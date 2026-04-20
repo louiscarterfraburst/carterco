@@ -17,6 +17,7 @@ type Lead = {
 };
 
 const allowedEmail = "louis@carterco.dk";
+const leadsUrl = "https://carterco.dk/leads";
 
 export default function LeadsPage() {
   const supabase = useMemo(() => createClient(), []);
@@ -86,7 +87,7 @@ export default function LeadsPage() {
     const { error } = await supabase.auth.signInWithOtp({
       email: email.trim().toLowerCase(),
       options: {
-        emailRedirectTo: `${window.location.origin}/leads`,
+        emailRedirectTo: leadsUrl,
         shouldCreateUser: false,
       },
     });
