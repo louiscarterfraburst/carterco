@@ -353,10 +353,11 @@ export default function Home() {
 
         <div className="mt-16 flex flex-col gap-10 pb-10 sm:mt-[120px]">
           <p
-            className="max-w-2xl -translate-y-[40px] text-lg leading-relaxed text-[var(--cream)]/70 sm:text-xl"
+            className="max-w-2xl -translate-y-[40px] text-lg leading-relaxed text-[var(--cream)]/70 sm:max-w-4xl sm:text-xl"
             style={{ textWrap: "pretty" }}
           >
-            Når leads skriver sig op, køler interessen ned på få minutter. Inden for 5 minutter er de{" "}
+            Når leads skriver sig op, køler interessen ned på få minutter.
+            <br className="hidden sm:block" /> Inden for 5 minutter er de{" "}
             <a
               href="https://25649.fs1.hubspotusercontent-na2.net/hub/25649/file-13535879-pdf/docs/mit_study.pdf"
               target="_blank"
@@ -366,7 +367,11 @@ export default function Home() {
               21× mere tilbøjelige til at blive kvalificeret
               <sup className="ml-0.5 text-xs font-bold text-[#ff6b2c]">↗</sup>
             </a>
-            . Jeg bygger systemet, der fanger dem varme — og ikke slipper før de er lukket.
+            .
+            <br className="hidden sm:block" />{" "}
+            <span className="sm:whitespace-nowrap">
+              Jeg bygger systemet, der fanger dem varme — og ikke slipper før de er lukket.
+            </span>
           </p>
 
           <div className="flex flex-col-reverse items-start justify-between gap-8 sm:flex-row sm:items-end">
