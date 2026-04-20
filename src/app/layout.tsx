@@ -1,5 +1,6 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, Homemade_Apple, Caveat } from "next/font/google";
+import { PwaRegistrar } from "./pwa-registrar";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -24,9 +25,31 @@ const caveat = Caveat({
 });
 
 export const metadata: Metadata = {
-  title: "CarterCo | Websites that make the next move obvious",
+  applicationName: "CarterCo",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "CarterCo",
+  },
+  title: "Carter & Co — Smed mens jernet er varmt",
   description:
-    "CarterCo builds polished, conversion-minded web experiences for ambitious companies.",
+    "Vi kontakter dine leads inden for 5 minutter — 21× mere tilbøjelige til at blive kvalificeret. Carter & Co bygger systemet, der fanger dem varme og ikke slipper før de er lukket.",
+  formatDetection: {
+    telephone: true,
+  },
+  manifest: "/manifest.webmanifest",
+  icons: {
+    icon: "/icon.png",
+    apple: "/apple-icon.png",
+  },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  viewportFit: "cover",
+  themeColor: "#0f0d0a",
 };
 
 export default function RootLayout({
@@ -36,10 +59,13 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      lang="en"
+      lang="da"
       className={`${geistSans.variable} ${geistMono.variable} ${homemadeApple.variable} ${caveat.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <PwaRegistrar />
+        {children}
+      </body>
     </html>
   );
 }

@@ -87,6 +87,7 @@ const steps: Step[] = [
 ];
 
 type FormState = Record<StepKey, string>;
+type FieldErrors = Partial<Record<StepKey, string>>;
 
 const calendlyUrl = "https://calendly.com/louis-carterco/30min";
 
@@ -106,13 +107,16 @@ export default function Home() {
   const [submitting, setSubmitting] = useState(false);
   const [stepIdx, setStepIdx] = useState(0);
   const [form, setForm] = useState<FormState>(initial);
+  const [errors, setErrors] = useState<FieldErrors>({});
 
   const step = steps[stepIdx];
   const total = steps.length;
   const progress = submitted ? 100 : ((stepIdx + 1) / total) * 100;
   const currentValue = form[step.key];
-  const canAdvance = step.required ? currentValue.trim().length > 0 : true;
+  const canAdvance =
+    !submitting && (step.required ? currentValue.trim().length > 0 : true);
   const isLast = stepIdx === total - 1;
+  const currentError = errors[step.key];
 
   useEffect(() => {
     function onKey(e: globalThis.KeyboardEvent) {
@@ -130,6 +134,7 @@ export default function Home() {
 
   function resetAndOpen() {
     setForm(initial);
+    setErrors({});
     setStepIdx(0);
     setSubmitted(false);
     setSubmitError(null);
@@ -139,6 +144,18 @@ export default function Home() {
 
   function advance() {
     if (!canAdvance || submitting) return;
+    const error = validateField(step.key, currentValue);
+    if (error) {
+      setErrors((current) => ({ ...current, [step.key]: error }));
+      return;
+    }
+
+    setErrors((current) => {
+      const next = { ...current };
+      delete next[step.key];
+      return next;
+    });
+
     if (isLast) {
       void submit();
     } else {
@@ -154,13 +171,23 @@ export default function Home() {
     setSubmitError(null);
     setSubmitting(true);
 
+    const cleaned = cleanForm(form);
+    const formErrors = validateForm(cleaned);
+    if (Object.keys(formErrors).length > 0) {
+      setErrors(formErrors);
+      setSubmitting(false);
+      const firstInvalidStep = steps.findIndex((item) => formErrors[item.key]);
+      setStepIdx(firstInvalidStep >= 0 ? firstInvalidStep : 0);
+      return;
+    }
+
     const params = new URLSearchParams({
-      name: form.name,
-      email: form.email,
-      a1: form.company,
-      a2: form.phone,
-      a3: form.monthlyLeads,
-      a4: form.responseTime,
+      name: cleaned.name,
+      email: cleaned.email,
+      a1: cleaned.company,
+      a2: cleaned.phone,
+      a3: cleaned.monthlyLeads,
+      a4: cleaned.responseTime,
       utm_source: "carterco.dk",
       utm_medium: "hero_form",
     });
@@ -168,12 +195,12 @@ export default function Home() {
     try {
       const supabase = createClient();
       const { error } = await supabase.from("leads").insert({
-        name: form.name,
-        company: form.company,
-        email: form.email,
-        phone: form.phone,
-        monthly_leads: form.monthlyLeads,
-        response_time: form.responseTime,
+        name: cleaned.name,
+        company: cleaned.company,
+        email: cleaned.email,
+        phone: cleaned.phone,
+        monthly_leads: cleaned.monthlyLeads,
+        response_time: cleaned.responseTime,
         source: "carterco.dk",
         page_url: window.location.href,
         user_agent: window.navigator.userAgent,
@@ -208,6 +235,17 @@ export default function Home() {
   function onFormSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     advance();
+  }
+
+  function updateField(key: StepKey, value: string) {
+    setForm({ ...form, [key]: value });
+    if (errors[key]) {
+      setErrors((current) => {
+        const next = { ...current };
+        delete next[key];
+        return next;
+      });
+    }
   }
 
   return (
@@ -318,7 +356,7 @@ export default function Home() {
             className="max-w-2xl -translate-y-[40px] text-lg leading-relaxed text-[var(--cream)]/70 sm:text-xl"
             style={{ textWrap: "pretty" }}
           >
-            Leads kontaktet inden for 5 minutter er{" "}
+            Når leads skriver sig op, køler interessen ned på få minutter. Inden for 5 minutter er de{" "}
             <a
               href="https://25649.fs1.hubspotusercontent-na2.net/hub/25649/file-13535879-pdf/docs/mit_study.pdf"
               target="_blank"
@@ -415,13 +453,38 @@ export default function Home() {
                       type={step.type}
                       value={currentValue}
                       onChange={(e) =>
-                        setForm({ ...form, [step.key]: e.target.value })
+                        updateField(step.key, e.target.value)
                       }
                       onKeyDown={onInputKey}
                       placeholder={step.placeholder}
+                      autoComplete={autoCompleteFor(step.key)}
+                      inputMode={
+                        step.type === "tel"
+                          ? "tel"
+                          : step.type === "email"
+                            ? "email"
+                            : "text"
+                      }
                       required={step.required}
-                      className="w-full border-b border-[var(--cream)]/20 bg-transparent pb-3 text-2xl text-[var(--cream)] placeholder:text-[var(--cream)]/25 focus:border-[#ff6b2c] focus:outline-none sm:text-3xl"
+                      aria-invalid={Boolean(currentError)}
+                      aria-describedby={
+                        currentError ? `${step.key}-error` : undefined
+                      }
+                      className={`w-full border-b bg-transparent pb-3 text-2xl text-[var(--cream)] placeholder:text-[var(--cream)]/25 focus:outline-none sm:text-3xl ${
+                        currentError
+                          ? "border-[#ff6b2c] focus:border-[#ff6b2c]"
+                          : "border-[var(--cream)]/20 focus:border-[#ff6b2c]"
+                      }`}
                     />
+                  ) : null}
+
+                  {currentError ? (
+                    <p
+                      id={`${step.key}-error`}
+                      className="-mt-4 text-sm leading-relaxed text-[#ffb86b]"
+                    >
+                      {currentError}
+                    </p>
                   ) : null}
 
                   {step.type === "choice" ? (
@@ -433,7 +496,7 @@ export default function Home() {
                             key={opt}
                             type="button"
                             onClick={() => {
-                              setForm({ ...form, [step.key]: opt });
+                              updateField(step.key, opt);
                               setTimeout(() => {
                                 setStepIdx((i) =>
                                   i < total - 1 ? i + 1 : i,
@@ -513,4 +576,112 @@ export default function Home() {
       )}
     </main>
   );
+}
+
+function autoCompleteFor(key: StepKey) {
+  const values: Record<StepKey, string> = {
+    name: "name",
+    company: "organization",
+    email: "email",
+    phone: "tel",
+    monthlyLeads: "off",
+    responseTime: "off",
+  };
+
+  return values[key];
+}
+
+function cleanForm(form: FormState): FormState {
+  return {
+    name: normalizeText(form.name),
+    company: normalizeText(form.company),
+    email: form.email.trim().toLowerCase(),
+    phone: normalizePhone(form.phone),
+    monthlyLeads: form.monthlyLeads.trim(),
+    responseTime: form.responseTime.trim(),
+  };
+}
+
+function normalizeText(value: string) {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function normalizePhone(value: string) {
+  const trimmed = value.trim().replace(/[^\d+]/g, "");
+  if (trimmed.startsWith("+")) return `+${trimmed.slice(1).replace(/\D/g, "")}`;
+
+  const digits = trimmed.replace(/\D/g, "");
+  if (digits.length === 8) return `+45${digits}`;
+  return digits;
+}
+
+function validateForm(form: FormState) {
+  return steps.reduce<FieldErrors>((result, item) => {
+    const error = validateField(item.key, form[item.key]);
+    if (error) result[item.key] = error;
+    return result;
+  }, {});
+}
+
+function validateField(key: StepKey, value: string) {
+  const cleanValue =
+    key === "email"
+      ? value.trim().toLowerCase()
+      : key === "phone"
+        ? normalizePhone(value)
+        : normalizeText(value);
+
+  if (!cleanValue) return "Udfyld feltet for at fortsætte.";
+
+  if (key === "name") {
+    if (cleanValue.length < 2) return "Skriv et rigtigt navn.";
+    if (!/[a-zæøå]/i.test(cleanValue)) return "Navnet skal indeholde bogstaver.";
+    if (looksLikeGarbage(cleanValue)) return "Skriv et rigtigt navn.";
+  }
+
+  if (key === "company") {
+    if (cleanValue.length < 2) return "Skriv et rigtigt firmanavn.";
+    if (!/[a-zæøå0-9]/i.test(cleanValue))
+      return "Firmanavnet skal indeholde bogstaver eller tal.";
+    if (looksLikeGarbage(cleanValue)) return "Skriv et rigtigt firmanavn.";
+  }
+
+  if (key === "email") {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i.test(cleanValue))
+      return "Skriv en gyldig e-mailadresse.";
+    if (/(test|fake|asdf|qwerty|example)\@/i.test(cleanValue))
+      return "Brug en rigtig e-mailadresse.";
+  }
+
+  if (key === "phone") {
+    const digits = cleanValue.replace(/\D/g, "");
+    if (digits.length < 8 || digits.length > 15)
+      return "Skriv et telefonnummer, der kan ringes op.";
+    if (/^(\d)\1+$/.test(digits)) return "Skriv et rigtigt telefonnummer.";
+  }
+
+  if (key === "monthlyLeads") {
+    const step = steps.find((item) => item.key === key);
+    if (step?.type === "choice" && !step.options.includes(cleanValue))
+      return "Vælg en af mulighederne.";
+  }
+
+  if (key === "responseTime") {
+    const step = steps.find((item) => item.key === key);
+    if (step?.type === "choice" && !step.options.includes(cleanValue))
+      return "Vælg en af mulighederne.";
+  }
+
+  return null;
+}
+
+function looksLikeGarbage(value: string) {
+  const compact = value.toLowerCase().replace(/[^a-zæøå0-9]/gi, "");
+  if (compact.length < 3) return false;
+  if (/^(.)\1+$/.test(compact)) return true;
+  if (/(asdf|qwer|test|fake|lorem|foobar)/i.test(compact)) return true;
+
+  const vowels = compact.match(/[aeiouyæøå]/gi)?.length ?? 0;
+  const letters = compact.match(/[a-zæøå]/gi)?.length ?? 0;
+  return letters >= 5 && vowels === 0;
 }
