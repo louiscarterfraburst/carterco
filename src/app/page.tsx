@@ -88,6 +88,8 @@ const steps: Step[] = [
 
 type FormState = Record<StepKey, string>;
 
+const calendlyUrl = "https://calendly.com/louis-carterco/30min";
+
 const initial: FormState = {
   name: "",
   company: "",
@@ -100,6 +102,8 @@ const initial: FormState = {
 export default function Home() {
   const [open, setOpen] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   const [stepIdx, setStepIdx] = useState(0);
   const [form, setForm] = useState<FormState>(initial);
 
@@ -128,11 +132,13 @@ export default function Home() {
     setForm(initial);
     setStepIdx(0);
     setSubmitted(false);
+    setSubmitError(null);
+    setSubmitting(false);
     setOpen(true);
   }
 
   function advance() {
-    if (!canAdvance) return;
+    if (!canAdvance || submitting) return;
     if (isLast) {
       void submit();
     } else {
@@ -145,6 +151,9 @@ export default function Home() {
   }
 
   async function submit() {
+    setSubmitError(null);
+    setSubmitting(true);
+
     const params = new URLSearchParams({
       name: form.name,
       email: form.email,
@@ -172,12 +181,20 @@ export default function Home() {
 
       if (error) {
         console.error("Supabase lead insert failed", error);
+        setSubmitError(`${error.code ?? "Supabase"}: ${error.message}`);
+        setSubmitting(false);
+        return;
       }
     } catch (error) {
       console.error("Supabase lead insert failed", error);
+      setSubmitError(
+        error instanceof Error ? error.message : "Supabase lead insert failed",
+      );
+      setSubmitting(false);
+      return;
     }
 
-    window.location.href = `https://calendly.com/louis-carterco/30min?${params.toString()}`;
+    window.location.href = `${calendlyUrl}?${params.toString()}`;
     setSubmitted(true);
   }
 
@@ -432,6 +449,25 @@ export default function Home() {
                       })}
                     </div>
                   ) : null}
+
+                  {submitError ? (
+                    <div className="rounded-xl border border-[#ff6b2c]/40 bg-[#ff6b2c]/10 p-4 text-sm leading-relaxed text-[var(--cream)]/80">
+                      <p className="font-bold text-[#ffb86b]">
+                        Supabase kunne ikke gemme leadet.
+                      </p>
+                      <p className="mt-2 break-words font-mono text-xs text-[var(--cream)]/65">
+                        {submitError}
+                      </p>
+                      <a
+                        href={calendlyUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-3 inline-flex text-xs font-bold uppercase tracking-[0.25em] text-[#ffb86b] underline decoration-[#ff6b2c]/70 underline-offset-4"
+                      >
+                        Fortsæt til kalender →
+                      </a>
+                    </div>
+                  ) : null}
                 </div>
 
                 <div className="mt-10 flex items-center justify-between pt-5">
@@ -446,10 +482,10 @@ export default function Home() {
 
                   <button
                     type="submit"
-                    disabled={!canAdvance}
+                    disabled={!canAdvance || submitting}
                     className="inline-flex items-center gap-3 rounded-full bg-[#ff6b2c] px-6 py-3 text-xs font-bold uppercase tracking-[0.25em] text-[#0f0d0a] shadow-[0_18px_50px_rgba(255,107,44,0.35)] transition hover:-translate-y-0.5 hover:bg-[#ff8244] disabled:cursor-not-allowed disabled:bg-[var(--cream)]/10 disabled:text-[var(--cream)]/30 disabled:shadow-none disabled:hover:translate-y-0"
                   >
-                    {isLast ? "Book" : "Næste"}
+                    {submitting ? "Gemmer" : isLast ? "Book" : "Næste"}
                     <span>→</span>
                   </button>
                 </div>
@@ -460,7 +496,7 @@ export default function Home() {
                   Vælg et tidspunkt.
                 </h3>
                 <a
-                  href="https://calendly.com/louis-carterco/30min"
+                  href={calendlyUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-xs font-bold uppercase tracking-[0.3em] text-[var(--cream)]/60 underline decoration-[#ff6b2c] hover:text-[var(--cream)]"
