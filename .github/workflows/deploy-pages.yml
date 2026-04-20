@@ -34,6 +34,9 @@ jobs:
         run: npm ci
 
       - name: Build static site
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://znpaevzwlcfuzqxsbyie.supabase.co
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_rKCrGrKGUr48lEhjqWj3dw_V0kAEKQl
         run: npm run build
 
       - name: Upload artifact
