@@ -16,8 +16,10 @@ alter table public.leads enable row level security;
 
 grant usage on schema public to anon, authenticated;
 grant insert on public.leads to anon, authenticated;
+grant select on public.leads to authenticated;
 
 drop policy if exists "Anyone can submit CarterCo leads" on public.leads;
+drop policy if exists "CarterCo can read leads" on public.leads;
 
 create policy "Anyone can submit CarterCo leads"
   on public.leads
@@ -32,3 +34,9 @@ create policy "Anyone can submit CarterCo leads"
     and monthly_leads in ('Under 50', '50–250', '250–1.000', '1.000+')
     and response_time in ('Under 5 min', '5–30 min', '30 min – 2 timer', 'Mere end 2 timer', 'Ved ikke')
   );
+
+create policy "CarterCo can read leads"
+  on public.leads
+  for select
+  to authenticated
+  using ((auth.jwt() ->> 'email') = 'louis@carterco.dk');
