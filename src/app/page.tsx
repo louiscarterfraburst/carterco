@@ -2,21 +2,23 @@
 
 import { FormEvent, KeyboardEvent, useEffect, useState } from "react";
 
+const LEADS_WEBHOOK_URL =
+  "https://script.google.com/macros/s/AKfycbxy-xe6chbbYp_8x3_vXXcXhvYj-z7B0a0Q9BkkLeD4Z2K2hujKtgRcDFgFpMpOlQXB/exec";
+
 type StepKey =
   | "name"
   | "company"
   | "email"
   | "phone"
   | "monthlyLeads"
-  | "responseTime"
-  | "note";
+  | "responseTime";
 
 type Step =
   | {
       key: StepKey;
       index: string;
       question: string;
-      type: "text" | "email" | "tel" | "textarea";
+      type: "text" | "email" | "tel";
       placeholder: string;
       required: boolean;
     }
@@ -33,39 +35,39 @@ const steps: Step[] = [
   {
     key: "name",
     index: "01",
-    question: "Hvad hedder du?",
+    question: "Navn",
     type: "text",
-    placeholder: "Dit fulde navn",
+    placeholder: "",
     required: true,
   },
   {
     key: "company",
     index: "02",
-    question: "Hvor arbejder du?",
+    question: "Firma",
     type: "text",
-    placeholder: "Firmanavn",
+    placeholder: "",
     required: true,
   },
   {
     key: "email",
     index: "03",
-    question: "Hvad er din e-mail?",
+    question: "E-mail",
     type: "email",
-    placeholder: "navn@firma.dk",
+    placeholder: "",
     required: true,
   },
   {
     key: "phone",
     index: "04",
-    question: "Og dit telefonnummer?",
+    question: "Telefon",
     type: "tel",
-    placeholder: "+45 12 34 56 78",
+    placeholder: "",
     required: true,
   },
   {
     key: "monthlyLeads",
     index: "05",
-    question: "Hvor mange leads får I om måneden?",
+    question: "Leads pr. måned",
     type: "choice",
     options: ["Under 50", "50–250", "250–1.000", "1.000+"],
     required: true,
@@ -73,7 +75,7 @@ const steps: Step[] = [
   {
     key: "responseTime",
     index: "06",
-    question: "Hvor hurtigt kontaktes nye leads i dag?",
+    question: "Nuværende responstid",
     type: "choice",
     options: [
       "Under 5 min",
@@ -83,14 +85,6 @@ const steps: Step[] = [
       "Ved ikke",
     ],
     required: true,
-  },
-  {
-    key: "note",
-    index: "07",
-    question: "Hvad vil du helst have løst?",
-    type: "textarea",
-    placeholder: "F.eks. vi taber for mange leads på Meta-annoncer inden de bliver ringet op.",
-    required: false,
   },
 ];
 
@@ -103,7 +97,6 @@ const initial: FormState = {
   phone: "",
   monthlyLeads: "",
   responseTime: "",
-  note: "",
 };
 
 export default function Home() {
@@ -154,17 +147,25 @@ export default function Home() {
   }
 
   function submit() {
-    const body = `Navn: ${form.name}
-Firma: ${form.company}
-E-mail: ${form.email}
-Telefon: ${form.phone}
-Leads pr. måned: ${form.monthlyLeads}
-Nuværende responstid: ${form.responseTime}
+    fetch(LEADS_WEBHOOK_URL, {
+      method: "POST",
+      mode: "no-cors",
+      keepalive: true,
+      body: JSON.stringify({ ...form, source: "carterco.dk" }),
+    }).catch(() => {});
 
-${form.note || "(ingen besked)"}`;
-    window.location.href = `mailto:louis@carterco.dk?subject=${encodeURIComponent(
-      `Book et opkald — ${form.company || form.name}`,
-    )}&body=${encodeURIComponent(body)}`;
+    const params = new URLSearchParams({
+      name: form.name,
+      email: form.email,
+      a1: form.company,
+      a2: form.phone,
+      a3: form.monthlyLeads,
+      a4: form.responseTime,
+      utm_source: "carterco.dk",
+      utm_medium: "hero_form",
+    });
+
+    window.location.href = `https://calendly.com/louis-carterco/30min?${params.toString()}`;
     setSubmitted(true);
   }
 
@@ -209,11 +210,63 @@ ${form.note || "(ingen besked)"}`;
         </a>
       </nav>
 
-      <div className="mx-auto flex w-full max-w-[1400px] flex-1 flex-col justify-center px-8 sm:px-12">
-        <h1 className="font-display text-[15vw] leading-[0.82] tracking-[-0.05em] sm:text-[13vw] lg:text-[11vw]">
-          Smed mens
+      <div className="mx-auto flex w-full max-w-[1400px] flex-1 flex-col justify-center px-8 pt-16 sm:px-12 sm:pt-20">
+        <h1 className="font-display text-[14vw] leading-[0.82] tracking-[-0.05em] sm:text-[12vw] lg:text-[10vw]">
+          <span className="relative inline-block">
+            Smed
+            <span
+              className="pointer-events-none absolute left-[52%] bottom-full -ml-[20px] -mb-[0.4em] flex flex-col items-center gap-[0.05em] text-[0.28em] font-normal leading-none tracking-normal text-[var(--cream)]/95"
+              style={{ fontFamily: "var(--font-handwritten)" }}
+            >
+              <span
+                className="whitespace-nowrap"
+                style={{ transform: "rotate(-3deg)" }}
+              >
+                Kontakt
+              </span>
+              <svg
+                viewBox="0 0 40 24"
+                className="h-[0.7em] w-auto text-[#ff6b2c]"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="3.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                style={{ transform: "rotate(-2deg)" }}
+              >
+                <path d="M 5 5 Q 11 14 20 20 Q 28 13 35 6" />
+              </svg>
+            </span>
+          </span>{" "}
+          mens
           <br />
-          jernet er{" "}
+          <span className="relative inline-block">
+            jernet
+            <span
+              className="pointer-events-none absolute left-[25%] top-full mt-[15px] flex flex-col items-center gap-[0.05em] text-[0.28em] font-normal leading-none tracking-normal text-[var(--cream)]/95"
+              style={{ fontFamily: "var(--font-handwritten)" }}
+            >
+              <svg
+                viewBox="0 0 40 24"
+                className="h-[0.7em] w-auto text-[#ff6b2c]"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="3.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                style={{ transform: "rotate(3deg)" }}
+              >
+                <path d="M 5 19 Q 12 11 20 4 Q 28 12 35 18" />
+              </svg>
+              <span
+                className="whitespace-nowrap"
+                style={{ transform: "rotate(-3deg)" }}
+              >
+                leadet
+              </span>
+            </span>
+          </span>{" "}
+          er{" "}
           <span className="relative inline-block">
             <span className="absolute inset-0 -z-10 scale-125 bg-[radial-gradient(ellipse_at_center,rgba(255,107,44,0.45),transparent_65%)] blur-2xl" />
             <span className="bg-gradient-to-b from-[#ffb86b] via-[#ff6b2c] to-[#c93c0a] bg-clip-text italic text-transparent">
@@ -222,48 +275,48 @@ ${form.note || "(ingen besked)"}`;
           </span>
         </h1>
 
-        <div className="mt-14 flex flex-col items-start justify-between gap-10 lg:flex-row lg:items-end">
-          <div className="max-w-xl">
-            <p className="text-lg leading-relaxed text-[var(--cream)]/70 sm:text-xl">
-              Leads kontaktet inden for 5 minutter er{" "}
-              <a
-                href="https://25649.fs1.hubspotusercontent-na2.net/hub/25649/file-13535879-pdf/docs/mit_study.pdf"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="font-semibold text-[var(--cream)] underline decoration-[#ff6b2c]/60 decoration-2 underline-offset-4 transition hover:decoration-[#ff6b2c]"
-              >
-                21× mere tilbøjelige til at blive kvalificeret
-                <sup className="ml-0.5 text-xs font-bold text-[#ff6b2c]">↗</sup>
-              </a>
-              . Jeg bygger systemet, der fanger dem varme — og ikke slipper før de er lukket.
-            </p>
+        <div className="mt-[120px] flex flex-col gap-10 pb-10">
+          <p
+            className="max-w-2xl text-lg leading-relaxed text-[var(--cream)]/70 sm:text-xl"
+            style={{ textWrap: "pretty" }}
+          >
+            Leads kontaktet inden for 5 minutter er{" "}
+            <a
+              href="https://25649.fs1.hubspotusercontent-na2.net/hub/25649/file-13535879-pdf/docs/mit_study.pdf"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-semibold text-[var(--cream)] underline decoration-[#ff6b2c]/60 decoration-2 underline-offset-4 transition hover:decoration-[#ff6b2c]"
+            >
+              21× mere tilbøjelige til at blive kvalificeret
+              <sup className="ml-0.5 text-xs font-bold text-[#ff6b2c]">↗</sup>
+            </a>
+            . Jeg bygger systemet, der fanger dem varme — og ikke slipper før de er lukket.
+          </p>
+
+          <div className="flex flex-col-reverse items-start justify-between gap-8 sm:flex-row sm:items-end">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src="/signature.png"
               alt="Louis Carter"
               draggable={false}
               onContextMenu={(e) => e.preventDefault()}
-              className="pointer-events-none -mt-4 h-32 w-auto select-none sm:h-40"
+              className="pointer-events-none h-32 w-auto -translate-y-[50px] select-none sm:h-40"
               style={{
                 filter: "invert(1)",
                 mixBlendMode: "screen",
                 WebkitUserDrag: "none",
               } as React.CSSProperties}
             />
-          </div>
 
-          <button
-            type="button"
-            onClick={resetAndOpen}
-            className="group inline-flex items-center gap-4 border-b border-[var(--cream)]/30 pb-2 text-sm font-bold uppercase tracking-[0.3em] transition hover:border-[#ff6b2c]"
-          >
-            <span className="transition group-hover:text-[#ff6b2c]">
-              Book et opkald
-            </span>
-            <span className="flex h-10 w-10 items-center justify-center rounded-full border border-[var(--cream)]/30 transition group-hover:border-[#ff6b2c] group-hover:bg-[#ff6b2c] group-hover:text-[#0f0d0a]">
-              →
-            </span>
-          </button>
+            <button
+              type="button"
+              onClick={resetAndOpen}
+              className="group inline-flex -translate-y-[50px] items-center gap-4 rounded-full bg-[#ff6b2c] px-8 py-5 text-sm font-bold uppercase tracking-[0.25em] text-[#0f0d0a] shadow-[0_18px_60px_rgba(255,107,44,0.35)] transition hover:-translate-y-[54px] hover:bg-[#ff8244] hover:shadow-[0_24px_80px_rgba(255,107,44,0.5)]"
+            >
+              <span>Book et opkald</span>
+              <span className="text-lg">→</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -275,7 +328,7 @@ ${form.note || "(ingen besked)"}`;
           rel="noopener noreferrer"
           className="hidden transition hover:text-[#ff6b2c] sm:inline"
         >
-          Kilde · MIT / InsideSales Lead Response Study (Oldroyd, 2007)
+          Kilde · MIT, 2007
         </a>
         <span>MMXXVI</span>
       </div>
@@ -289,13 +342,7 @@ ${form.note || "(ingen besked)"}`;
             className="absolute inset-0 bg-black/80 backdrop-blur-md"
           />
           <div className="relative z-10 flex max-h-[92vh] w-[calc(100%-2rem)] max-w-2xl flex-col overflow-hidden rounded-2xl border border-[var(--cream)]/10 bg-[#14110d] shadow-[0_40px_120px_rgba(0,0,0,0.6)]">
-            <div className="flex items-center justify-between px-8 pt-6">
-              <div className="flex items-center gap-3">
-                <span className="h-1.5 w-1.5 rounded-full bg-[#ff6b2c] shadow-[0_0_8px_rgba(255,107,44,0.9)]" />
-                <span className="text-[10px] font-bold uppercase tracking-[0.35em] text-[var(--cream)]/60">
-                  Carter &amp; Co · Book et opkald
-                </span>
-              </div>
+            <div className="flex items-center justify-end px-8 pt-6">
               <button
                 type="button"
                 aria-label="Luk"
@@ -315,16 +362,8 @@ ${form.note || "(ingen besked)"}`;
               </button>
             </div>
 
-            <div className="mt-5 px-8">
-              <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-[0.3em] text-[var(--cream)]/40">
-                <span>
-                  {submitted
-                    ? "Klar"
-                    : `Spørgsmål ${stepIdx + 1} af ${total}`}
-                </span>
-                <span>{Math.round(progress)}%</span>
-              </div>
-              <div className="mt-2 h-1 overflow-hidden rounded-full bg-[var(--cream)]/10">
+            <div className="mt-4 px-8">
+              <div className="h-1 overflow-hidden rounded-full bg-[var(--cream)]/10">
                 <div
                   className="h-full bg-gradient-to-r from-[#ffb86b] via-[#ff6b2c] to-[#c93c0a] transition-all duration-500 ease-out"
                   style={{ width: `${progress}%` }}
@@ -339,15 +378,9 @@ ${form.note || "(ingen besked)"}`;
                 key={step.key}
               >
                 <div className="flex flex-col gap-8">
-                  <div>
-                    <p className="text-[10px] font-bold uppercase tracking-[0.35em] text-[#ff6b2c]">
-                      {step.index}
-                      {step.required ? " · Påkrævet" : " · Valgfri"}
-                    </p>
-                    <h2 className="font-display mt-3 text-3xl leading-tight tracking-tight sm:text-4xl">
-                      {step.question}
-                    </h2>
-                  </div>
+                  <h2 className="font-display text-3xl leading-tight tracking-tight sm:text-4xl">
+                    {step.question}
+                  </h2>
 
                   {step.type === "text" ||
                   step.type === "email" ||
@@ -366,21 +399,8 @@ ${form.note || "(ingen besked)"}`;
                     />
                   ) : null}
 
-                  {step.type === "textarea" ? (
-                    <textarea
-                      autoFocus
-                      rows={4}
-                      value={currentValue}
-                      onChange={(e) =>
-                        setForm({ ...form, [step.key]: e.target.value })
-                      }
-                      placeholder={step.placeholder}
-                      className="w-full resize-none border-b border-[var(--cream)]/20 bg-transparent pb-3 text-lg leading-relaxed text-[var(--cream)] placeholder:text-[var(--cream)]/25 focus:border-[#ff6b2c] focus:outline-none"
-                    />
-                  ) : null}
-
                   {step.type === "choice" ? (
-                    <div className="flex flex-col gap-3">
+                    <div className="flex flex-col gap-2">
                       {step.options.map((opt) => {
                         const selected = currentValue === opt;
                         return (
@@ -395,22 +415,13 @@ ${form.note || "(ingen besked)"}`;
                                 );
                               }, 160);
                             }}
-                            className={`group flex items-center justify-between rounded-xl border px-5 py-4 text-left transition ${
+                            className={`flex items-center justify-between rounded-xl border px-5 py-4 text-left text-base transition ${
                               selected
-                                ? "border-[#ff6b2c] bg-[#ff6b2c]/10 text-[var(--cream)]"
+                                ? "border-[#ff6b2c] bg-[#ff6b2c]/10"
                                 : "border-[var(--cream)]/15 bg-black/20 text-[var(--cream)]/80 hover:border-[var(--cream)]/40 hover:bg-black/40"
                             }`}
                           >
-                            <span className="text-base sm:text-lg">{opt}</span>
-                            <span
-                              className={`ml-4 flex h-7 w-7 items-center justify-center rounded-full border text-xs transition ${
-                                selected
-                                  ? "border-[#ff6b2c] bg-[#ff6b2c] text-[#0f0d0a]"
-                                  : "border-[var(--cream)]/30 text-transparent group-hover:border-[var(--cream)]/60"
-                              }`}
-                            >
-                              ✓
-                            </span>
+                            {opt}
                           </button>
                         );
                       })}
@@ -418,14 +429,14 @@ ${form.note || "(ingen besked)"}`;
                   ) : null}
                 </div>
 
-                <div className="mt-10 flex items-center justify-between border-t border-[var(--cream)]/10 pt-5">
+                <div className="mt-10 flex items-center justify-between pt-5">
                   <button
                     type="button"
                     onClick={back}
                     disabled={stepIdx === 0}
                     className="text-[11px] font-bold uppercase tracking-[0.3em] text-[var(--cream)]/50 transition hover:text-[var(--cream)] disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:text-[var(--cream)]/50"
                   >
-                    ← Tilbage
+                    ←
                   </button>
 
                   <button
@@ -433,41 +444,24 @@ ${form.note || "(ingen besked)"}`;
                     disabled={!canAdvance}
                     className="inline-flex items-center gap-3 rounded-full bg-[#ff6b2c] px-6 py-3 text-xs font-bold uppercase tracking-[0.25em] text-[#0f0d0a] shadow-[0_18px_50px_rgba(255,107,44,0.35)] transition hover:-translate-y-0.5 hover:bg-[#ff8244] disabled:cursor-not-allowed disabled:bg-[var(--cream)]/10 disabled:text-[var(--cream)]/30 disabled:shadow-none disabled:hover:translate-y-0"
                   >
-                    {isLast ? "Send forespørgsel" : "Næste"}
+                    {isLast ? "Book" : "Næste"}
                     <span>→</span>
                   </button>
                 </div>
-
-                <p className="mt-3 text-[10px] uppercase tracking-[0.25em] text-[var(--cream)]/30">
-                  Tryk Enter for at fortsætte
-                </p>
               </form>
             ) : (
-              <div className="flex flex-col items-center gap-4 px-8 py-14 text-center">
-                <p className="text-[11px] font-bold uppercase tracking-[0.3em] text-[#ff6b2c]">
-                  Modtaget
-                </p>
+              <div className="flex flex-col items-center gap-3 px-8 py-14 text-center">
                 <h3 className="font-display text-3xl leading-tight tracking-tight">
-                  Tak — jeg vender tilbage inden for 24 timer.
+                  Vælg et tidspunkt.
                 </h3>
-                <p className="max-w-sm text-sm text-[var(--cream)]/60">
-                  Din e-mailklient skulle nu åbne med din forespørgsel. Hvis
-                  ikke, så skriv direkte til{" "}
-                  <a
-                    href="mailto:louis@carterco.dk"
-                    className="text-[var(--cream)] underline decoration-[#ff6b2c]"
-                  >
-                    louis@carterco.dk
-                  </a>
-                  .
-                </p>
-                <button
-                  type="button"
-                  onClick={() => setOpen(false)}
-                  className="mt-4 text-[11px] font-bold uppercase tracking-[0.3em] text-[var(--cream)]/60 hover:text-[var(--cream)]"
+                <a
+                  href="https://calendly.com/louis-carterco/30min"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs font-bold uppercase tracking-[0.3em] text-[var(--cream)]/60 underline decoration-[#ff6b2c] hover:text-[var(--cream)]"
                 >
-                  Luk
-                </button>
+                  Åbn kalender →
+                </a>
               </div>
             )}
           </div>

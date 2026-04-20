@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono, Homemade_Apple } from "next/font/google";
+import { Geist, Geist_Mono, Homemade_Apple, Caveat } from "next/font/google";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -18,6 +18,11 @@ const homemadeApple = Homemade_Apple({
   subsets: ["latin"],
 });
 
+const caveat = Caveat({
+  variable: "--font-handwritten",
+  subsets: ["latin"],
+});
+
 export const metadata: Metadata = {
   title: "CarterCo | Websites that make the next move obvious",
   description:
@@ -32,7 +37,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} ${homemadeApple.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${homemadeApple.variable} ${caveat.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">{children}</body>
     </html>
