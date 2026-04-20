@@ -1,9 +1,7 @@
 "use client";
 
 import { FormEvent, KeyboardEvent, useEffect, useState } from "react";
-
-const LEADS_WEBHOOK_URL =
-  "https://script.google.com/macros/s/AKfycbxy-xe6chbbYp_8x3_vXXcXhvYj-z7B0a0Q9BkkLeD4Z2K2hujKtgRcDFgFpMpOlQXB/exec";
+import { createClient } from "@/utils/supabase/client";
 
 type StepKey =
   | "name"
@@ -136,7 +134,7 @@ export default function Home() {
   function advance() {
     if (!canAdvance) return;
     if (isLast) {
-      submit();
+      void submit();
     } else {
       setStepIdx((i) => i + 1);
     }
@@ -146,14 +144,7 @@ export default function Home() {
     if (stepIdx > 0) setStepIdx((i) => i - 1);
   }
 
-  function submit() {
-    fetch(LEADS_WEBHOOK_URL, {
-      method: "POST",
-      mode: "no-cors",
-      keepalive: true,
-      body: JSON.stringify({ ...form, source: "carterco.dk" }),
-    }).catch(() => {});
-
+  async function submit() {
     const params = new URLSearchParams({
       name: form.name,
       email: form.email,
@@ -164,6 +155,27 @@ export default function Home() {
       utm_source: "carterco.dk",
       utm_medium: "hero_form",
     });
+
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.from("leads").insert({
+        name: form.name,
+        company: form.company,
+        email: form.email,
+        phone: form.phone,
+        monthly_leads: form.monthlyLeads,
+        response_time: form.responseTime,
+        source: "carterco.dk",
+        page_url: window.location.href,
+        user_agent: window.navigator.userAgent,
+      });
+
+      if (error) {
+        console.error("Supabase lead insert failed", error);
+      }
+    } catch (error) {
+      console.error("Supabase lead insert failed", error);
+    }
 
     window.location.href = `https://calendly.com/louis-carterco/30min?${params.toString()}`;
     setSubmitted(true);
@@ -195,8 +207,14 @@ export default function Home() {
       <nav className="mx-auto flex w-full max-w-[1400px] items-center justify-between px-8 pt-8 sm:px-12">
         <div className="flex items-center gap-3">
           <span className="h-2 w-2 animate-pulse rounded-full bg-[#ff6b2c] shadow-[0_0_12px_rgba(255,107,44,0.9)]" />
-          <span className="text-xs font-bold uppercase tracking-[0.4em] text-[var(--cream)]/80">
-            CARTER &amp; CO
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/logo.png"
+            alt="Carter &amp; Co"
+            className="h-5 w-auto sm:h-6"
+          />
+          <span className="ml-3 hidden text-[10px] font-bold uppercase tracking-[0.3em] text-[var(--cream)]/40 sm:inline">
+            København
           </span>
         </div>
         <a
@@ -300,7 +318,7 @@ export default function Home() {
               alt="Louis Carter"
               draggable={false}
               onContextMenu={(e) => e.preventDefault()}
-              className="pointer-events-none h-32 w-auto -translate-y-[50px] select-none sm:h-40"
+              className="pointer-events-none h-16 w-auto -translate-y-[40px] select-none sm:h-20"
               style={{
                 filter: "invert(1)",
                 mixBlendMode: "screen",
@@ -318,19 +336,6 @@ export default function Home() {
             </button>
           </div>
         </div>
-      </div>
-
-      <div className="mx-auto flex w-full max-w-[1400px] items-center justify-between px-8 pb-8 text-[11px] font-bold uppercase tracking-[0.3em] text-[var(--cream)]/40 sm:px-12">
-        <span>København</span>
-        <a
-          href="https://25649.fs1.hubspotusercontent-na2.net/hub/25649/file-13535879-pdf/docs/mit_study.pdf"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="hidden transition hover:text-[#ff6b2c] sm:inline"
-        >
-          Kilde · MIT, 2007
-        </a>
-        <span>MMXXVI</span>
       </div>
 
       {open && (
