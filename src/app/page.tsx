@@ -356,8 +356,8 @@ export default function Home() {
             className="max-w-2xl -translate-y-[40px] text-lg leading-relaxed text-[var(--cream)]/70 sm:max-w-4xl sm:text-xl"
             style={{ textWrap: "pretty" }}
           >
-            Når leads skriver sig op, køler interessen ned på få minutter.
-            <br className="hidden sm:block" /> Inden for 5 minutter er de{" "}
+            Når et lead skriver sig op, køler interessen ned på få minutter.
+            <br className="hidden sm:block" /> De første 5 minutter er det{" "}
             <a
               href="https://25649.fs1.hubspotusercontent-na2.net/hub/25649/file-13535879-pdf/docs/mit_study.pdf"
               target="_blank"
