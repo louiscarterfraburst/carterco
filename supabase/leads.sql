@@ -14,12 +14,15 @@ create table if not exists public.leads (
 
 alter table public.leads enable row level security;
 
+grant usage on schema public to anon, authenticated;
+grant insert on public.leads to anon, authenticated;
+
 drop policy if exists "Anyone can submit CarterCo leads" on public.leads;
 
 create policy "Anyone can submit CarterCo leads"
   on public.leads
   for insert
-  to anon
+  to public
   with check (
     source = 'carterco.dk'
     and length(trim(name)) > 0
