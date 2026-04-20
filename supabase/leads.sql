@@ -23,10 +23,4 @@ create policy "Anyone can submit CarterCo leads"
   on public.leads
   for insert
   to public
-  with check (
-    source = 'carterco.dk'
-    and length(trim(name)) > 0
-    and length(trim(company)) > 0
-    and email ~* '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$'
-    and length(trim(phone)) > 0
-  );
+  with check (true);
