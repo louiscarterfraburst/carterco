@@ -236,9 +236,10 @@ export default function Home() {
         </div>
         <a
           href="mailto:louis@carterco.dk"
-          className="group flex items-center gap-2 text-xs font-bold uppercase tracking-[0.3em] text-[var(--cream)]/70 transition hover:text-[var(--cream)]"
+          className="group flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.15em] text-[var(--cream)]/70 transition hover:text-[var(--cream)] sm:text-xs sm:tracking-[0.3em]"
         >
-          louis@carterco.dk
+          <span className="hidden sm:inline">louis@carterco.dk</span>
+          <span className="sm:hidden">E-mail</span>
           <span className="inline-block transition group-hover:translate-x-1">
             →
           </span>
@@ -250,27 +251,28 @@ export default function Home() {
           <span className="relative inline-block">
             Smed
             <span
-              className="pointer-events-none absolute left-[52%] bottom-full -ml-[20px] -mb-[0.4em] flex flex-col items-center gap-[0.05em] text-[0.28em] font-normal leading-none tracking-normal text-[var(--cream)]/95"
-              style={{ fontFamily: "var(--font-handwritten)" }}
+              className="pointer-events-none absolute left-[8%] bottom-full mb-[0.05em] inline-flex items-center gap-[0.2em] whitespace-nowrap text-[0.28em] font-normal leading-none tracking-normal text-[var(--cream)]/95"
+              style={{
+                fontFamily: "var(--font-handwritten)",
+                transform: "translate(1.4em, 0.6em) rotate(-4deg)",
+              }}
             >
+              Sælg
               <span
-                className="whitespace-nowrap"
-                style={{ transform: "rotate(-3deg)" }}
-              >
-                Kontakt
-              </span>
-              <svg
-                viewBox="0 0 40 24"
-                className="h-[0.7em] w-auto text-[#ff6b2c]"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="3.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                style={{ transform: "rotate(-2deg)" }}
-              >
-                <path d="M 5 5 Q 11 14 20 20 Q 28 13 35 6" />
-              </svg>
+                aria-hidden
+                className="inline-block h-[0.8em] w-[0.8em] shrink-0 bg-[#ff6b2c]"
+                style={{
+                  maskImage: "url(/annotation-arrow.png)",
+                  maskSize: "contain",
+                  maskRepeat: "no-repeat",
+                  maskPosition: "center",
+                  WebkitMaskImage: "url(/annotation-arrow.png)",
+                  WebkitMaskSize: "contain",
+                  WebkitMaskRepeat: "no-repeat",
+                  WebkitMaskPosition: "center",
+                  transform: "translate(0.12em, 0.24em)",
+                }}
+              />
             </span>
           </span>{" "}
           mens
@@ -278,27 +280,28 @@ export default function Home() {
           <span className="relative inline-block">
             jernet
             <span
-              className="pointer-events-none absolute left-[25%] top-full mt-[15px] flex flex-col items-center gap-[0.05em] text-[0.28em] font-normal leading-none tracking-normal text-[var(--cream)]/95"
-              style={{ fontFamily: "var(--font-handwritten)" }}
+              className="pointer-events-none absolute left-[12%] top-full mt-[0.05em] inline-flex items-center gap-[0.2em] whitespace-nowrap text-[0.28em] font-normal leading-none tracking-normal text-[var(--cream)]/95"
+              style={{
+                fontFamily: "var(--font-handwritten)",
+                transform: "rotate(-3deg)",
+              }}
             >
-              <svg
-                viewBox="0 0 40 24"
-                className="h-[0.7em] w-auto text-[#ff6b2c]"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="3.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                style={{ transform: "rotate(3deg)" }}
-              >
-                <path d="M 5 19 Q 12 11 20 4 Q 28 12 35 18" />
-              </svg>
+              leadet
               <span
-                className="whitespace-nowrap"
-                style={{ transform: "rotate(-3deg)" }}
-              >
-                leadet
-              </span>
+                aria-hidden
+                className="inline-block h-[0.8em] w-[0.8em] shrink-0 bg-[#ff6b2c]"
+                style={{
+                  maskImage: "url(/annotation-arrow.png)",
+                  maskSize: "contain",
+                  maskRepeat: "no-repeat",
+                  maskPosition: "center",
+                  WebkitMaskImage: "url(/annotation-arrow.png)",
+                  WebkitMaskSize: "contain",
+                  WebkitMaskRepeat: "no-repeat",
+                  WebkitMaskPosition: "center",
+                  transform: "scaleY(-1)",
+                }}
+              />
             </span>
           </span>{" "}
           er{" "}
@@ -310,9 +313,9 @@ export default function Home() {
           </span>
         </h1>
 
-        <div className="mt-[120px] flex flex-col gap-10 pb-10">
+        <div className="mt-16 flex flex-col gap-10 pb-10 sm:mt-[120px]">
           <p
-            className="max-w-2xl text-lg leading-relaxed text-[var(--cream)]/70 sm:text-xl"
+            className="max-w-2xl -translate-y-[40px] text-lg leading-relaxed text-[var(--cream)]/70 sm:text-xl"
             style={{ textWrap: "pretty" }}
           >
             Leads kontaktet inden for 5 minutter er{" "}
