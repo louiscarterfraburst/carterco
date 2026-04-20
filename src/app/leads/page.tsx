@@ -18,6 +18,8 @@ type Lead = {
 
 const allowedEmail = "louis@carterco.dk";
 const leadsUrl = "https://carterco.dk/leads";
+const vapidPublicKey =
+  "BHu6uhde8dpGML_i2Q0iQ_mU1heEp9FCxoB-wG9bAuUcu8PruD78-eBLoZhWvgy46xSXW7KSHXOlwg67ekFXADU";
 
 export default function LeadsPage() {
   const supabase = useMemo(() => createClient(), []);
@@ -26,6 +28,7 @@ export default function LeadsPage() {
   const [token, setToken] = useState("");
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
+  const [notifications, setNotifications] = useState("Ikke aktiv");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -123,6 +126,67 @@ export default function LeadsPage() {
     await supabase.auth.signOut();
     setUser(null);
     setLeads([]);
+  }
+
+  async function enableNotifications() {
+    setError(null);
+    setMessage(null);
+
+    if (!("Notification" in window) || !("serviceWorker" in navigator)) {
+      setError("Denne browser understøtter ikke push-notifikationer.");
+      return;
+    }
+
+    if (!("PushManager" in window)) {
+      setError(
+        "Push virker på iPhone, når siden er gemt på hjemmeskærmen og åbnet som app.",
+      );
+      return;
+    }
+
+    setNotifications("Beder om adgang");
+    const permission = await Notification.requestPermission();
+
+    if (permission !== "granted") {
+      setNotifications("Ikke aktiv");
+      setError("Notifikationer blev ikke slået til.");
+      return;
+    }
+
+    try {
+      const registration = await navigator.serviceWorker.ready;
+      const existingSubscription =
+        await registration.pushManager.getSubscription();
+      const subscription =
+        existingSubscription ??
+        (await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
+        }));
+      const subscriptionJson = subscription.toJSON();
+
+      const { error } = await supabase.from("push_subscriptions").upsert(
+        {
+          endpoint: subscription.endpoint,
+          p256dh: subscriptionJson.keys?.p256dh,
+          auth: subscriptionJson.keys?.auth,
+          user_agent: navigator.userAgent,
+        },
+        { onConflict: "endpoint" },
+      );
+
+      if (error) {
+        setNotifications("Ikke aktiv");
+        setError(error.message);
+        return;
+      }
+
+      setNotifications("Aktiv");
+      setMessage("Notifikationer er slået til på denne enhed.");
+    } catch (err) {
+      setNotifications("Ikke aktiv");
+      setError(err instanceof Error ? err.message : "Notifikationer fejlede.");
+    }
   }
 
   if (loading) {
@@ -224,6 +288,13 @@ export default function LeadsPage() {
         <div className="flex items-center gap-2">
           <button
             type="button"
+            onClick={() => void enableNotifications()}
+            className="rounded-full border border-[var(--cream)]/15 px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--cream)]/70"
+          >
+            Notifikationer
+          </button>
+          <button
+            type="button"
             onClick={() => void loadLeads()}
             className="rounded-full border border-[var(--cream)]/15 px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--cream)]/70"
           >
@@ -240,6 +311,16 @@ export default function LeadsPage() {
       </header>
 
       <section className="mx-auto mt-6 flex w-full max-w-3xl flex-col gap-3">
+        <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-[var(--cream)]/35">
+          Push: {notifications}
+        </p>
+
+        {message ? (
+          <p className="rounded-xl border border-[#ff6b2c]/30 bg-[#ff6b2c]/10 p-4 text-sm text-[var(--cream)]/75">
+            {message}
+          </p>
+        ) : null}
+
         {error ? (
           <p className="rounded-xl border border-[#ff6b2c]/40 bg-[#ff6b2c]/10 p-4 text-sm text-[#ffb86b]">
             {error}
@@ -308,4 +389,17 @@ function formatLeadTime(value: string) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(value));
+}
+
+function urlBase64ToUint8Array(value: string) {
+  const padding = "=".repeat((4 - (value.length % 4)) % 4);
+  const base64 = `${value}${padding}`.replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+
+  for (let i = 0; i < rawData.length; i += 1) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+
+  return outputArray;
 }
