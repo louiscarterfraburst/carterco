@@ -251,7 +251,7 @@ export default function Home() {
           <span className="relative inline-block">
             Smed
             <span
-              className="pointer-events-none absolute left-[8%] bottom-full mb-[0.05em] inline-flex items-center gap-[0.2em] whitespace-nowrap text-[0.28em] font-normal leading-none tracking-normal text-[var(--cream)]/95"
+              className="pointer-events-none absolute left-[8%] bottom-full mb-[0.05em] hidden items-center gap-[0.2em] whitespace-nowrap text-[0.28em] font-normal leading-none tracking-normal text-[var(--cream)]/95 sm:inline-flex"
               style={{
                 fontFamily: "var(--font-handwritten)",
                 transform: "translate(1.4em, 0.6em) rotate(-4deg)",
@@ -280,7 +280,7 @@ export default function Home() {
           <span className="relative inline-block">
             jernet
             <span
-              className="pointer-events-none absolute left-[12%] top-full mt-[0.05em] inline-flex items-center gap-[0.2em] whitespace-nowrap text-[0.28em] font-normal leading-none tracking-normal text-[var(--cream)]/95"
+              className="pointer-events-none absolute left-[12%] top-full mt-[0.05em] hidden items-center gap-[0.2em] whitespace-nowrap text-[0.28em] font-normal leading-none tracking-normal text-[var(--cream)]/95 sm:inline-flex"
               style={{
                 fontFamily: "var(--font-handwritten)",
                 transform: "rotate(-3deg)",
