@@ -26,7 +26,6 @@ type NotificationStatus =
   | "Aktiv";
 
 const allowedEmail = "louis@carterco.dk";
-const leadsUrl = "https://carterco.dk/leads";
 const vapidPublicKey =
   process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ??
   "BHu6uhde8dpGML_i2Q0iQ_mU1heEp9FCxoB-wG9bAuUcu8PruD78-eBLoZhWvgy46xSXW7KSHXOlwg67ekFXADU";
@@ -102,7 +101,6 @@ export default function LeadsPage() {
     const { error } = await supabase.auth.signInWithOtp({
       email: email.trim().toLowerCase(),
       options: {
-        emailRedirectTo: leadsUrl,
         shouldCreateUser: false,
       },
     });

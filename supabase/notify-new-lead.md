@@ -53,3 +53,18 @@ SUPABASE_FUNCTION_URL=https://<project-ref>.functions.supabase.co/notify-new-lea
 LEAD_WEBHOOK_SECRET=... \
 sh scripts/test-lead-push.sh
 ```
+
+## Auth email code template
+
+`/leads` verifies the 6-digit email OTP directly. Supabase sends a magic link by
+default unless the Magic Link template uses `{{ .Token }}`.
+
+Run:
+
+```sh
+SUPABASE_ACCESS_TOKEN=... sh scripts/configure-supabase-otp-email.sh
+```
+
+This sets the Supabase Auth Site URL to `https://carterco.dk`, allow-lists
+`https://carterco.dk/leads`, and replaces the Magic Link email body with the
+6-digit token.
