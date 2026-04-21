@@ -194,7 +194,7 @@ export default function Home() {
 
     try {
       const supabase = createClient();
-      const { error } = await supabase.from("leads").insert({
+      const leadPayload = {
         name: cleaned.name,
         company: cleaned.company,
         email: cleaned.email,
@@ -204,13 +204,25 @@ export default function Home() {
         source: "carterco.dk",
         page_url: window.location.href,
         user_agent: window.navigator.userAgent,
-      });
+      };
+      const { error } = await supabase.from("leads").insert(leadPayload);
 
       if (error) {
         console.error("Supabase lead insert failed", error);
         setSubmitError(`${error.code ?? "Supabase"}: ${error.message}`);
         setSubmitting(false);
         return;
+      }
+
+      const { error: notificationError } = await supabase.functions.invoke(
+        "notify-new-lead",
+        {
+          body: leadPayload,
+        },
+      );
+
+      if (notificationError) {
+        console.error("Lead notification failed", notificationError);
       }
     } catch (error) {
       console.error("Supabase lead insert failed", error);

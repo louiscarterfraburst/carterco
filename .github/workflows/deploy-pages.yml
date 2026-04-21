@@ -37,7 +37,7 @@ jobs:
         env:
           NEXT_PUBLIC_SUPABASE_URL: https://znpaevzwlcfuzqxsbyie.supabase.co
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_rKCrGrKGUr48lEhjqWj3dw_V0kAEKQl
-          NEXT_PUBLIC_VAPID_PUBLIC_KEY: BHu6uhde8dpGML_i2Q0iQ_mU1heEp9FCxoB-wG9bAuUcu8PruD78-eBLoZhWvgy46xSXW7KSHXOlwg67ekFXADU
+          NEXT_PUBLIC_VAPID_PUBLIC_KEY: BFxkts1k-dL9mbX23uPtalmaBnt-bHfXL4Xn7E6xImhFd1XlKR_mFHVXLfELe2PIVoM-c4a3_M9YXIOAlhooFUM
         run: npm run build
 
       - name: Upload artifact

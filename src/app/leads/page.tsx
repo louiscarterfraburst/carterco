@@ -105,7 +105,7 @@ const URGENCY: Record<string, "urgent" | "warm" | "cool" | "muted"> = {
 const allowedEmail = "louis@carterco.dk";
 const vapidPublicKey =
   process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ??
-  "BHu6uhde8dpGML_i2Q0iQ_mU1heEp9FCxoB-wG9bAuUcu8PruD78-eBLoZhWvgy46xSXW7KSHXOlwg67ekFXADU";
+  "BFxkts1k-dL9mbX23uPtalmaBnt-bHfXL4Xn7E6xImhFd1XlKR_mFHVXLfELe2PIVoM-c4a3_M9YXIOAlhooFUM";
 
 /* ─── component ─────────────────────────────────────────────────────── */
 
@@ -349,13 +349,25 @@ export default function LeadsPage() {
     try {
       setNotifications("Gemmer");
       const registration = await navigator.serviceWorker.ready;
-      const existingSubscription =
-        await registration.pushManager.getSubscription();
+      let existingSubscription = await registration.pushManager.getSubscription();
+      const currentKey = urlBase64ToUint8Array(vapidPublicKey);
+
+      if (
+        existingSubscription &&
+        !arrayBuffersEqual(
+          existingSubscription.options.applicationServerKey,
+          currentKey,
+        )
+      ) {
+        await existingSubscription.unsubscribe();
+        existingSubscription = null;
+      }
+
       const subscription =
         existingSubscription ??
         (await registration.pushManager.subscribe({
           userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
+          applicationServerKey: currentKey,
         }));
       const subscriptionJson = subscription.toJSON();
 
@@ -1371,4 +1383,13 @@ function urlBase64ToUint8Array(value: string) {
   }
 
   return outputArray;
+}
+
+function arrayBuffersEqual(
+  left: ArrayBuffer | null | undefined,
+  right: Uint8Array,
+) {
+  if (!left || left.byteLength !== right.byteLength) return false;
+  const leftBytes = new Uint8Array(left);
+  return leftBytes.every((byte, index) => byte === right[index]);
 }
