@@ -119,6 +119,12 @@ export default function Home() {
   const currentError = errors[step.key];
 
   useEffect(() => {
+    if (window.location.hostname === "leads.carterco.dk") {
+      window.location.replace("/leads");
+    }
+  }, []);
+
+  useEffect(() => {
     function onKey(e: globalThis.KeyboardEvent) {
       if (e.key === "Escape") setOpen(false);
     }
