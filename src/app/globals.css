@@ -20,6 +20,10 @@
   --font-mono: var(--font-geist-mono);
 }
 
+html {
+  background: var(--background);
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
@@ -33,4 +37,68 @@ body {
 ::selection {
   background: var(--clay);
   color: white;
+}
+
+/* ─── /leads tool styling ──────────────────────────────── */
+
+.font-display {
+  font-optical-sizing: auto;
+  font-variation-settings: "SOFT" 50, "WONK" 0;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1, "ss01" 1;
+}
+
+.oldstyle {
+  font-variant-numeric: oldstyle-nums;
+  font-feature-settings: "onum" 1;
+}
+
+/* Subtle grain overlay for atmosphere on dark surfaces */
+.grain-overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0.06;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' seed='7' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.9 0'/></filter><rect width='180' height='180' filter='url(%23n)'/></svg>");
+  mix-blend-mode: screen;
+}
+
+/* Staggered row entry */
+@keyframes ledger-row-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.ledger-row {
+  animation: ledger-row-in 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+/* Status dot pulse for fresh leads */
+@keyframes ledger-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 248, 234, 0.45); }
+  50%      { box-shadow: 0 0 0 6px rgba(255, 248, 234, 0); }
+}
+
+.dot-pulse {
+  animation: ledger-pulse 2.4s ease-out infinite;
+}
+
+/* Smooth expansion */
+.ledger-detail {
+  animation: ledger-row-in 0.35s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+/* Focus rings that match the aesthetic */
+.focus-cream:focus-visible {
+  outline: 1px solid rgba(255, 248, 234, 0.45);
+  outline-offset: 2px;
+}
+
+.focus-orange:focus-visible {
+  outline: 1px solid rgba(255, 107, 44, 0.7);
+  outline-offset: 2px;
 }
