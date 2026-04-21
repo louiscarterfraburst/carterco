@@ -1,5 +1,5 @@
-const CACHE_NAME = "carterco-v1";
-const CORE_ASSETS = ["/", "/manifest.webmanifest", "/logo.png", "/signature.png"];
+const CACHE_NAME = "carterco-v2";
+const CORE_ASSETS = ["/", "/leads", "/logo.png", "/signature.png"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -30,6 +30,7 @@ self.addEventListener("fetch", (event) => {
   const requestUrl = new URL(event.request.url);
 
   if (requestUrl.origin !== self.location.origin) return;
+  if (requestUrl.pathname === "/manifest.webmanifest") return;
 
   event.respondWith(
     caches.match(event.request).then((cached) => {
