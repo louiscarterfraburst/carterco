@@ -18,8 +18,9 @@ type CallStatus = "answered" | "no_answer" | null;
 type Outcome =
   | "booked"
   | "interested"
-  | "not_interested"
   | "follow_up"
+  | "not_interested"
+  | "unqualified"
   | null;
 
 type Lead = {
@@ -52,8 +53,9 @@ type NotificationStatus =
 const OUTCOME_LABELS: Record<Exclude<Outcome, null>, string> = {
   booked: "Booket møde",
   interested: "Interesseret",
-  not_interested: "Ikke interesseret",
   follow_up: "Follow up",
+  not_interested: "Ikke interesseret",
+  unqualified: "Ikke kvalificeret",
 };
 
 const OUTCOME_TONE: Record<
@@ -72,17 +74,23 @@ const OUTCOME_TONE: Record<
     surface: "bg-[var(--clay)]/15",
     edge: "border-l-[var(--clay)]",
   },
-  not_interested: {
-    dot: "bg-[var(--ink)]/25",
-    text: "text-[var(--ink)]/50",
-    surface: "bg-white/[0.02]",
-    edge: "border-l-[var(--ink)]/20",
-  },
   follow_up: {
     dot: "bg-transparent ring-1 ring-inset ring-[var(--ink)]/60",
     text: "text-[var(--ink)]/80",
-    surface: "bg-white/[0.03]",
+    surface: "bg-[var(--ink)]/[0.05]",
     edge: "border-l-[var(--ink)]/40",
+  },
+  not_interested: {
+    dot: "bg-[var(--ink)]/30",
+    text: "text-[var(--ink)]/55",
+    surface: "bg-[var(--ink)]/[0.04]",
+    edge: "border-l-[var(--ink)]/25",
+  },
+  unqualified: {
+    dot: "bg-transparent ring-1 ring-inset ring-[var(--ink)]/30",
+    text: "text-[var(--ink)]/45",
+    surface: "bg-[var(--ink)]/[0.025]",
+    edge: "border-l-[var(--ink)]/15",
   },
 };
 
@@ -393,7 +401,7 @@ export default function LeadsPage() {
   /* ─── loading screen ─── */
   if (loading) {
     return (
-      <main className="relative flex min-h-screen items-center justify-center bg-[var(--sand)] px-6 text-[var(--ink)]">
+      <main className="safe-screen safe-pad-top safe-pad-bottom relative flex min-h-screen items-center justify-center bg-[var(--sand)] px-6 text-[var(--ink)]">
         <div className="grain-overlay" />
         <p className="tabular text-[11px] uppercase tracking-[0.4em] text-[var(--ink)]/40">
           Indlæser
@@ -405,11 +413,11 @@ export default function LeadsPage() {
   /* ─── login screen ─── */
   if (!user) {
     return (
-      <main className="relative min-h-screen overflow-hidden bg-[var(--sand)] text-[var(--ink)]">
+      <main className="safe-screen safe-pad-top safe-pad-bottom safe-px relative min-h-screen overflow-hidden bg-[var(--sand)] text-[var(--ink)]">
         <div className="grain-overlay" />
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-[60vh] bg-[radial-gradient(ellipse_at_top,rgba(61,122,96,0.18),transparent_60%)]" />
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-[60vh] bg-[radial-gradient(ellipse_at_top,rgba(185,112,65,0.14),transparent_60%)]" />
 
-        <div className="relative mx-auto flex min-h-screen w-full max-w-md flex-col justify-between px-6 py-10">
+        <div className="safe-screen relative mx-auto flex min-h-screen w-full max-w-md flex-col justify-between px-6 py-8 sm:py-10">
           <Link
             href="/"
             className="tabular text-[10px] uppercase tracking-[0.35em] text-[var(--ink)]/45 hover:text-[var(--ink)]/70"
@@ -492,11 +500,11 @@ export default function LeadsPage() {
 
   /* ─── main dashboard ─── */
   return (
-    <main className="relative min-h-screen bg-[var(--sand)] text-[var(--ink)]">
+    <main className="safe-screen safe-pad-bottom relative min-h-screen bg-[var(--sand)] text-[var(--ink)]">
       <div className="grain-overlay" />
 
       {/* Sticky top bar */}
-      <div className="sticky top-0 z-20 border-b border-[var(--ink)]/[0.06] bg-[var(--sand)]/85 backdrop-blur-xl">
+      <div className="safe-pad-top sticky top-0 z-20 border-b border-[var(--ink)]/[0.10] bg-[var(--sand)]/85 backdrop-blur-xl">
         <div className="mx-auto flex w-full max-w-[1400px] items-center justify-between gap-4 px-4 py-3 sm:px-8 lg:px-12">
           <Link
             href="/"
@@ -539,7 +547,7 @@ export default function LeadsPage() {
 
       {/* Masthead */}
       <section className="relative mx-auto w-full max-w-[1400px] px-4 pt-10 pb-8 sm:px-8 sm:pt-16 sm:pb-10 lg:px-12">
-        <div className="pointer-events-none absolute inset-x-4 top-6 -z-10 h-[40vh] bg-[radial-gradient(ellipse_at_top_left,rgba(61,122,96,0.08),transparent_60%)] sm:inset-x-8 lg:inset-x-12" />
+        <div className="pointer-events-none absolute inset-x-4 top-6 -z-10 h-[40vh] bg-[radial-gradient(ellipse_at_top_left,rgba(185,112,65,0.08),transparent_60%)] sm:inset-x-8 lg:inset-x-12" />
 
         <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
           <div>
@@ -663,7 +671,7 @@ function LeadRow({
 
   return (
     <li
-      className="ledger-row relative border-b border-[var(--ink)]/[0.06]"
+      className="ledger-row relative border-b border-[var(--ink)]/[0.10]"
       style={{ animationDelay: `${Math.min(index, 8) * 40}ms` }}
     >
       {/* Urgency stripe */}
@@ -685,7 +693,7 @@ function LeadRow({
       <button
         type="button"
         onClick={onToggle}
-        className="focus-cream grid w-full grid-cols-[16px_1fr_24px] items-center gap-4 px-2 py-4 text-left transition hover:bg-[var(--ink)]/[0.02] md:grid-cols-[16px_80px_1.2fr_1fr_90px_120px_160px_20px] md:items-center md:gap-4 md:py-5"
+        className="focus-cream grid w-full grid-cols-[16px_1fr_24px] items-center gap-4 px-2 py-4 text-left transition hover:bg-[var(--ink)]/[0.04] md:grid-cols-[16px_80px_1.2fr_1fr_90px_120px_160px_20px] md:items-center md:gap-4 md:py-5"
       >
         {/* Status dot */}
         <StatusDot lead={lead} />
@@ -793,7 +801,7 @@ function DetailPanel({
   // Resolved — terminal state, shown only in "Vis alle"
   if (lead.outcome) {
     return (
-      <div className="ledger-detail border-t border-[var(--ink)]/[0.05] bg-[var(--ink)]/[0.015] px-4 py-5 sm:px-6 sm:py-6">
+      <div className="ledger-detail border-t border-[var(--ink)]/[0.10] bg-[var(--ink)]/[0.03] px-4 py-5 sm:px-6 sm:py-6">
         <div className="mx-auto flex w-full max-w-xl flex-col gap-4">
           <div className="flex items-start justify-between gap-4">
             <div>
@@ -834,7 +842,7 @@ function DetailPanel({
   const showOutcomeSection = !!lead.call_status;
 
   return (
-    <div className="ledger-detail border-t border-[var(--ink)]/[0.05] bg-[var(--ink)]/[0.015] px-4 py-5 sm:px-6 sm:py-6">
+    <div className="ledger-detail border-t border-[var(--ink)]/[0.10] bg-[var(--ink)]/[0.03] px-4 py-5 sm:px-6 sm:py-6">
       <div className="mx-auto flex w-full max-w-xl flex-col gap-5">
         {/* Step 1 — primary action: Ring. Mail stays quiet beneath. */}
         <div className="flex flex-col gap-1">
@@ -867,7 +875,7 @@ function DetailPanel({
 
         {/* Step 2 — appears after Ring: Svarede / Intet svar */}
         {showCallResultButtons ? (
-          <div className="ledger-detail flex flex-col gap-3 border-t border-[var(--ink)]/[0.06] pt-5">
+          <div className="ledger-detail flex flex-col gap-3 border-t border-[var(--ink)]/[0.10] pt-5">
             {lead.call_status ? (
               <div className="flex items-center justify-between gap-3">
                 <p className="flex items-center gap-2.5 text-[12px] text-[var(--ink)]/70">
@@ -916,7 +924,7 @@ function DetailPanel({
 
         {/* Step 3 — appears after Svarede/Intet svar: outcome + notes */}
         {showOutcomeSection ? (
-          <div className="ledger-detail flex flex-col gap-5 border-t border-[var(--ink)]/[0.06] pt-5">
+          <div className="ledger-detail flex flex-col gap-5 border-t border-[var(--ink)]/[0.10] pt-5">
             <div>
               <p className="tabular mb-3 text-[10px] uppercase tracking-[0.28em] text-[var(--ink)]/45">
                 Resultat
@@ -937,6 +945,12 @@ function DetailPanel({
                     onClick={() => void setOutcome(lead.id, key)}
                   />
                 ))}
+                <OutcomeButton
+                  outcome="unqualified"
+                  selected={lead.outcome === "unqualified"}
+                  onClick={() => void setOutcome(lead.id, "unqualified")}
+                  fullWidth
+                />
               </div>
             </div>
             <textarea
@@ -984,7 +998,7 @@ function StatusDot({ lead }: { lead: Lead }) {
   return (
     <span
       aria-hidden
-      className="dot-pulse inline-block h-2 w-2 rounded-full bg-[var(--ink)]"
+      className="dot-pulse inline-block h-2 w-2 rounded-full bg-[var(--forest)]"
     />
   );
 }
@@ -1065,10 +1079,12 @@ function OutcomeButton({
   outcome,
   selected,
   onClick,
+  fullWidth,
 }: {
   outcome: Exclude<Outcome, null>;
   selected: boolean;
   onClick: () => void;
+  fullWidth?: boolean;
 }) {
   const tone = OUTCOME_TONE[outcome];
   return (
@@ -1076,6 +1092,8 @@ function OutcomeButton({
       type="button"
       onClick={onClick}
       className={`focus-cream flex items-center justify-between gap-3 rounded-sm border px-3 py-3 text-left text-[11px] uppercase tracking-[0.16em] transition ${
+        fullWidth ? "col-span-2" : ""
+      } ${
         selected
           ? `border-transparent ${tone.surface} ${tone.text}`
           : "border-[var(--ink)]/10 text-[var(--ink)]/65 hover:border-[var(--ink)]/30 hover:text-[var(--ink)]"
@@ -1103,7 +1121,7 @@ function SegmentedToggle({
     <div
       role="tablist"
       aria-label="Vis"
-      className="relative flex items-center gap-0 rounded-sm border border-[var(--ink)]/10 bg-white/[0.02] p-0.5"
+      className="relative flex items-center gap-0 rounded-sm border border-[var(--ink)]/10 bg-[var(--ink)]/[0.04] p-0.5"
     >
       {(
         [

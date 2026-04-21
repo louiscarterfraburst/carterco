@@ -56,6 +56,24 @@ body {
   font-feature-settings: "onum" 1;
 }
 
+.safe-screen {
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+.safe-pad-top {
+  padding-top: max(env(safe-area-inset-top), 0px);
+}
+
+.safe-pad-bottom {
+  padding-bottom: max(env(safe-area-inset-bottom), 0px);
+}
+
+.safe-px {
+  padding-left: max(env(safe-area-inset-left), 0px);
+  padding-right: max(env(safe-area-inset-right), 0px);
+}
+
 /* Paper grain — multiply blend reads as printed texture on sand */
 .grain-overlay {
   position: fixed;
