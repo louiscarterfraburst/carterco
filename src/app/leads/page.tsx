@@ -61,28 +61,28 @@ const OUTCOME_TONE: Record<
   { dot: string; text: string; surface: string; edge: string }
 > = {
   booked: {
-    dot: "bg-[#7fb89b] shadow-[0_0_12px_rgba(127,184,155,0.4)]",
-    text: "text-[#9fc9b2]",
-    surface: "bg-[#19463a]/20",
-    edge: "border-l-[#7fb89b]",
+    dot: "bg-[var(--forest)]",
+    text: "text-[var(--forest)]",
+    surface: "bg-[var(--forest)]/20",
+    edge: "border-l-[var(--forest)]",
   },
   interested: {
-    dot: "bg-[#d98a54] shadow-[0_0_12px_rgba(217,138,84,0.35)]",
-    text: "text-[#e2a37b]",
-    surface: "bg-[#b97041]/15",
-    edge: "border-l-[#d98a54]",
+    dot: "bg-[var(--clay)]",
+    text: "text-[var(--clay)]",
+    surface: "bg-[var(--clay)]/15",
+    edge: "border-l-[var(--clay)]",
   },
   not_interested: {
-    dot: "bg-[var(--cream)]/25",
-    text: "text-[var(--cream)]/50",
+    dot: "bg-[var(--ink)]/25",
+    text: "text-[var(--ink)]/50",
     surface: "bg-white/[0.02]",
-    edge: "border-l-[var(--cream)]/20",
+    edge: "border-l-[var(--ink)]/20",
   },
   follow_up: {
-    dot: "bg-transparent ring-1 ring-inset ring-[var(--cream)]/60",
-    text: "text-[var(--cream)]/80",
+    dot: "bg-transparent ring-1 ring-inset ring-[var(--ink)]/60",
+    text: "text-[var(--ink)]/80",
     surface: "bg-white/[0.03]",
-    edge: "border-l-[var(--cream)]/40",
+    edge: "border-l-[var(--ink)]/40",
   },
 };
 
@@ -114,9 +114,18 @@ export default function LeadsPage() {
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<View>("active");
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [hasRungIds, setHasRungIds] = useState<Set<string>>(new Set());
   const notesTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(
     new Map(),
   );
+
+  function markRung(leadId: string) {
+    setHasRungIds((curr) => {
+      const next = new Set(curr);
+      next.add(leadId);
+      return next;
+    });
+  }
 
   const visibleLeads = useMemo(
     () => (view === "active" ? leads.filter((l) => !l.outcome) : leads),
@@ -368,6 +377,7 @@ export default function LeadsPage() {
 
   function isExpanded(lead: Lead) {
     if (lead.call_status && !lead.outcome) return true;
+    if (hasRungIds.has(lead.id) && !lead.outcome) return true;
     return expandedIds.has(lead.id);
   }
 
@@ -383,9 +393,9 @@ export default function LeadsPage() {
   /* ─── loading screen ─── */
   if (loading) {
     return (
-      <main className="relative flex min-h-screen items-center justify-center bg-[#0a0907] px-6 text-[var(--cream)]">
+      <main className="relative flex min-h-screen items-center justify-center bg-[var(--sand)] px-6 text-[var(--ink)]">
         <div className="grain-overlay" />
-        <p className="tabular text-[11px] uppercase tracking-[0.4em] text-[var(--cream)]/40">
+        <p className="tabular text-[11px] uppercase tracking-[0.4em] text-[var(--ink)]/40">
           Indlæser
         </p>
       </main>
@@ -395,32 +405,32 @@ export default function LeadsPage() {
   /* ─── login screen ─── */
   if (!user) {
     return (
-      <main className="relative min-h-screen overflow-hidden bg-[#0a0907] text-[var(--cream)]">
+      <main className="relative min-h-screen overflow-hidden bg-[var(--sand)] text-[var(--ink)]">
         <div className="grain-overlay" />
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-[60vh] bg-[radial-gradient(ellipse_at_top,rgba(185,112,65,0.18),transparent_60%)]" />
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-[60vh] bg-[radial-gradient(ellipse_at_top,rgba(61,122,96,0.18),transparent_60%)]" />
 
         <div className="relative mx-auto flex min-h-screen w-full max-w-md flex-col justify-between px-6 py-10">
           <Link
             href="/"
-            className="tabular text-[10px] uppercase tracking-[0.35em] text-[var(--cream)]/45 hover:text-[var(--cream)]/70"
+            className="tabular text-[10px] uppercase tracking-[0.35em] text-[var(--ink)]/45 hover:text-[var(--ink)]/70"
           >
             CarterCo · Leads
           </Link>
 
           <section>
-            <p className="tabular text-[10px] uppercase tracking-[0.32em] text-[var(--cream)]/40">
+            <p className="tabular text-[10px] uppercase tracking-[0.32em] text-[var(--ink)]/40">
               Privat arbejdsrum
             </p>
-            <h1 className="font-display mt-4 text-6xl italic leading-[0.9] tracking-[-0.02em] text-[var(--cream)] sm:text-7xl">
+            <h1 className="font-display mt-4 text-6xl italic leading-[0.9] tracking-[-0.02em] text-[var(--ink)] sm:text-7xl">
               Leads
             </h1>
-            <p className="mt-6 max-w-xs text-sm leading-relaxed text-[var(--cream)]/55">
+            <p className="mt-6 max-w-xs text-sm leading-relaxed text-[var(--ink)]/55">
               Se nye henvendelser, ring direkte og hold styr på din pipeline
               uden støj.
             </p>
 
             <form onSubmit={sendLink} className="mt-10 flex flex-col gap-3">
-              <label className="tabular text-[10px] uppercase tracking-[0.28em] text-[var(--cream)]/40">
+              <label className="tabular text-[10px] uppercase tracking-[0.28em] text-[var(--ink)]/40">
                 E-mail
               </label>
               <input
@@ -428,11 +438,11 @@ export default function LeadsPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 autoComplete="email"
-                className="focus-orange border-b border-[var(--cream)]/15 bg-transparent py-3 text-base text-[var(--cream)] outline-none transition focus:border-[#ff6b2c]"
+                className="focus-orange border-b border-[var(--ink)]/15 bg-transparent py-3 text-base text-[var(--ink)] outline-none transition focus:border-[var(--forest)]"
               />
               <button
                 type="submit"
-                className="focus-orange mt-4 flex items-center justify-between rounded-sm bg-[#ff6b2c] px-5 py-3.5 text-[11px] font-semibold uppercase tracking-[0.22em] text-[#0a0907] transition hover:bg-[#ff7f47]"
+                className="focus-orange mt-4 flex items-center justify-between rounded-sm bg-[var(--forest)] px-5 py-3.5 text-[11px] font-semibold uppercase tracking-[0.22em] text-[var(--cream)] transition hover:bg-[#2f5e4e] active:bg-[#0e3429]"
               >
                 <span>Send login-link</span>
                 <span aria-hidden>→</span>
@@ -440,7 +450,7 @@ export default function LeadsPage() {
             </form>
 
             <form onSubmit={verifyCode} className="mt-8 flex flex-col gap-3">
-              <label className="tabular text-[10px] uppercase tracking-[0.28em] text-[var(--cream)]/40">
+              <label className="tabular text-[10px] uppercase tracking-[0.28em] text-[var(--ink)]/40">
                 Eller indtast kode
               </label>
               <input
@@ -450,29 +460,29 @@ export default function LeadsPage() {
                 inputMode="numeric"
                 autoComplete="one-time-code"
                 placeholder="6-cifret"
-                className="focus-cream tabular border-b border-[var(--cream)]/15 bg-transparent py-3 text-base text-[var(--cream)] outline-none transition placeholder:text-[var(--cream)]/25 focus:border-[var(--cream)]/45"
+                className="focus-cream tabular border-b border-[var(--ink)]/15 bg-transparent py-3 text-base text-[var(--ink)] outline-none transition placeholder:text-[var(--ink)]/25 focus:border-[var(--ink)]/45"
               />
               <button
                 type="submit"
-                className="focus-cream mt-2 self-start text-[11px] uppercase tracking-[0.22em] text-[var(--cream)]/70 underline-offset-[6px] transition hover:text-[var(--cream)] hover:underline"
+                className="focus-cream mt-2 self-start text-[11px] uppercase tracking-[0.22em] text-[var(--ink)]/70 underline-offset-[6px] transition hover:text-[var(--ink)] hover:underline"
               >
                 Verificer →
               </button>
             </form>
 
             {message ? (
-              <p className="mt-8 border-l border-[#ff6b2c]/50 pl-3 text-sm text-[var(--cream)]/70">
+              <p className="mt-8 border-l border-[var(--forest)]/50 pl-3 text-sm text-[var(--ink)]/70">
                 {message}
               </p>
             ) : null}
             {error ? (
-              <p className="mt-8 border-l border-[#ffb86b]/50 pl-3 text-sm text-[#ffb86b]">
+              <p className="mt-8 border-l border-[var(--clay)]/50 pl-3 text-sm text-[var(--clay)]">
                 {error}
               </p>
             ) : null}
           </section>
 
-          <p className="tabular text-[10px] uppercase tracking-[0.28em] text-[var(--cream)]/25">
+          <p className="tabular text-[10px] uppercase tracking-[0.28em] text-[var(--ink)]/25">
             {new Date().getFullYear()} · Kun for {allowedEmail}
           </p>
         </div>
@@ -482,24 +492,24 @@ export default function LeadsPage() {
 
   /* ─── main dashboard ─── */
   return (
-    <main className="relative min-h-screen bg-[#0a0907] text-[var(--cream)]">
+    <main className="relative min-h-screen bg-[var(--sand)] text-[var(--ink)]">
       <div className="grain-overlay" />
 
       {/* Sticky top bar */}
-      <div className="sticky top-0 z-20 border-b border-[var(--cream)]/[0.06] bg-[#0a0907]/85 backdrop-blur-xl">
+      <div className="sticky top-0 z-20 border-b border-[var(--ink)]/[0.06] bg-[var(--sand)]/85 backdrop-blur-xl">
         <div className="mx-auto flex w-full max-w-[1400px] items-center justify-between gap-4 px-4 py-3 sm:px-8 lg:px-12">
           <Link
             href="/"
-            className="tabular text-[10px] uppercase tracking-[0.35em] text-[var(--cream)]/50 transition hover:text-[var(--cream)]/80"
+            className="tabular text-[10px] uppercase tracking-[0.35em] text-[var(--ink)]/50 transition hover:text-[var(--ink)]/80"
           >
             CarterCo
-            <span className="mx-2 text-[var(--cream)]/25">/</span>
-            <span className="text-[var(--cream)]/75">Leads</span>
+            <span className="mx-2 text-[var(--ink)]/25">/</span>
+            <span className="text-[var(--ink)]/75">Leads</span>
           </Link>
 
           <div className="flex items-center gap-1 sm:gap-2">
             <SegmentedToggle value={view} onChange={setView} />
-            <div className="mx-1 hidden h-4 w-px bg-[var(--cream)]/10 sm:block" />
+            <div className="mx-1 hidden h-4 w-px bg-[var(--ink)]/10 sm:block" />
             <IconButton
               title={`Push: ${notifications}`}
               onClick={() => void enableNotifications()}
@@ -529,14 +539,14 @@ export default function LeadsPage() {
 
       {/* Masthead */}
       <section className="relative mx-auto w-full max-w-[1400px] px-4 pt-10 pb-8 sm:px-8 sm:pt-16 sm:pb-10 lg:px-12">
-        <div className="pointer-events-none absolute inset-x-4 top-6 -z-10 h-[40vh] bg-[radial-gradient(ellipse_at_top_left,rgba(185,112,65,0.08),transparent_60%)] sm:inset-x-8 lg:inset-x-12" />
+        <div className="pointer-events-none absolute inset-x-4 top-6 -z-10 h-[40vh] bg-[radial-gradient(ellipse_at_top_left,rgba(61,122,96,0.08),transparent_60%)] sm:inset-x-8 lg:inset-x-12" />
 
         <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <p className="tabular text-[10px] uppercase tracking-[0.32em] text-[var(--cream)]/40">
+            <p className="tabular text-[10px] uppercase tracking-[0.32em] text-[var(--ink)]/40">
               Indbakke
             </p>
-            <h1 className="font-display mt-2 text-[15vw] italic leading-[0.85] tracking-[-0.03em] text-[var(--cream)] sm:text-[96px]">
+            <h1 className="font-display mt-2 text-[15vw] italic leading-[0.85] tracking-[-0.03em] text-[var(--ink)] sm:text-[96px]">
               Leads
             </h1>
           </div>
@@ -555,12 +565,12 @@ export default function LeadsPage() {
       {(message || error) && (
         <div className="mx-auto mb-4 w-full max-w-[1400px] px-4 sm:px-8 lg:px-12">
           {message ? (
-            <p className="border-l-2 border-[#ff6b2c]/60 bg-[#ff6b2c]/[0.04] py-2 pl-4 pr-4 text-sm text-[var(--cream)]/75">
+            <p className="border-l-2 border-[var(--forest)]/60 bg-[var(--forest)]/[0.04] py-2 pl-4 pr-4 text-sm text-[var(--ink)]/75">
               {message}
             </p>
           ) : null}
           {error ? (
-            <p className="mt-2 border-l-2 border-[#ffb86b]/70 bg-[#ffb86b]/[0.04] py-2 pl-4 pr-4 text-sm text-[#ffb86b]">
+            <p className="mt-2 border-l-2 border-[var(--clay)]/70 bg-[var(--clay)]/[0.04] py-2 pl-4 pr-4 text-sm text-[var(--clay)]">
               {error}
             </p>
           ) : null}
@@ -570,7 +580,7 @@ export default function LeadsPage() {
       {/* Ledger */}
       <section className="mx-auto w-full max-w-[1400px] px-4 pb-24 sm:px-8 lg:px-12">
         {/* Column headers — desktop only */}
-        <div className="hidden border-b border-[var(--cream)]/[0.08] px-2 pb-3 md:grid md:grid-cols-[16px_80px_1.2fr_1fr_90px_120px_160px_20px] md:gap-4 md:items-end">
+        <div className="hidden border-b border-[var(--ink)]/[0.08] px-2 pb-3 md:grid md:grid-cols-[16px_80px_1.2fr_1fr_90px_120px_160px_20px] md:gap-4 md:items-end">
           <span />
           <ColHeader>Modtaget</ColHeader>
           <ColHeader>Navn</ColHeader>
@@ -582,13 +592,13 @@ export default function LeadsPage() {
         </div>
 
         {visibleLeads.length === 0 ? (
-          <div className="border-b border-[var(--cream)]/[0.08] py-16 text-center">
-            <p className="font-display text-2xl italic text-[var(--cream)]/40">
+          <div className="border-b border-[var(--ink)]/[0.08] py-16 text-center">
+            <p className="font-display text-2xl italic text-[var(--ink)]/40">
               {view === "active"
                 ? "Ingen aktive leads."
                 : "Ingen leads endnu."}
             </p>
-            <p className="mt-3 tabular text-[10px] uppercase tracking-[0.3em] text-[var(--cream)]/30">
+            <p className="mt-3 tabular text-[10px] uppercase tracking-[0.3em] text-[var(--ink)]/30">
               Indbakken er ren.
             </p>
           </div>
@@ -600,7 +610,9 @@ export default function LeadsPage() {
                 lead={lead}
                 index={index}
                 expanded={isExpanded(lead)}
+                hasRung={hasRungIds.has(lead.id)}
                 onToggle={() => toggleExpanded(lead.id)}
+                onRung={() => markRung(lead.id)}
                 setCallStatus={setCallStatus}
                 setOutcome={setOutcome}
                 updateNotes={updateNotes}
@@ -611,9 +623,9 @@ export default function LeadsPage() {
       </section>
 
       <footer className="mx-auto w-full max-w-[1400px] px-4 pb-10 sm:px-8 lg:px-12">
-        <p className="tabular text-[10px] uppercase tracking-[0.28em] text-[var(--cream)]/25">
+        <p className="tabular text-[10px] uppercase tracking-[0.28em] text-[var(--ink)]/25">
           Push: {notifications}
-          <span className="mx-3 text-[var(--cream)]/15">·</span>
+          <span className="mx-3 text-[var(--ink)]/15">·</span>
           {stats.total} i arkivet
         </p>
       </footer>
@@ -627,7 +639,9 @@ function LeadRow({
   lead,
   index,
   expanded,
+  hasRung,
   onToggle,
+  onRung,
   setCallStatus,
   setOutcome,
   updateNotes,
@@ -635,7 +649,9 @@ function LeadRow({
   lead: Lead;
   index: number;
   expanded: boolean;
+  hasRung: boolean;
   onToggle: () => void;
+  onRung: () => void;
   setCallStatus: (id: string, s: CallStatus) => Promise<void>;
   setOutcome: (id: string, o: Outcome) => Promise<void>;
   updateNotes: (id: string, v: string) => void;
@@ -647,14 +663,14 @@ function LeadRow({
 
   return (
     <li
-      className="ledger-row relative border-b border-[var(--cream)]/[0.06]"
+      className="ledger-row relative border-b border-[var(--ink)]/[0.06]"
       style={{ animationDelay: `${Math.min(index, 8) * 40}ms` }}
     >
       {/* Urgency stripe */}
       {urgent && !lead.outcome ? (
         <span
           aria-hidden
-          className="absolute left-0 top-0 bottom-0 w-[2px] bg-[#ff6b2c]"
+          className="absolute left-0 top-0 bottom-0 w-[2px] bg-[var(--clay)]"
         />
       ) : null}
       {lead.outcome ? (
@@ -669,7 +685,7 @@ function LeadRow({
       <button
         type="button"
         onClick={onToggle}
-        className="focus-cream grid w-full grid-cols-[16px_1fr_24px] items-center gap-4 px-2 py-4 text-left transition hover:bg-[var(--cream)]/[0.02] md:grid-cols-[16px_80px_1.2fr_1fr_90px_120px_160px_20px] md:items-center md:gap-4 md:py-5"
+        className="focus-cream grid w-full grid-cols-[16px_1fr_24px] items-center gap-4 px-2 py-4 text-left transition hover:bg-[var(--ink)]/[0.02] md:grid-cols-[16px_80px_1.2fr_1fr_90px_120px_160px_20px] md:items-center md:gap-4 md:py-5"
       >
         {/* Status dot */}
         <StatusDot lead={lead} />
@@ -677,18 +693,18 @@ function LeadRow({
         {/* Mobile: stacked content */}
         <div className="min-w-0 md:hidden">
           <div className="flex items-baseline justify-between gap-3">
-            <h2 className="font-display truncate text-xl leading-tight text-[var(--cream)]">
+            <h2 className="font-display truncate text-xl leading-tight text-[var(--ink)]">
               {lead.name}
             </h2>
-            <span className="tabular shrink-0 text-[10px] uppercase tracking-[0.18em] text-[var(--cream)]/40">
+            <span className="tabular shrink-0 text-[10px] uppercase tracking-[0.18em] text-[var(--ink)]/40">
               {day}
             </span>
           </div>
           <div className="mt-1 flex items-baseline justify-between gap-3">
-            <p className="truncate text-sm text-[var(--cream)]/55">
+            <p className="truncate text-sm text-[var(--ink)]/55">
               {lead.company}
             </p>
-            <span className="tabular shrink-0 text-[11px] text-[var(--cream)]/35">
+            <span className="tabular shrink-0 text-[11px] text-[var(--ink)]/35">
               {time}
             </span>
           </div>
@@ -697,7 +713,7 @@ function LeadRow({
             <MetaTag tone={urgent ? "urgent" : warm ? "warm" : "neutral"}>
               {lead.response_time}
             </MetaTag>
-            <span className="tabular ml-auto text-[11px] text-[var(--cream)]/50">
+            <span className="tabular ml-auto text-[11px] text-[var(--ink)]/50">
               {formattedPhone}
             </span>
           </div>
@@ -705,22 +721,22 @@ function LeadRow({
 
         {/* Desktop columns */}
         <div className="hidden flex-col gap-0.5 md:flex">
-          <span className="tabular text-[11px] uppercase tracking-[0.16em] text-[var(--cream)]/55">
+          <span className="tabular text-[11px] uppercase tracking-[0.16em] text-[var(--ink)]/55">
             {day}
           </span>
-          <span className="tabular text-[11px] text-[var(--cream)]/30">
+          <span className="tabular text-[11px] text-[var(--ink)]/30">
             {time}
           </span>
         </div>
 
         <div className="hidden min-w-0 md:block">
-          <h2 className="font-display truncate text-[22px] leading-tight text-[var(--cream)]">
+          <h2 className="font-display truncate text-[22px] leading-tight text-[var(--ink)]">
             {lead.name}
           </h2>
         </div>
 
         <div className="hidden min-w-0 md:block">
-          <p className="truncate text-sm text-[var(--cream)]/55">
+          <p className="truncate text-sm text-[var(--ink)]/55">
             {lead.company}
           </p>
         </div>
@@ -735,7 +751,7 @@ function LeadRow({
           </MetaTag>
         </div>
 
-        <div className="hidden justify-self-end tabular text-sm text-[var(--cream)]/75 md:block">
+        <div className="hidden justify-self-end tabular text-sm text-[var(--ink)]/75 md:block">
           {formattedPhone}
         </div>
 
@@ -746,6 +762,8 @@ function LeadRow({
       {expanded ? (
         <DetailPanel
           lead={lead}
+          hasRung={hasRung}
+          onRung={onRung}
           setCallStatus={setCallStatus}
           setOutcome={setOutcome}
           updateNotes={updateNotes}
@@ -759,155 +777,177 @@ function LeadRow({
 
 function DetailPanel({
   lead,
+  hasRung,
+  onRung,
   setCallStatus,
   setOutcome,
   updateNotes,
 }: {
   lead: Lead;
+  hasRung: boolean;
+  onRung: () => void;
   setCallStatus: (id: string, s: CallStatus) => Promise<void>;
   setOutcome: (id: string, o: Outcome) => Promise<void>;
   updateNotes: (id: string, v: string) => void;
 }) {
-  const smsHref = `sms:${lead.phone}?&body=${encodeURIComponent(
-    buildSmsBody(lead.name),
-  )}`;
-
-  return (
-    <div className="ledger-detail relative grid gap-8 border-t border-[var(--cream)]/[0.05] bg-[var(--cream)]/[0.015] px-4 py-6 md:grid-cols-[1fr_380px] md:px-8 md:py-8">
-      {/* Left: contact column */}
-      <div className="flex flex-col gap-6">
-        <div>
-          <p className="tabular text-[10px] uppercase tracking-[0.28em] text-[var(--cream)]/35">
-            Kontakt
-          </p>
-          <div className="mt-3 flex flex-col gap-2">
-            <a
-              href={`tel:${lead.phone}`}
-              className="focus-orange group inline-flex items-center justify-between gap-4 rounded-sm bg-[#ff6b2c] px-5 py-4 text-[12px] font-semibold uppercase tracking-[0.2em] text-[#0a0907] transition hover:bg-[#ff7f47]"
-            >
-              <span className="flex items-center gap-3">
-                <PhoneIcon />
-                Ring
-              </span>
-              <span className="tabular text-[13px] tracking-[0.1em]">
-                {formatPhone(lead.phone)}
-              </span>
-            </a>
-            <a
-              href={`mailto:${lead.email}`}
-              className="focus-cream group inline-flex items-center justify-between gap-4 border-b border-[var(--cream)]/10 px-1 py-3 text-sm text-[var(--cream)]/70 transition hover:text-[var(--cream)]"
-            >
-              <span className="flex items-center gap-3">
-                <MailIcon />
-                Skriv mail
-              </span>
-              <span className="truncate text-[13px] text-[var(--cream)]/45 group-hover:text-[var(--cream)]/70">
-                {lead.email}
-              </span>
-            </a>
-          </div>
-        </div>
-
-        <div>
-          <p className="tabular text-[10px] uppercase tracking-[0.28em] text-[var(--cream)]/35">
-            Besked til lead
-          </p>
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            <GhostButton
-              onClick={() => void setCallStatus(lead.id, "answered")}
-              active={lead.call_status === "answered"}
-            >
-              Svarede
-            </GhostButton>
-            <GhostAnchor
-              href={smsHref}
-              onClick={() => void setCallStatus(lead.id, "no_answer")}
-              active={lead.call_status === "no_answer"}
-            >
-              Intet svar · SMS
-            </GhostAnchor>
-          </div>
-          {lead.call_status ? (
-            <div className="mt-3 flex items-center justify-between">
-              <p className="flex items-center gap-2 text-[12px] text-[var(--cream)]/60">
-                <span
-                  className={`inline-block h-1.5 w-1.5 rounded-full ${
-                    lead.call_status === "answered"
-                      ? "bg-[#b97041]"
-                      : "bg-[#b97041] ring-1 ring-inset ring-[#b97041]"
-                  }`}
-                />
-                {lead.call_status === "answered"
-                  ? "Svarede på opkaldet"
-                  : "Intet svar · SMS afsendt fra din telefon"}
+  // Resolved — terminal state, shown only in "Vis alle"
+  if (lead.outcome) {
+    return (
+      <div className="ledger-detail border-t border-[var(--ink)]/[0.05] bg-[var(--ink)]/[0.015] px-4 py-5 sm:px-6 sm:py-6">
+        <div className="mx-auto flex w-full max-w-xl flex-col gap-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="tabular text-[10px] uppercase tracking-[0.26em] text-[var(--ink)]/35">
+                Lukket
               </p>
-              <button
-                type="button"
-                onClick={() => void setCallStatus(lead.id, null)}
-                className="text-[10px] uppercase tracking-[0.2em] text-[var(--cream)]/40 underline-offset-4 hover:text-[var(--cream)]/75 hover:underline"
-              >
-                Fortryd
-              </button>
+              <p className="font-display mt-1.5 text-2xl italic leading-tight text-[var(--ink)]">
+                {OUTCOME_LABELS[lead.outcome]}
+              </p>
+              {lead.outcome_at ? (
+                <p className="tabular mt-2 text-[11px] text-[var(--ink)]/40">
+                  {formatLeadTime(lead.outcome_at)}
+                </p>
+              ) : null}
             </div>
+            <button
+              type="button"
+              onClick={() => void setOutcome(lead.id, null)}
+              className="text-[11px] uppercase tracking-[0.18em] text-[var(--ink)]/50 underline-offset-4 transition hover:text-[var(--ink)] hover:underline"
+            >
+              Genåbn
+            </button>
+          </div>
+          {lead.notes ? (
+            <p className="whitespace-pre-wrap border-l-2 border-[var(--ink)]/10 pl-4 text-sm leading-relaxed text-[var(--ink)]/70">
+              {lead.notes}
+            </p>
           ) : null}
         </div>
       </div>
+    );
+  }
 
-      {/* Right: pipeline column */}
-      <div className="flex flex-col gap-6">
-        <div>
-          <div className="flex items-center justify-between">
-            <p className="tabular text-[10px] uppercase tracking-[0.28em] text-[var(--cream)]/35">
-              Resultat
-            </p>
-            {lead.outcome ? (
-              <button
-                type="button"
-                onClick={() => void setOutcome(lead.id, null)}
-                className="text-[10px] uppercase tracking-[0.2em] text-[var(--cream)]/40 underline-offset-4 hover:text-[var(--cream)]/75 hover:underline"
+  const smsHref = `sms:${lead.phone}?&body=${encodeURIComponent(
+    buildSmsBody(lead.name),
+  )}`;
+  const showCallResultButtons = hasRung || !!lead.call_status;
+  const showOutcomeSection = !!lead.call_status;
+
+  return (
+    <div className="ledger-detail border-t border-[var(--ink)]/[0.05] bg-[var(--ink)]/[0.015] px-4 py-5 sm:px-6 sm:py-6">
+      <div className="mx-auto flex w-full max-w-xl flex-col gap-5">
+        {/* Step 1 — primary action: Ring. Mail stays quiet beneath. */}
+        <div className="flex flex-col gap-1">
+          <a
+            href={`tel:${lead.phone}`}
+            onClick={onRung}
+            className="focus-orange flex items-center justify-between gap-4 rounded-sm bg-[var(--forest)] px-5 py-4 text-[13px] font-semibold uppercase tracking-[0.18em] text-[var(--cream)] transition hover:bg-[#2f5e4e] active:bg-[#0e3429]"
+          >
+            <span className="flex items-center gap-3">
+              <PhoneIcon />
+              Ring op
+            </span>
+            <span className="tabular text-[13px] tracking-[0.08em]">
+              {formatPhone(lead.phone)}
+            </span>
+          </a>
+          <a
+            href={`mailto:${lead.email}`}
+            className="focus-cream flex items-center justify-between gap-4 px-1 py-3 text-[var(--ink)]/55 transition hover:text-[var(--ink)]"
+          >
+            <span className="flex items-center gap-3 text-[11px] uppercase tracking-[0.18em]">
+              <MailIcon />
+              Skriv mail
+            </span>
+            <span className="truncate text-[12px] text-[var(--ink)]/35">
+              {lead.email}
+            </span>
+          </a>
+        </div>
+
+        {/* Step 2 — appears after Ring: Svarede / Intet svar */}
+        {showCallResultButtons ? (
+          <div className="ledger-detail flex flex-col gap-3 border-t border-[var(--ink)]/[0.06] pt-5">
+            {lead.call_status ? (
+              <div className="flex items-center justify-between gap-3">
+                <p className="flex items-center gap-2.5 text-[12px] text-[var(--ink)]/70">
+                  <span
+                    className={`inline-block h-1.5 w-1.5 rounded-full ${
+                      lead.call_status === "answered"
+                        ? "bg-[var(--clay)]"
+                        : "bg-transparent ring-[1.5px] ring-inset ring-[var(--clay)]"
+                    }`}
+                    aria-hidden
+                  />
+                  {lead.call_status === "answered"
+                    ? "Svarede på opkaldet"
+                    : "Intet svar · SMS afsendt"}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void setCallStatus(lead.id, null)}
+                  className="text-[10px] uppercase tracking-[0.2em] text-[var(--ink)]/40 underline-offset-4 transition hover:text-[var(--ink)]/75 hover:underline"
+                >
+                  Fortryd
+                </button>
+              </div>
+            ) : (
+              <p className="tabular text-[10px] uppercase tracking-[0.28em] text-[var(--ink)]/45">
+                Hvad skete der?
+              </p>
+            )}
+            <div className="grid grid-cols-2 gap-2">
+              <GhostButton
+                onClick={() => void setCallStatus(lead.id, "answered")}
+                active={lead.call_status === "answered"}
               >
-                Genåbn
-              </button>
-            ) : null}
+                Svarede
+              </GhostButton>
+              <GhostAnchor
+                href={smsHref}
+                onClick={() => void setCallStatus(lead.id, "no_answer")}
+                active={lead.call_status === "no_answer"}
+              >
+                Intet svar · SMS
+              </GhostAnchor>
+            </div>
           </div>
+        ) : null}
 
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            {(
-              [
-                "booked",
-                "interested",
-                "follow_up",
-                "not_interested",
-              ] as const
-            ).map((key) => (
-              <OutcomeButton
-                key={key}
-                outcome={key}
-                selected={lead.outcome === key}
-                onClick={() => void setOutcome(lead.id, key)}
-              />
-            ))}
+        {/* Step 3 — appears after Svarede/Intet svar: outcome + notes */}
+        {showOutcomeSection ? (
+          <div className="ledger-detail flex flex-col gap-5 border-t border-[var(--ink)]/[0.06] pt-5">
+            <div>
+              <p className="tabular mb-3 text-[10px] uppercase tracking-[0.28em] text-[var(--ink)]/45">
+                Resultat
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                {(
+                  [
+                    "booked",
+                    "interested",
+                    "follow_up",
+                    "not_interested",
+                  ] as const
+                ).map((key) => (
+                  <OutcomeButton
+                    key={key}
+                    outcome={key}
+                    selected={lead.outcome === key}
+                    onClick={() => void setOutcome(lead.id, key)}
+                  />
+                ))}
+              </div>
+            </div>
+            <textarea
+              value={lead.notes ?? ""}
+              onChange={(e) => updateNotes(lead.id, e.target.value)}
+              placeholder="Noter — valgfrit"
+              rows={3}
+              className="focus-cream w-full resize-y border border-[var(--ink)]/10 bg-transparent px-3 py-3 text-sm leading-relaxed text-[var(--ink)] outline-none transition placeholder:italic placeholder:text-[var(--ink)]/25 focus:border-[var(--ink)]/40"
+            />
           </div>
-
-          {lead.outcome_at ? (
-            <p className="tabular mt-3 text-[10px] uppercase tracking-[0.22em] text-[var(--cream)]/35">
-              Lukket {formatLeadTime(lead.outcome_at)}
-            </p>
-          ) : null}
-        </div>
-
-        <div>
-          <p className="tabular text-[10px] uppercase tracking-[0.28em] text-[var(--cream)]/35">
-            Noter
-          </p>
-          <textarea
-            value={lead.notes ?? ""}
-            onChange={(e) => updateNotes(lead.id, e.target.value)}
-            placeholder="Skriv hvad I talte om, næste skridt, dato for opkald …"
-            rows={4}
-            className="focus-cream mt-3 w-full resize-y border border-[var(--cream)]/10 bg-transparent px-3 py-3 text-sm leading-relaxed text-[var(--cream)] outline-none transition placeholder:italic placeholder:text-[var(--cream)]/25 focus:border-[var(--cream)]/40"
-          />
-        </div>
+        ) : null}
       </div>
     </div>
   );
@@ -929,7 +969,7 @@ function StatusDot({ lead }: { lead: Lead }) {
     return (
       <span
         aria-hidden
-        className="inline-block h-2 w-2 rounded-full bg-[#b97041] shadow-[0_0_10px_rgba(185,112,65,0.45)]"
+        className="inline-block h-2 w-2 rounded-full bg-[var(--clay)]"
       />
     );
   }
@@ -937,14 +977,14 @@ function StatusDot({ lead }: { lead: Lead }) {
     return (
       <span
         aria-hidden
-        className="inline-block h-2 w-2 rounded-full bg-transparent ring-[1.5px] ring-inset ring-[#b97041]"
+        className="inline-block h-2 w-2 rounded-full bg-transparent ring-[1.5px] ring-inset ring-[var(--clay)]"
       />
     );
   }
   return (
     <span
       aria-hidden
-      className="dot-pulse inline-block h-2 w-2 rounded-full bg-[var(--cream)]"
+      className="dot-pulse inline-block h-2 w-2 rounded-full bg-[var(--ink)]"
     />
   );
 }
@@ -958,10 +998,10 @@ function MetaTag({
 }) {
   const toneCls =
     tone === "urgent"
-      ? "text-[#ffb68a] ring-[#ff6b2c]/40 bg-[#ff6b2c]/[0.08]"
+      ? "text-[var(--clay)] ring-[var(--clay)]/40 bg-[var(--clay)]/[0.08]"
       : tone === "warm"
-        ? "text-[#e2a37b] ring-[#b97041]/30 bg-[#b97041]/[0.06]"
-        : "text-[var(--cream)]/55 ring-[var(--cream)]/10 bg-transparent";
+        ? "text-[var(--clay)] ring-[var(--clay)]/30 bg-[var(--clay)]/[0.06]"
+        : "text-[var(--ink)]/55 ring-[var(--ink)]/10 bg-transparent";
   return (
     <span
       className={`tabular inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] uppercase tracking-[0.12em] ring-1 ring-inset ${toneCls}`}
@@ -986,8 +1026,8 @@ function GhostButton({
       onClick={onClick}
       className={`focus-cream group relative overflow-hidden rounded-sm border px-4 py-3 text-[11px] uppercase tracking-[0.18em] transition ${
         active
-          ? "border-[#b97041]/60 bg-[#b97041]/[0.08] text-[var(--cream)]"
-          : "border-[var(--cream)]/12 text-[var(--cream)]/70 hover:border-[var(--cream)]/30 hover:text-[var(--cream)]"
+          ? "border-[var(--clay)]/60 bg-[var(--clay)]/[0.08] text-[var(--ink)]"
+          : "border-[var(--ink)]/12 text-[var(--ink)]/70 hover:border-[var(--ink)]/30 hover:text-[var(--ink)]"
       }`}
     >
       {children}
@@ -1012,8 +1052,8 @@ function GhostAnchor({
       onClick={onClick}
       className={`focus-cream group relative overflow-hidden rounded-sm border px-4 py-3 text-center text-[11px] uppercase tracking-[0.18em] transition ${
         active
-          ? "border-[#b97041]/60 bg-[#b97041]/[0.08] text-[var(--cream)]"
-          : "border-[var(--cream)]/12 text-[var(--cream)]/70 hover:border-[var(--cream)]/30 hover:text-[var(--cream)]"
+          ? "border-[var(--clay)]/60 bg-[var(--clay)]/[0.08] text-[var(--ink)]"
+          : "border-[var(--ink)]/12 text-[var(--ink)]/70 hover:border-[var(--ink)]/30 hover:text-[var(--ink)]"
       }`}
     >
       {children}
@@ -1038,14 +1078,14 @@ function OutcomeButton({
       className={`focus-cream flex items-center justify-between gap-3 rounded-sm border px-3 py-3 text-left text-[11px] uppercase tracking-[0.16em] transition ${
         selected
           ? `border-transparent ${tone.surface} ${tone.text}`
-          : "border-[var(--cream)]/10 text-[var(--cream)]/65 hover:border-[var(--cream)]/30 hover:text-[var(--cream)]"
+          : "border-[var(--ink)]/10 text-[var(--ink)]/65 hover:border-[var(--ink)]/30 hover:text-[var(--ink)]"
       }`}
     >
       <span>{OUTCOME_LABELS[outcome]}</span>
       <span
         aria-hidden
         className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${
-          selected ? tone.dot : "bg-[var(--cream)]/15"
+          selected ? tone.dot : "bg-[var(--ink)]/15"
         }`}
       />
     </button>
@@ -1063,7 +1103,7 @@ function SegmentedToggle({
     <div
       role="tablist"
       aria-label="Vis"
-      className="relative flex items-center gap-0 rounded-sm border border-[var(--cream)]/10 bg-white/[0.02] p-0.5"
+      className="relative flex items-center gap-0 rounded-sm border border-[var(--ink)]/10 bg-white/[0.02] p-0.5"
     >
       {(
         [
@@ -1081,8 +1121,8 @@ function SegmentedToggle({
             onClick={() => onChange(key)}
             className={`focus-cream relative rounded-[2px] px-3 py-1.5 text-[10px] uppercase tracking-[0.18em] transition ${
               selected
-                ? "bg-[var(--cream)] text-[#0a0907]"
-                : "text-[var(--cream)]/55 hover:text-[var(--cream)]"
+                ? "bg-[var(--ink)] text-[var(--sand)]"
+                : "text-[var(--ink)]/55 hover:text-[var(--ink)]"
             }`}
           >
             {label}
@@ -1114,8 +1154,8 @@ function IconButton({
       title={title}
       className={`focus-cream relative flex h-9 w-9 items-center justify-center rounded-sm border transition ${
         active
-          ? "border-[#ff6b2c]/40 text-[#ff6b2c]"
-          : "border-[var(--cream)]/10 text-[var(--cream)]/60 hover:border-[var(--cream)]/30 hover:text-[var(--cream)]"
+          ? "border-[var(--forest)]/50 text-[var(--forest)]"
+          : "border-[var(--ink)]/10 text-[var(--ink)]/60 hover:border-[var(--ink)]/30 hover:text-[var(--ink)]"
       } disabled:cursor-wait disabled:opacity-40`}
     >
       {children}
@@ -1134,12 +1174,12 @@ function Stat({
 }) {
   return (
     <div className="flex flex-col items-start">
-      <dt className="tabular text-[10px] uppercase tracking-[0.26em] text-[var(--cream)]/35">
+      <dt className="tabular text-[10px] uppercase tracking-[0.26em] text-[var(--ink)]/35">
         {label}
       </dt>
       <dd
         className={`font-display mt-1 text-3xl leading-none tabular sm:text-4xl ${
-          accent ? "text-[#ff6b2c]" : "text-[var(--cream)]"
+          accent ? "text-[var(--forest)]" : "text-[var(--ink)]"
         }`}
       >
         {value}
@@ -1157,7 +1197,7 @@ function ColHeader({
 }) {
   return (
     <span
-      className={`tabular text-[10px] uppercase tracking-[0.26em] text-[var(--cream)]/30 ${className ?? ""}`}
+      className={`tabular text-[10px] uppercase tracking-[0.26em] text-[var(--ink)]/30 ${className ?? ""}`}
     >
       {children}
     </span>
@@ -1168,8 +1208,8 @@ function Chevron({ expanded }: { expanded: boolean }) {
   return (
     <span
       aria-hidden
-      className={`inline-flex h-5 w-5 items-center justify-center text-[var(--cream)]/30 transition-transform duration-300 ${
-        expanded ? "rotate-90 text-[var(--cream)]/60" : ""
+      className={`inline-flex h-5 w-5 items-center justify-center text-[var(--ink)]/30 transition-transform duration-300 ${
+        expanded ? "rotate-90 text-[var(--ink)]/60" : ""
       }`}
     >
       <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
