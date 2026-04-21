@@ -26,17 +26,20 @@ type Outcome =
 type Lead = {
   id: string;
   created_at: string;
-  name: string;
-  company: string;
-  email: string;
-  phone: string;
-  monthly_leads: string;
-  response_time: string;
+  name: string | null;
+  company: string | null;
+  email: string | null;
+  phone: string | null;
+  monthly_leads: string | null;
+  response_time: string | null;
   call_status: CallStatus;
   call_status_at: string | null;
   outcome: Outcome;
   outcome_at: string | null;
   notes: string | null;
+  is_draft: boolean;
+  draft_updated_at: string | null;
+  meeting_at: string | null;
 };
 
 type View = "active" | "all";
@@ -178,7 +181,7 @@ export default function LeadsPage() {
     const { data, error } = await supabase
       .from("leads")
       .select(
-        "id, created_at, name, company, email, phone, monthly_leads, response_time, call_status, call_status_at, outcome, outcome_at, notes",
+        "id, created_at, name, company, email, phone, monthly_leads, response_time, call_status, call_status_at, outcome, outcome_at, notes, is_draft, draft_updated_at, meeting_at",
       )
       .order("created_at", { ascending: false })
       .limit(50);
@@ -188,7 +191,12 @@ export default function LeadsPage() {
       return;
     }
 
-    setLeads(data ?? []);
+    const sorted = (data ?? []).slice().sort((a, b) => {
+      const aAt = a.draft_updated_at ?? a.created_at;
+      const bAt = b.draft_updated_at ?? b.created_at;
+      return bAt.localeCompare(aAt);
+    });
+    setLeads(sorted);
   }
 
   async function sendLink(e: FormEvent<HTMLFormElement>) {
@@ -765,10 +773,20 @@ function LeadRow({
   setOutcome: (id: string, o: Outcome) => Promise<void>;
   updateNotes: (id: string, v: string) => void;
 }) {
-  const urgent = URGENCY[lead.response_time] === "urgent";
-  const warm = URGENCY[lead.response_time] === "warm";
-  const { day, time } = splitLeadTime(lead.created_at);
-  const formattedPhone = formatPhone(lead.phone);
+  const urgent =
+    !!lead.response_time && URGENCY[lead.response_time] === "urgent";
+  const warm =
+    !!lead.response_time && URGENCY[lead.response_time] === "warm";
+  const rowTimestamp =
+    lead.is_draft && lead.draft_updated_at
+      ? lead.draft_updated_at
+      : lead.created_at;
+  const { day, time } = splitLeadTime(rowTimestamp);
+  const phoneDigits = lead.phone ? lead.phone.replace(/\D/g, "") : "";
+  const canCall = phoneDigits.length >= 8;
+  const formattedPhone = lead.phone ? formatPhone(lead.phone) : "—";
+  const displayName = lead.name ?? lead.email ?? "Udkast";
+  const displayCompany = lead.company;
 
   return (
     <li
@@ -803,8 +821,9 @@ function LeadRow({
           {/* Mobile: stacked content */}
           <div className="min-w-0 md:hidden">
             <div className="flex items-baseline justify-between gap-3">
-              <h2 className="font-display truncate text-xl leading-tight text-[var(--ink)]">
-                {lead.name}
+              <h2 className="font-display flex min-w-0 items-baseline gap-2 truncate text-xl leading-tight text-[var(--ink)]">
+                <span className="truncate">{displayName}</span>
+                {lead.is_draft ? <DraftBadge /> : null}
               </h2>
               <span className="tabular shrink-0 text-[10px] uppercase tracking-[0.18em] text-[var(--ink)]/40">
                 {day}
@@ -812,18 +831,28 @@ function LeadRow({
             </div>
             <div className="mt-1 flex items-baseline justify-between gap-3">
               <p className="truncate text-sm text-[var(--ink)]/55">
-                {lead.company}
+                {displayCompany ?? (
+                  <span className="text-[var(--ink)]/30">—</span>
+                )}
               </p>
               <span className="tabular shrink-0 text-[11px] text-[var(--ink)]/35">
                 {time}
               </span>
             </div>
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              <MetaTag>{lead.monthly_leads}</MetaTag>
-              <MetaTag tone={urgent ? "urgent" : warm ? "warm" : "neutral"}>
-                {lead.response_time}
-              </MetaTag>
-            </div>
+            {lead.monthly_leads || lead.response_time ? (
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                {lead.monthly_leads ? (
+                  <MetaTag>{lead.monthly_leads}</MetaTag>
+                ) : null}
+                {lead.response_time ? (
+                  <MetaTag
+                    tone={urgent ? "urgent" : warm ? "warm" : "neutral"}
+                  >
+                    {lead.response_time}
+                  </MetaTag>
+                ) : null}
+              </div>
+            ) : null}
           </div>
 
           {/* Desktop columns */}
@@ -837,25 +866,36 @@ function LeadRow({
           </div>
 
           <div className="hidden min-w-0 md:block">
-            <h2 className="font-display truncate text-[22px] leading-tight text-[var(--ink)]">
-              {lead.name}
+            <h2 className="font-display flex items-baseline gap-2 text-[22px] leading-tight text-[var(--ink)]">
+              <span className="truncate">{displayName}</span>
+              {lead.is_draft ? <DraftBadge /> : null}
             </h2>
           </div>
 
           <div className="hidden min-w-0 md:block">
             <p className="truncate text-sm text-[var(--ink)]/55">
-              {lead.company}
+              {displayCompany ?? (
+                <span className="text-[var(--ink)]/30">—</span>
+              )}
             </p>
           </div>
 
           <div className="hidden md:block">
-            <MetaTag>{lead.monthly_leads}</MetaTag>
+            {lead.monthly_leads ? (
+              <MetaTag>{lead.monthly_leads}</MetaTag>
+            ) : (
+              <span className="text-[var(--ink)]/25">—</span>
+            )}
           </div>
 
           <div className="hidden md:block">
-            <MetaTag tone={urgent ? "urgent" : warm ? "warm" : "neutral"}>
-              {lead.response_time}
-            </MetaTag>
+            {lead.response_time ? (
+              <MetaTag tone={urgent ? "urgent" : warm ? "warm" : "neutral"}>
+                {lead.response_time}
+              </MetaTag>
+            ) : (
+              <span className="text-[var(--ink)]/25">—</span>
+            )}
           </div>
 
           {/* Expand indicator (desktop only — mobile is whole-row tap) */}
@@ -865,17 +905,30 @@ function LeadRow({
         </button>
 
         {/* Tap-to-call action — sibling to the expand button so they can be activated independently */}
-        <a
-          href={`tel:${lead.phone}`}
-          onClick={onRung}
-          aria-label={`Ring ${formattedPhone}`}
-          className="focus-orange group flex w-12 shrink-0 items-center justify-center gap-2 self-stretch border-l border-[var(--ink)]/[0.08] text-[var(--forest)] transition hover:bg-[var(--forest)] hover:text-[var(--cream)] active:bg-[#0e3429] md:w-auto md:gap-3 md:px-5"
-        >
-          <PhoneIcon />
-          <span className="tabular hidden text-[13px] tracking-[0.04em] md:inline">
-            {formattedPhone}
+        {canCall ? (
+          <a
+            href={`tel:${lead.phone}`}
+            onClick={onRung}
+            aria-label={`Ring ${formattedPhone}`}
+            className="focus-orange group flex w-12 shrink-0 items-center justify-center gap-2 self-stretch border-l border-[var(--ink)]/[0.08] text-[var(--forest)] transition hover:bg-[var(--forest)] hover:text-[var(--cream)] active:bg-[#0e3429] md:w-auto md:gap-3 md:px-5"
+          >
+            <PhoneIcon />
+            <span className="tabular hidden text-[13px] tracking-[0.04em] md:inline">
+              {formattedPhone}
+            </span>
+          </a>
+        ) : (
+          <span
+            aria-label="Telefon mangler"
+            className="flex w-12 shrink-0 items-center justify-center gap-2 self-stretch border-l border-[var(--ink)]/[0.08] text-[var(--ink)]/20 md:w-auto md:gap-3 md:px-5"
+            title="Telefonnummer mangler"
+          >
+            <PhoneIcon />
+            <span className="tabular hidden text-[13px] tracking-[0.04em] italic md:inline">
+              {lead.phone ?? "—"}
+            </span>
           </span>
-        </a>
+        )}
       </div>
 
       {expanded ? (
@@ -916,9 +969,14 @@ function DetailPanel({
               <p className="font-display mt-1.5 text-2xl italic leading-tight text-[var(--ink)]">
                 {OUTCOME_LABELS[lead.outcome]}
               </p>
+              {lead.meeting_at ? (
+                <p className="tabular mt-2 text-[12px] text-[var(--forest)]">
+                  {formatMeetingTime(lead.meeting_at)}
+                </p>
+              ) : null}
               {lead.outcome_at ? (
                 <p className="tabular mt-2 text-[11px] text-[var(--ink)]/40">
-                  {formatLeadTime(lead.outcome_at)}
+                  Lukket {formatLeadTime(lead.outcome_at)}
                 </p>
               ) : null}
             </div>
@@ -940,27 +998,42 @@ function DetailPanel({
     );
   }
 
-  const smsHref = `sms:${lead.phone}?&body=${encodeURIComponent(
-    buildSmsBody(lead.name),
-  )}`;
+  const canSms =
+    !!lead.phone && lead.phone.replace(/\D/g, "").length >= 8;
+  const smsHref = canSms
+    ? `sms:${lead.phone}?&body=${encodeURIComponent(buildSmsBody(lead.name))}`
+    : "#";
+  const hasEmail = !!lead.email && lead.email.includes("@");
   const showOutcomeSection = !!lead.call_status;
 
   return (
     <div className="ledger-detail border-t border-[var(--ink)]/[0.10] bg-[var(--ink)]/[0.03] px-4 py-5 sm:px-6 sm:py-6">
       <div className="mx-auto flex w-full max-w-xl flex-col gap-5">
         {/* Mail (secondary contact action — Ring lives on the row itself) */}
-        <a
-          href={`mailto:${lead.email}`}
-          className="focus-cream flex items-center justify-between gap-4 border-b border-[var(--ink)]/[0.10] pb-3 text-[var(--ink)]/55 transition hover:text-[var(--ink)]"
-        >
-          <span className="flex items-center gap-3 text-[11px] uppercase tracking-[0.18em]">
-            <MailIcon />
-            Skriv mail
-          </span>
-          <span className="truncate text-[12px] text-[var(--ink)]/35">
-            {lead.email}
-          </span>
-        </a>
+        {hasEmail ? (
+          <a
+            href={mailtoHref(lead.email, lead.name)}
+            className="focus-cream flex items-center justify-between gap-4 border-b border-[var(--ink)]/[0.10] pb-3 text-[var(--ink)]/55 transition hover:text-[var(--ink)]"
+          >
+            <span className="flex items-center gap-3 text-[11px] uppercase tracking-[0.18em]">
+              <MailIcon />
+              Skriv mail
+            </span>
+            <span className="truncate text-[12px] text-[var(--ink)]/35">
+              {lead.email}
+            </span>
+          </a>
+        ) : (
+          <div className="flex items-center justify-between gap-4 border-b border-[var(--ink)]/[0.10] pb-3 text-[var(--ink)]/30">
+            <span className="flex items-center gap-3 text-[11px] uppercase tracking-[0.18em]">
+              <MailIcon />
+              Skriv mail
+            </span>
+            <span className="truncate text-[12px] italic">
+              Mail mangler
+            </span>
+          </div>
+        )}
 
         {/* Step 1 — Svarede / Intet svar (always visible when expanded) */}
         <div className="ledger-detail flex flex-col gap-3">
@@ -999,13 +1072,22 @@ function DetailPanel({
             >
               Svarede
             </GhostButton>
-            <GhostAnchor
-              href={smsHref}
-              onClick={() => void setCallStatus(lead.id, "no_answer")}
-              active={lead.call_status === "no_answer"}
-            >
-              Intet svar · SMS
-            </GhostAnchor>
+            {canSms ? (
+              <GhostAnchor
+                href={smsHref}
+                onClick={() => void setCallStatus(lead.id, "no_answer")}
+                active={lead.call_status === "no_answer"}
+              >
+                Intet svar · SMS
+              </GhostAnchor>
+            ) : (
+              <GhostButton
+                onClick={() => void setCallStatus(lead.id, "no_answer")}
+                active={lead.call_status === "no_answer"}
+              >
+                Intet svar
+              </GhostButton>
+            )}
           </div>
         </div>
 
@@ -1066,6 +1148,14 @@ function StatusDot({ lead }: { lead: Lead }) {
       />
     );
   }
+  if (lead.is_draft) {
+    return (
+      <span
+        aria-hidden
+        className="inline-block h-2 w-2 rounded-full bg-transparent ring-[1.5px] ring-inset ring-[var(--ink)]/40"
+      />
+    );
+  }
   if (lead.call_status === "answered") {
     return (
       <span
@@ -1087,6 +1177,14 @@ function StatusDot({ lead }: { lead: Lead }) {
       aria-hidden
       className="dot-pulse inline-block h-2 w-2 rounded-full bg-[var(--forest)]"
     />
+  );
+}
+
+function DraftBadge() {
+  return (
+    <span className="tabular inline-flex shrink-0 items-center rounded-full border border-dashed border-[var(--clay)]/60 px-2 py-0.5 text-[9px] uppercase tracking-[0.22em] text-[var(--clay)]">
+      Udkast
+    </span>
   );
 }
 
@@ -1405,9 +1503,34 @@ function outcomeStripe(outcome: Exclude<Outcome, null>) {
   return OUTCOME_TONE[outcome].edge;
 }
 
-function buildSmsBody(name: string) {
-  const firstName = name.trim().split(/\s+/)[0] ?? name;
-  return `Hej ${firstName}, det er Louis fra CarterCo - jeg prøvede lige at ringe. Skriv når det passer, så finder vi et tidspunkt. /Louis`;
+function firstName(name: string | null) {
+  if (!name) return "der";
+  return name.trim().split(/\s+/)[0] ?? name;
+}
+
+function buildSmsBody(name: string | null) {
+  return `Hej ${firstName(name)}, det er Louis fra CarterCo - jeg prøvede lige at ringe. Skriv når det passer, så finder vi et tidspunkt. /Louis`;
+}
+
+const CALENDLY_URL = "https://calendly.com/louis-carter/30min";
+
+function buildEmailDraft(name: string | null) {
+  const subject = "Kort follow-up fra CarterCo";
+  const body = `Hej ${firstName(name)},
+
+Det er Louis fra CarterCo. Jeg prøvede lige at ringe dig efter din henvendelse — har du 20 minutter senere i denne uge til at snakke om, hvordan vi kan gøre dine leads varme hurtigere?
+
+Du kan også booke direkte her: ${CALENDLY_URL}
+
+/Louis`;
+  return { subject, body };
+}
+
+function mailtoHref(email: string | null | undefined, name: string | null) {
+  if (!email) return "#";
+  const { subject, body } = buildEmailDraft(name);
+  const params = new URLSearchParams({ subject, body });
+  return `mailto:${email}?${params.toString()}`;
 }
 
 function notificationTitle(status: NotificationStatus) {
@@ -1446,6 +1569,18 @@ function notificationHelp(status: NotificationStatus) {
     default:
       return "Tryk Slå til på den enhed, hvor du vil modtage nye lead-notifikationer.";
   }
+}
+
+function formatMeetingTime(value: string) {
+  const d = new Date(value);
+  const formatter = new Intl.DateTimeFormat("da-DK", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  return formatter.format(d).replace(" kl.", " kl.");
 }
 
 function formatLeadTime(value: string) {

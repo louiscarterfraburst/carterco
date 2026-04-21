@@ -1,7 +1,16 @@
 "use client";
 
-import { FormEvent, KeyboardEvent, useEffect, useState } from "react";
+import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
 import { createClient } from "@/utils/supabase/client";
+
+const DRAFT_STORAGE_KEY = "carterco.lead_draft_id";
+const DRAFT_DEBOUNCE_MS = 1200;
+const SUPABASE_URL =
+  process.env.NEXT_PUBLIC_SUPABASE_URL ??
+  "https://znpaevzwlcfuzqxsbyie.supabase.co";
+const SUPABASE_KEY =
+  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??
+  "sb_publishable_rKCrGrKGUr48lEhjqWj3dw_V0kAEKQl";
 
 type StepKey =
   | "name"
@@ -108,6 +117,35 @@ export default function Home() {
   const [stepIdx, setStepIdx] = useState(0);
   const [form, setForm] = useState<FormState>(initial);
   const [errors, setErrors] = useState<FieldErrors>({});
+  const draftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const formRef = useRef(form);
+
+  useEffect(() => {
+    formRef.current = form;
+  }, [form]);
+
+  useEffect(() => {
+    function flush() {
+      if (draftTimerRef.current) {
+        clearTimeout(draftTimerRef.current);
+        draftTimerRef.current = null;
+      }
+      flushDraft(formRef.current);
+    }
+    function onVisibility() {
+      if (document.visibilityState === "hidden") flush();
+    }
+    window.addEventListener("pagehide", flush);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      document.removeEventListener("visibilitychange", onVisibility);
+      if (draftTimerRef.current) {
+        clearTimeout(draftTimerRef.current);
+        draftTimerRef.current = null;
+      }
+    };
+  }, []);
 
   const step = steps[stepIdx];
   const total = steps.length;
@@ -192,6 +230,11 @@ export default function Home() {
       utm_medium: "hero_form",
     });
 
+    if (draftTimerRef.current) {
+      clearTimeout(draftTimerRef.current);
+      draftTimerRef.current = null;
+    }
+
     try {
       const supabase = createClient();
       const leadPayload = {
@@ -224,6 +267,15 @@ export default function Home() {
       if (notificationError) {
         console.error("Lead notification failed", notificationError);
       }
+
+      const draftId =
+        typeof window !== "undefined"
+          ? window.localStorage.getItem(DRAFT_STORAGE_KEY)
+          : null;
+      if (draftId) {
+        void supabase.from("leads").delete().eq("draft_session_id", draftId);
+        window.localStorage.removeItem(DRAFT_STORAGE_KEY);
+      }
     } catch (error) {
       console.error("Supabase lead insert failed", error);
       setSubmitError(
@@ -250,7 +302,8 @@ export default function Home() {
   }
 
   function updateField(key: StepKey, value: string) {
-    setForm({ ...form, [key]: value });
+    const nextForm = { ...form, [key]: value };
+    setForm(nextForm);
     if (errors[key]) {
       setErrors((current) => {
         const next = { ...current };
@@ -258,6 +311,12 @@ export default function Home() {
         return next;
       });
     }
+
+    if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
+    draftTimerRef.current = setTimeout(() => {
+      draftTimerRef.current = null;
+      void saveDraft(nextForm);
+    }, DRAFT_DEBOUNCE_MS);
   }
 
   return (
@@ -593,6 +652,88 @@ export default function Home() {
       )}
     </main>
   );
+}
+
+function getOrCreateDraftSessionId(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const existing = window.localStorage.getItem(DRAFT_STORAGE_KEY);
+    if (existing) return existing;
+    const fresh =
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `draft-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    window.localStorage.setItem(DRAFT_STORAGE_KEY, fresh);
+    return fresh;
+  } catch {
+    return null;
+  }
+}
+
+function draftReady(form: FormState) {
+  const email = form.email.trim();
+  const phoneDigits = form.phone.replace(/\D/g, "");
+  return email.length > 0 || phoneDigits.length >= 4;
+}
+
+function buildDraftPayload(form: FormState, sessionId: string) {
+  const cleaned = cleanForm(form);
+  return {
+    source: "carterco.dk",
+    is_draft: true,
+    draft_session_id: sessionId,
+    draft_updated_at: new Date().toISOString(),
+    name: cleaned.name || null,
+    company: cleaned.company || null,
+    email: cleaned.email || null,
+    phone: cleaned.phone || null,
+    monthly_leads: cleaned.monthlyLeads || null,
+    response_time: cleaned.responseTime || null,
+    page_url:
+      typeof window !== "undefined" ? window.location.href : null,
+    user_agent:
+      typeof window !== "undefined" ? window.navigator.userAgent : null,
+  };
+}
+
+async function saveDraft(form: FormState) {
+  if (!draftReady(form)) return;
+  const sessionId = getOrCreateDraftSessionId();
+  if (!sessionId) return;
+  try {
+    const supabase = createClient();
+    const payload = buildDraftPayload(form, sessionId);
+    const { error } = await supabase
+      .from("leads")
+      .upsert(payload, { onConflict: "draft_session_id" });
+    if (error) console.warn("Draft save failed", error);
+  } catch (err) {
+    console.warn("Draft save failed", err);
+  }
+}
+
+function flushDraft(form: FormState) {
+  if (!draftReady(form)) return;
+  const sessionId = getOrCreateDraftSessionId();
+  if (!sessionId) return;
+  const payload = buildDraftPayload(form, sessionId);
+  try {
+    fetch(`${SUPABASE_URL}/rest/v1/leads?on_conflict=draft_session_id`, {
+      method: "POST",
+      keepalive: true,
+      headers: {
+        "Content-Type": "application/json",
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`,
+        Prefer: "resolution=merge-duplicates,return=minimal",
+      },
+      body: JSON.stringify(payload),
+    }).catch(() => {
+      /* keepalive requests can't be awaited on unload; swallow errors */
+    });
+  } catch {
+    /* noop */
+  }
 }
 
 function autoCompleteFor(key: StepKey) {
