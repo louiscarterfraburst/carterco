@@ -401,7 +401,7 @@ export default function LeadsPage() {
   /* ─── loading screen ─── */
   if (loading) {
     return (
-      <main className="safe-screen safe-pad-top safe-pad-bottom relative flex min-h-screen items-center justify-center bg-[var(--sand)] px-6 text-[var(--ink)]">
+      <main className="safe-screen safe-pad-top safe-pad-bottom relative flex min-h-screen max-w-full items-center justify-center overflow-x-hidden bg-[var(--sand)] px-6 text-[var(--ink)]">
         <div className="grain-overlay" />
         <p className="tabular text-[11px] uppercase tracking-[0.4em] text-[var(--ink)]/40">
           Indlæser
@@ -413,11 +413,11 @@ export default function LeadsPage() {
   /* ─── login screen ─── */
   if (!user) {
     return (
-      <main className="safe-screen safe-pad-top safe-pad-bottom safe-px relative min-h-screen overflow-hidden bg-[var(--sand)] text-[var(--ink)]">
+      <main className="safe-screen safe-pad-top safe-pad-bottom safe-px relative min-h-screen max-w-full overflow-hidden bg-[var(--sand)] text-[var(--ink)]">
         <div className="grain-overlay" />
         <div className="pointer-events-none absolute inset-x-0 top-0 h-[60vh] bg-[radial-gradient(ellipse_at_top,rgba(185,112,65,0.14),transparent_60%)]" />
 
-        <div className="safe-screen relative mx-auto flex min-h-screen w-full max-w-md flex-col justify-between px-6 py-8 sm:py-10">
+        <div className="safe-screen relative mx-auto flex min-h-screen w-full max-w-md min-w-0 flex-col justify-between px-6 py-8 sm:py-10">
           <Link
             href="/"
             className="tabular text-[10px] uppercase tracking-[0.35em] text-[var(--ink)]/45 hover:text-[var(--ink)]/70"
@@ -500,22 +500,22 @@ export default function LeadsPage() {
 
   /* ─── main dashboard ─── */
   return (
-    <main className="safe-screen safe-pad-bottom relative min-h-screen bg-[var(--sand)] text-[var(--ink)]">
+    <main className="safe-screen safe-pad-bottom relative min-h-screen max-w-full overflow-x-hidden bg-[var(--sand)] text-[var(--ink)]">
       <div className="grain-overlay" />
 
       {/* Sticky top bar */}
       <div className="safe-pad-top sticky top-0 z-20 border-b border-[var(--ink)]/[0.10] bg-[var(--sand)]/85 backdrop-blur-xl">
-        <div className="mx-auto flex w-full max-w-[1400px] items-center justify-between gap-4 px-4 py-3 sm:px-8 lg:px-12">
+        <div className="mx-auto flex w-full max-w-[1400px] min-w-0 items-center justify-between gap-3 px-4 py-3 sm:gap-4 sm:px-8 lg:px-12">
           <Link
             href="/"
-            className="tabular text-[10px] uppercase tracking-[0.35em] text-[var(--ink)]/50 transition hover:text-[var(--ink)]/80"
+            className="tabular min-w-0 truncate text-[10px] uppercase tracking-[0.24em] text-[var(--ink)]/50 transition hover:text-[var(--ink)]/80 sm:tracking-[0.35em]"
           >
             CarterCo
             <span className="mx-2 text-[var(--ink)]/25">/</span>
             <span className="text-[var(--ink)]/75">Leads</span>
           </Link>
 
-          <div className="flex items-center gap-1 sm:gap-2">
+          <div className="flex min-w-0 shrink-0 items-center gap-1 sm:gap-2">
             <SegmentedToggle value={view} onChange={setView} />
             <div className="mx-1 hidden h-4 w-px bg-[var(--ink)]/10 sm:block" />
             <IconButton
@@ -546,7 +546,7 @@ export default function LeadsPage() {
       </div>
 
       {/* Masthead */}
-      <section className="relative mx-auto w-full max-w-[1400px] px-4 pt-10 pb-8 sm:px-8 sm:pt-16 sm:pb-10 lg:px-12">
+      <section className="relative mx-auto w-full max-w-[1400px] min-w-0 px-4 pt-10 pb-8 sm:px-8 sm:pt-16 sm:pb-10 lg:px-12">
         <div className="pointer-events-none absolute inset-x-4 top-6 -z-10 h-[40vh] bg-[radial-gradient(ellipse_at_top_left,rgba(185,112,65,0.08),transparent_60%)] sm:inset-x-8 lg:inset-x-12" />
 
         <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
@@ -586,17 +586,18 @@ export default function LeadsPage() {
       )}
 
       {/* Ledger */}
-      <section className="mx-auto w-full max-w-[1400px] px-4 pb-24 sm:px-8 lg:px-12">
+      <section className="mx-auto w-full max-w-[1400px] min-w-0 px-4 pb-24 sm:px-8 lg:px-12">
         {/* Column headers — desktop only */}
-        <div className="hidden border-b border-[var(--ink)]/[0.08] px-2 pb-3 md:grid md:grid-cols-[16px_80px_1.2fr_1fr_90px_120px_160px_20px] md:gap-4 md:items-end">
+        <div className="hidden border-b border-[var(--ink)]/[0.10] px-2 pb-3 md:grid md:grid-cols-[16px_80px_1.2fr_1fr_90px_120px_20px_1px_180px] md:gap-4 md:items-end">
           <span />
           <ColHeader>Modtaget</ColHeader>
           <ColHeader>Navn</ColHeader>
           <ColHeader>Virksomhed</ColHeader>
           <ColHeader>Volumen</ColHeader>
           <ColHeader>Respons</ColHeader>
-          <ColHeader className="text-right">Telefon</ColHeader>
           <span />
+          <span />
+          <ColHeader className="px-5 text-center">Ring</ColHeader>
         </div>
 
         {visibleLeads.length === 0 ? (
@@ -618,7 +619,6 @@ export default function LeadsPage() {
                 lead={lead}
                 index={index}
                 expanded={isExpanded(lead)}
-                hasRung={hasRungIds.has(lead.id)}
                 onToggle={() => toggleExpanded(lead.id)}
                 onRung={() => markRung(lead.id)}
                 setCallStatus={setCallStatus}
@@ -647,7 +647,6 @@ function LeadRow({
   lead,
   index,
   expanded,
-  hasRung,
   onToggle,
   onRung,
   setCallStatus,
@@ -657,7 +656,6 @@ function LeadRow({
   lead: Lead;
   index: number;
   expanded: boolean;
-  hasRung: boolean;
   onToggle: () => void;
   onRung: () => void;
   setCallStatus: (id: string, s: CallStatus) => Promise<void>;
@@ -690,88 +688,96 @@ function LeadRow({
         />
       ) : null}
 
-      <button
-        type="button"
-        onClick={onToggle}
-        className="focus-cream grid w-full grid-cols-[16px_1fr_24px] items-center gap-4 px-2 py-4 text-left transition hover:bg-[var(--ink)]/[0.04] md:grid-cols-[16px_80px_1.2fr_1fr_90px_120px_160px_20px] md:items-center md:gap-4 md:py-5"
-      >
-        {/* Status dot */}
-        <StatusDot lead={lead} />
+      <div className="flex min-w-0 items-stretch overflow-hidden">
+        <button
+          type="button"
+          onClick={onToggle}
+          className="focus-cream grid min-w-0 flex-1 grid-cols-[16px_1fr] items-center gap-3 px-3 py-4 text-left transition hover:bg-[var(--ink)]/[0.04] sm:px-4 md:grid-cols-[16px_80px_1.2fr_1fr_90px_120px_20px] md:gap-4 md:py-5"
+        >
+          {/* Status dot */}
+          <StatusDot lead={lead} />
 
-        {/* Mobile: stacked content */}
-        <div className="min-w-0 md:hidden">
-          <div className="flex items-baseline justify-between gap-3">
-            <h2 className="font-display truncate text-xl leading-tight text-[var(--ink)]">
-              {lead.name}
-            </h2>
-            <span className="tabular shrink-0 text-[10px] uppercase tracking-[0.18em] text-[var(--ink)]/40">
+          {/* Mobile: stacked content */}
+          <div className="min-w-0 md:hidden">
+            <div className="flex items-baseline justify-between gap-3">
+              <h2 className="font-display truncate text-xl leading-tight text-[var(--ink)]">
+                {lead.name}
+              </h2>
+              <span className="tabular shrink-0 text-[10px] uppercase tracking-[0.18em] text-[var(--ink)]/40">
+                {day}
+              </span>
+            </div>
+            <div className="mt-1 flex items-baseline justify-between gap-3">
+              <p className="truncate text-sm text-[var(--ink)]/55">
+                {lead.company}
+              </p>
+              <span className="tabular shrink-0 text-[11px] text-[var(--ink)]/35">
+                {time}
+              </span>
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <MetaTag>{lead.monthly_leads}</MetaTag>
+              <MetaTag tone={urgent ? "urgent" : warm ? "warm" : "neutral"}>
+                {lead.response_time}
+              </MetaTag>
+            </div>
+          </div>
+
+          {/* Desktop columns */}
+          <div className="hidden flex-col gap-0.5 md:flex">
+            <span className="tabular text-[11px] uppercase tracking-[0.16em] text-[var(--ink)]/55">
               {day}
             </span>
-          </div>
-          <div className="mt-1 flex items-baseline justify-between gap-3">
-            <p className="truncate text-sm text-[var(--ink)]/55">
-              {lead.company}
-            </p>
-            <span className="tabular shrink-0 text-[11px] text-[var(--ink)]/35">
+            <span className="tabular text-[11px] text-[var(--ink)]/30">
               {time}
             </span>
           </div>
-          <div className="mt-2 flex flex-wrap items-center gap-2">
+
+          <div className="hidden min-w-0 md:block">
+            <h2 className="font-display truncate text-[22px] leading-tight text-[var(--ink)]">
+              {lead.name}
+            </h2>
+          </div>
+
+          <div className="hidden min-w-0 md:block">
+            <p className="truncate text-sm text-[var(--ink)]/55">
+              {lead.company}
+            </p>
+          </div>
+
+          <div className="hidden md:block">
             <MetaTag>{lead.monthly_leads}</MetaTag>
+          </div>
+
+          <div className="hidden md:block">
             <MetaTag tone={urgent ? "urgent" : warm ? "warm" : "neutral"}>
               {lead.response_time}
             </MetaTag>
-            <span className="tabular ml-auto text-[11px] text-[var(--ink)]/50">
-              {formattedPhone}
-            </span>
           </div>
-        </div>
 
-        {/* Desktop columns */}
-        <div className="hidden flex-col gap-0.5 md:flex">
-          <span className="tabular text-[11px] uppercase tracking-[0.16em] text-[var(--ink)]/55">
-            {day}
+          {/* Expand indicator (desktop only — mobile is whole-row tap) */}
+          <div className="hidden md:block">
+            <Chevron expanded={expanded} />
+          </div>
+        </button>
+
+        {/* Tap-to-call action — sibling to the expand button so they can be activated independently */}
+        <a
+          href={`tel:${lead.phone}`}
+          onClick={onRung}
+          aria-label={`Ring ${formattedPhone}`}
+          className="focus-orange group flex w-12 shrink-0 items-center justify-center gap-2 self-stretch border-l border-[var(--ink)]/[0.08] text-[var(--forest)] transition hover:bg-[var(--forest)] hover:text-[var(--cream)] active:bg-[#0e3429] md:w-auto md:gap-3 md:px-5"
+        >
+          <PhoneIcon />
+          <span className="tabular hidden text-[13px] tracking-[0.04em] md:inline">
+            {formattedPhone}
           </span>
-          <span className="tabular text-[11px] text-[var(--ink)]/30">
-            {time}
-          </span>
-        </div>
-
-        <div className="hidden min-w-0 md:block">
-          <h2 className="font-display truncate text-[22px] leading-tight text-[var(--ink)]">
-            {lead.name}
-          </h2>
-        </div>
-
-        <div className="hidden min-w-0 md:block">
-          <p className="truncate text-sm text-[var(--ink)]/55">
-            {lead.company}
-          </p>
-        </div>
-
-        <div className="hidden md:block">
-          <MetaTag>{lead.monthly_leads}</MetaTag>
-        </div>
-
-        <div className="hidden md:block">
-          <MetaTag tone={urgent ? "urgent" : warm ? "warm" : "neutral"}>
-            {lead.response_time}
-          </MetaTag>
-        </div>
-
-        <div className="hidden justify-self-end tabular text-sm text-[var(--ink)]/75 md:block">
-          {formattedPhone}
-        </div>
-
-        {/* Expand indicator */}
-        <Chevron expanded={expanded} />
-      </button>
+        </a>
+      </div>
 
       {expanded ? (
         <DetailPanel
           lead={lead}
-          hasRung={hasRung}
-          onRung={onRung}
           setCallStatus={setCallStatus}
           setOutcome={setOutcome}
           updateNotes={updateNotes}
@@ -785,15 +791,11 @@ function LeadRow({
 
 function DetailPanel({
   lead,
-  hasRung,
-  onRung,
   setCallStatus,
   setOutcome,
   updateNotes,
 }: {
   lead: Lead;
-  hasRung: boolean;
-  onRung: () => void;
   setCallStatus: (id: string, s: CallStatus) => Promise<void>;
   setOutcome: (id: string, o: Outcome) => Promise<void>;
   updateNotes: (id: string, v: string) => void;
@@ -838,91 +840,73 @@ function DetailPanel({
   const smsHref = `sms:${lead.phone}?&body=${encodeURIComponent(
     buildSmsBody(lead.name),
   )}`;
-  const showCallResultButtons = hasRung || !!lead.call_status;
   const showOutcomeSection = !!lead.call_status;
 
   return (
     <div className="ledger-detail border-t border-[var(--ink)]/[0.10] bg-[var(--ink)]/[0.03] px-4 py-5 sm:px-6 sm:py-6">
       <div className="mx-auto flex w-full max-w-xl flex-col gap-5">
-        {/* Step 1 — primary action: Ring. Mail stays quiet beneath. */}
-        <div className="flex flex-col gap-1">
-          <a
-            href={`tel:${lead.phone}`}
-            onClick={onRung}
-            className="focus-orange flex items-center justify-between gap-4 rounded-sm bg-[var(--forest)] px-5 py-4 text-[13px] font-semibold uppercase tracking-[0.18em] text-[var(--cream)] transition hover:bg-[#2f5e4e] active:bg-[#0e3429]"
-          >
-            <span className="flex items-center gap-3">
-              <PhoneIcon />
-              Ring op
-            </span>
-            <span className="tabular text-[13px] tracking-[0.08em]">
-              {formatPhone(lead.phone)}
-            </span>
-          </a>
-          <a
-            href={`mailto:${lead.email}`}
-            className="focus-cream flex items-center justify-between gap-4 px-1 py-3 text-[var(--ink)]/55 transition hover:text-[var(--ink)]"
-          >
-            <span className="flex items-center gap-3 text-[11px] uppercase tracking-[0.18em]">
-              <MailIcon />
-              Skriv mail
-            </span>
-            <span className="truncate text-[12px] text-[var(--ink)]/35">
-              {lead.email}
-            </span>
-          </a>
+        {/* Mail (secondary contact action — Ring lives on the row itself) */}
+        <a
+          href={`mailto:${lead.email}`}
+          className="focus-cream flex items-center justify-between gap-4 border-b border-[var(--ink)]/[0.10] pb-3 text-[var(--ink)]/55 transition hover:text-[var(--ink)]"
+        >
+          <span className="flex items-center gap-3 text-[11px] uppercase tracking-[0.18em]">
+            <MailIcon />
+            Skriv mail
+          </span>
+          <span className="truncate text-[12px] text-[var(--ink)]/35">
+            {lead.email}
+          </span>
+        </a>
+
+        {/* Step 1 — Svarede / Intet svar (always visible when expanded) */}
+        <div className="ledger-detail flex flex-col gap-3">
+          {lead.call_status ? (
+            <div className="flex items-center justify-between gap-3">
+              <p className="flex items-center gap-2.5 text-[12px] text-[var(--ink)]/70">
+                <span
+                  className={`inline-block h-1.5 w-1.5 rounded-full ${
+                    lead.call_status === "answered"
+                      ? "bg-[var(--clay)]"
+                      : "bg-transparent ring-[1.5px] ring-inset ring-[var(--clay)]"
+                  }`}
+                  aria-hidden
+                />
+                {lead.call_status === "answered"
+                  ? "Svarede på opkaldet"
+                  : "Intet svar · SMS afsendt"}
+              </p>
+              <button
+                type="button"
+                onClick={() => void setCallStatus(lead.id, null)}
+                className="text-[10px] uppercase tracking-[0.2em] text-[var(--ink)]/40 underline-offset-4 transition hover:text-[var(--ink)]/75 hover:underline"
+              >
+                Fortryd
+              </button>
+            </div>
+          ) : (
+            <p className="tabular text-[10px] uppercase tracking-[0.28em] text-[var(--ink)]/45">
+              Hvad skete der?
+            </p>
+          )}
+          <div className="grid grid-cols-2 gap-2">
+            <GhostButton
+              onClick={() => void setCallStatus(lead.id, "answered")}
+              active={lead.call_status === "answered"}
+            >
+              Svarede
+            </GhostButton>
+            <GhostAnchor
+              href={smsHref}
+              onClick={() => void setCallStatus(lead.id, "no_answer")}
+              active={lead.call_status === "no_answer"}
+            >
+              Intet svar · SMS
+            </GhostAnchor>
+          </div>
         </div>
 
-        {/* Step 2 — appears after Ring: Svarede / Intet svar */}
-        {showCallResultButtons ? (
-          <div className="ledger-detail flex flex-col gap-3 border-t border-[var(--ink)]/[0.10] pt-5">
-            {lead.call_status ? (
-              <div className="flex items-center justify-between gap-3">
-                <p className="flex items-center gap-2.5 text-[12px] text-[var(--ink)]/70">
-                  <span
-                    className={`inline-block h-1.5 w-1.5 rounded-full ${
-                      lead.call_status === "answered"
-                        ? "bg-[var(--clay)]"
-                        : "bg-transparent ring-[1.5px] ring-inset ring-[var(--clay)]"
-                    }`}
-                    aria-hidden
-                  />
-                  {lead.call_status === "answered"
-                    ? "Svarede på opkaldet"
-                    : "Intet svar · SMS afsendt"}
-                </p>
-                <button
-                  type="button"
-                  onClick={() => void setCallStatus(lead.id, null)}
-                  className="text-[10px] uppercase tracking-[0.2em] text-[var(--ink)]/40 underline-offset-4 transition hover:text-[var(--ink)]/75 hover:underline"
-                >
-                  Fortryd
-                </button>
-              </div>
-            ) : (
-              <p className="tabular text-[10px] uppercase tracking-[0.28em] text-[var(--ink)]/45">
-                Hvad skete der?
-              </p>
-            )}
-            <div className="grid grid-cols-2 gap-2">
-              <GhostButton
-                onClick={() => void setCallStatus(lead.id, "answered")}
-                active={lead.call_status === "answered"}
-              >
-                Svarede
-              </GhostButton>
-              <GhostAnchor
-                href={smsHref}
-                onClick={() => void setCallStatus(lead.id, "no_answer")}
-                active={lead.call_status === "no_answer"}
-              >
-                Intet svar · SMS
-              </GhostAnchor>
-            </div>
-          </div>
-        ) : null}
-
-        {/* Step 3 — appears after Svarede/Intet svar: outcome + notes */}
+        {/* Step 2 — outcome + notes (only after Svarede/Intet svar) */}
         {showOutcomeSection ? (
           <div className="ledger-detail flex flex-col gap-5 border-t border-[var(--ink)]/[0.10] pt-5">
             <div>
