@@ -118,6 +118,7 @@ export default function LeadsPage() {
   const [loading, setLoading] = useState(true);
   const [notifications, setNotifications] =
     useState<NotificationStatus>("Ikke aktiv");
+  const [testingNotification, setTestingNotification] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<View>("active");
@@ -395,6 +396,36 @@ export default function LeadsPage() {
     }
   }
 
+  async function sendTestNotification() {
+    setError(null);
+    setMessage(null);
+    setTestingNotification(true);
+
+    try {
+      const { error } = await supabase.functions.invoke("notify-new-lead", {
+        body: {
+          name: "Test Notifikation",
+          company: "CarterCo",
+          email: allowedEmail,
+          phone: "+4512345678",
+          monthly_leads: "50-250",
+          response_time: "Under 5 min",
+        },
+      });
+
+      if (error) {
+        setError(error.message);
+        return;
+      }
+
+      setMessage("Test-notifikation sendt. Tjek om den dukker op på enheden.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Test-notifikation fejlede.");
+    } finally {
+      setTestingNotification(false);
+    }
+  }
+
   function isExpanded(lead: Lead) {
     if (lead.call_status && !lead.outcome) return true;
     if (hasRungIds.has(lead.id) && !lead.outcome) return true;
@@ -578,6 +609,57 @@ export default function LeadsPage() {
               <Stat label="Senest" value={formatRelative(stats.latest)} />
             ) : null}
           </dl>
+        </div>
+      </section>
+
+      {/* Notification status */}
+      <section className="mx-auto mb-5 w-full max-w-[1400px] px-4 sm:px-8 lg:px-12">
+        <div className="grid gap-3 border border-[var(--ink)]/[0.10] bg-[var(--ink)]/[0.025] p-4 sm:grid-cols-[1fr_auto] sm:items-center">
+          <div className="min-w-0">
+            <p className="tabular text-[10px] uppercase tracking-[0.26em] text-[var(--ink)]/35">
+              Push-notifikationer
+            </p>
+            <div className="mt-2 flex min-w-0 flex-wrap items-center gap-2">
+              <span
+                className={`h-2.5 w-2.5 rounded-full ${
+                  notifications === "Aktiv"
+                    ? "bg-[var(--forest)]"
+                    : notifications === "Blokeret"
+                      ? "bg-[var(--clay)]"
+                      : "bg-[var(--ink)]/25"
+                }`}
+                aria-hidden
+              />
+              <p className="font-display text-2xl italic leading-none text-[var(--ink)]">
+                {notificationTitle(notifications)}
+              </p>
+            </div>
+            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-[var(--ink)]/55">
+              {notificationHelp(notifications)}
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:justify-end">
+            <button
+              type="button"
+              onClick={() => void enableNotifications()}
+              disabled={
+                notifications === "Beder om adgang" ||
+                notifications === "Gemmer"
+              }
+              className="focus-cream rounded-sm border border-[var(--ink)]/15 px-4 py-3 text-[10px] uppercase tracking-[0.16em] text-[var(--ink)]/70 transition hover:border-[var(--ink)]/30 hover:text-[var(--ink)] disabled:cursor-wait disabled:opacity-45"
+            >
+              {notifications === "Aktiv" ? "Tjek igen" : "Slå til"}
+            </button>
+            <button
+              type="button"
+              onClick={() => void sendTestNotification()}
+              disabled={notifications !== "Aktiv" || testingNotification}
+              className="focus-cream rounded-sm border border-[var(--ink)]/15 px-4 py-3 text-[10px] uppercase tracking-[0.16em] text-[var(--ink)]/70 transition hover:border-[var(--ink)]/30 hover:text-[var(--ink)] disabled:cursor-not-allowed disabled:opacity-35"
+            >
+              {testingNotification ? "Sender" : "Send test"}
+            </button>
+          </div>
         </div>
       </section>
 
@@ -1317,6 +1399,44 @@ function outcomeStripe(outcome: Exclude<Outcome, null>) {
 function buildSmsBody(name: string) {
   const firstName = name.trim().split(/\s+/)[0] ?? name;
   return `Hej ${firstName}, det er Louis fra CarterCo - jeg prøvede lige at ringe. Skriv når det passer, så finder vi et tidspunkt. /Louis`;
+}
+
+function notificationTitle(status: NotificationStatus) {
+  switch (status) {
+    case "Aktiv":
+      return "Aktiv på denne enhed";
+    case "Beder om adgang":
+      return "Venter på tilladelse";
+    case "Gemmer":
+      return "Gemmer enheden";
+    case "Installer appen":
+      return "Åbn som Home Screen app";
+    case "Blokeret":
+      return "Blokeret i iOS";
+    case "Ikke understøttet":
+      return "Ikke understøttet";
+    default:
+      return "Ikke slået til";
+  }
+}
+
+function notificationHelp(status: NotificationStatus) {
+  switch (status) {
+    case "Aktiv":
+      return "Denne enhed er registreret. Brug Send test for at tjekke om iOS viser push-beskeden.";
+    case "Beder om adgang":
+      return "Svar på iOS-dialogen. Vælg Tillad, ellers kan appen ikke sende push.";
+    case "Gemmer":
+      return "Tilladelsen er givet. Appen gemmer nu enheden i Supabase.";
+    case "Installer appen":
+      return "På iPhone virker push kun når siden er gemt på hjemmeskærmen og åbnet som app.";
+    case "Blokeret":
+      return "Åbn iOS Indstillinger, find CarterCo/Safari notifikationer, og tillad beskeder igen.";
+    case "Ikke understøttet":
+      return "Denne browser understøtter ikke web push. Brug Safari på iPhone som Home Screen app.";
+    default:
+      return "Tryk Slå til på den enhed, hvor du vil modtage nye lead-notifikationer.";
+  }
 }
 
 function formatLeadTime(value: string) {
