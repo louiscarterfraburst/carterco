@@ -2,7 +2,7 @@
   "name": "CarterCo",
   "short_name": "CarterCo",
   "description": "CarterCo lead response systems.",
-  "start_url": "/",
+  "start_url": "/leads",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
