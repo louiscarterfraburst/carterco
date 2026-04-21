@@ -317,9 +317,56 @@ export default function LeadsPage() {
       setNotifications("Blokeret");
       return;
     }
-    const registration = await navigator.serviceWorker.ready;
-    const subscription = await registration.pushManager.getSubscription();
+
+    if (Notification.permission !== "granted") {
+      setNotifications("Ikke aktiv");
+      return;
+    }
+
+    setNotifications("Gemmer");
+    const subscription = await syncPushSubscription();
     setNotifications(subscription ? "Aktiv" : "Ikke aktiv");
+  }
+
+  async function syncPushSubscription() {
+    const registration = await navigator.serviceWorker.ready;
+    let existingSubscription = await registration.pushManager.getSubscription();
+    const currentKey = urlBase64ToUint8Array(vapidPublicKey);
+
+    if (
+      existingSubscription &&
+      !arrayBuffersEqual(
+        existingSubscription.options.applicationServerKey,
+        currentKey,
+      )
+    ) {
+      await existingSubscription.unsubscribe();
+      existingSubscription = null;
+    }
+
+    const subscription =
+      existingSubscription ??
+      (await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: currentKey,
+      }));
+    const subscriptionJson = subscription.toJSON();
+
+    const { error } = await supabase.from("push_subscriptions").upsert(
+      {
+        endpoint: subscription.endpoint,
+        p256dh: subscriptionJson.keys?.p256dh,
+        auth: subscriptionJson.keys?.auth,
+        user_agent: navigator.userAgent,
+      },
+      { onConflict: "endpoint" },
+    );
+
+    if (error) {
+      throw error;
+    }
+
+    return subscription;
   }
 
   async function enableNotifications() {
@@ -349,45 +396,7 @@ export default function LeadsPage() {
 
     try {
       setNotifications("Gemmer");
-      const registration = await navigator.serviceWorker.ready;
-      let existingSubscription = await registration.pushManager.getSubscription();
-      const currentKey = urlBase64ToUint8Array(vapidPublicKey);
-
-      if (
-        existingSubscription &&
-        !arrayBuffersEqual(
-          existingSubscription.options.applicationServerKey,
-          currentKey,
-        )
-      ) {
-        await existingSubscription.unsubscribe();
-        existingSubscription = null;
-      }
-
-      const subscription =
-        existingSubscription ??
-        (await registration.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: currentKey,
-        }));
-      const subscriptionJson = subscription.toJSON();
-
-      const { error } = await supabase.from("push_subscriptions").upsert(
-        {
-          endpoint: subscription.endpoint,
-          p256dh: subscriptionJson.keys?.p256dh,
-          auth: subscriptionJson.keys?.auth,
-          user_agent: navigator.userAgent,
-        },
-        { onConflict: "endpoint" },
-      );
-
-      if (error) {
-        setNotifications("Ikke aktiv");
-        setError(error.message);
-        return;
-      }
-
+      await syncPushSubscription();
       setNotifications("Aktiv");
       setMessage("Notifikationer er slået til på denne enhed.");
     } catch (err) {
