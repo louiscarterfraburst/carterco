@@ -27,6 +27,9 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
+  const requestUrl = new URL(event.request.url);
+
+  if (requestUrl.origin !== self.location.origin) return;
 
   event.respondWith(
     caches.match(event.request).then((cached) => {
@@ -34,10 +37,12 @@ self.addEventListener("fetch", (event) => {
 
       return fetch(event.request)
         .then((response) => {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, clone);
-          });
+          if (CORE_ASSETS.includes(requestUrl.pathname)) {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(event.request, clone);
+            });
+          }
           return response;
         })
         .catch(() => caches.match("/"));
@@ -75,7 +80,10 @@ self.addEventListener("notificationclick", (event) => {
   event.notification.close();
 
   const phone = event.notification.data?.phone;
-  const url = event.action === "call" && phone ? `tel:${phone}` : event.notification.data?.url || "/";
+  const url =
+    event.action === "call" && phone
+      ? `tel:${phone}`
+      : event.notification.data?.url || "/leads";
 
   event.waitUntil(self.clients.openWindow(url));
 });

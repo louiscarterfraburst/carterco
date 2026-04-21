@@ -16,9 +16,19 @@ type Lead = {
   response_time: string;
 };
 
+type NotificationStatus =
+  | "Ikke aktiv"
+  | "Installer appen"
+  | "Ikke understøttet"
+  | "Blokeret"
+  | "Beder om adgang"
+  | "Gemmer"
+  | "Aktiv";
+
 const allowedEmail = "louis@carterco.dk";
 const leadsUrl = "https://carterco.dk/leads";
 const vapidPublicKey =
+  process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ??
   "BHu6uhde8dpGML_i2Q0iQ_mU1heEp9FCxoB-wG9bAuUcu8PruD78-eBLoZhWvgy46xSXW7KSHXOlwg67ekFXADU";
 
 export default function LeadsPage() {
@@ -28,7 +38,8 @@ export default function LeadsPage() {
   const [token, setToken] = useState("");
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
-  const [notifications, setNotifications] = useState("Ikke aktiv");
+  const [notifications, setNotifications] =
+    useState<NotificationStatus>("Ikke aktiv");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -56,6 +67,7 @@ export default function LeadsPage() {
   useEffect(() => {
     if (!user) return;
     void loadLeads();
+    void refreshNotificationStatus();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
@@ -128,6 +140,27 @@ export default function LeadsPage() {
     setLeads([]);
   }
 
+  async function refreshNotificationStatus() {
+    if (!("Notification" in window) || !("serviceWorker" in navigator)) {
+      setNotifications("Ikke understøttet");
+      return;
+    }
+
+    if (!("PushManager" in window)) {
+      setNotifications("Installer appen");
+      return;
+    }
+
+    if (Notification.permission === "denied") {
+      setNotifications("Blokeret");
+      return;
+    }
+
+    const registration = await navigator.serviceWorker.ready;
+    const subscription = await registration.pushManager.getSubscription();
+    setNotifications(subscription ? "Aktiv" : "Ikke aktiv");
+  }
+
   async function enableNotifications() {
     setError(null);
     setMessage(null);
@@ -138,6 +171,7 @@ export default function LeadsPage() {
     }
 
     if (!("PushManager" in window)) {
+      setNotifications("Installer appen");
       setError(
         "Push virker på iPhone, når siden er gemt på hjemmeskærmen og åbnet som app.",
       );
@@ -154,6 +188,7 @@ export default function LeadsPage() {
     }
 
     try {
+      setNotifications("Gemmer");
       const registration = await navigator.serviceWorker.ready;
       const existingSubscription =
         await registration.pushManager.getSubscription();
@@ -289,7 +324,8 @@ export default function LeadsPage() {
           <button
             type="button"
             onClick={() => void enableNotifications()}
-            className="rounded-full border border-[var(--cream)]/15 px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--cream)]/70"
+            disabled={notifications === "Beder om adgang" || notifications === "Gemmer"}
+            className="rounded-full border border-[var(--cream)]/15 px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--cream)]/70 disabled:cursor-wait disabled:opacity-50"
           >
             Notifikationer
           </button>
