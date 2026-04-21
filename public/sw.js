@@ -1,5 +1,5 @@
-const CACHE_NAME = "carterco-v2";
-const CORE_ASSETS = ["/", "/leads", "/logo.png", "/signature.png"];
+const CACHE_NAME = "carterco-v3";
+const CORE_ASSETS = ["/logo.png", "/signature.png"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -31,6 +31,7 @@ self.addEventListener("fetch", (event) => {
 
   if (requestUrl.origin !== self.location.origin) return;
   if (requestUrl.pathname === "/manifest.webmanifest") return;
+  if (event.request.mode === "navigate") return;
 
   event.respondWith(
     caches.match(event.request).then((cached) => {
@@ -46,7 +47,7 @@ self.addEventListener("fetch", (event) => {
           }
           return response;
         })
-        .catch(() => caches.match("/"));
+        .catch(() => caches.match(event.request));
     }),
   );
 });
