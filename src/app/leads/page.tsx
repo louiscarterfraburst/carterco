@@ -710,6 +710,12 @@ export default function LeadsPage() {
           <div className="flex min-w-0 shrink-0 items-center gap-1 sm:gap-2">
             <SegmentedToggle value={view} onChange={setView} />
             <div className="mx-1 hidden h-4 w-px bg-[var(--ink)]/10 sm:block" />
+            <Link
+              href="/meetings"
+              className="focus-cream tabular hidden rounded-sm border border-[var(--ink)]/15 px-3 py-1.5 text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/65 transition hover:border-[var(--ink)]/35 hover:text-[var(--ink)] sm:inline-flex"
+            >
+              Møder →
+            </Link>
             <IconButton
               title={`Push: ${notifications}`}
               onClick={() => void enableNotifications()}
