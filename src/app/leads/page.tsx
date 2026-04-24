@@ -913,6 +913,7 @@ export default function LeadsPage() {
                 lead={lead}
                 index={index}
                 expanded={isExpanded(lead)}
+                hasRung={hasRungIds.has(lead.id)}
                 onToggle={() => toggleExpanded(lead.id)}
                 onRung={() => markRung(lead.id)}
                 setCallStatus={setCallStatus}
@@ -941,6 +942,7 @@ function LeadRow({
   lead,
   index,
   expanded,
+  hasRung,
   onToggle,
   onRung,
   setCallStatus,
@@ -950,6 +952,7 @@ function LeadRow({
   lead: Lead;
   index: number;
   expanded: boolean;
+  hasRung: boolean;
   onToggle: () => void;
   onRung: () => void;
   setCallStatus: (id: string, s: CallStatus) => Promise<void>;
@@ -1127,6 +1130,7 @@ function LeadRow({
       {expanded ? (
         <DetailPanel
           lead={lead}
+          hasRung={hasRung}
           setCallStatus={setCallStatus}
           setOutcome={setOutcome}
           updateNotes={updateNotes}
@@ -1140,11 +1144,13 @@ function LeadRow({
 
 function DetailPanel({
   lead,
+  hasRung,
   setCallStatus,
   setOutcome,
   updateNotes,
 }: {
   lead: Lead;
+  hasRung: boolean;
   setCallStatus: (id: string, s: CallStatus) => Promise<void>;
   setOutcome: (
     id: string,
@@ -1217,6 +1223,7 @@ function DetailPanel({
     ? `sms:${lead.phone}?&body=${encodeURIComponent(buildSmsBody(lead.name))}`
     : "#";
   const hasEmail = !!lead.email && lead.email.includes("@");
+  const hasDialled = hasRung || lead.call_status !== null;
   const showOutcomeSection = lead.call_status === "answered";
 
   return (
@@ -1248,60 +1255,73 @@ function DetailPanel({
           </div>
         )}
 
-        {/* Step 1 — Svarede / Intet svar (always visible when expanded) */}
+        {/* Step 1 — Svarede / Intet svar. Gated behind having dialled. */}
         <div className="ledger-detail flex flex-col gap-3">
-          {lead.call_status ? (
-            <div className="flex items-center justify-between gap-3">
-              <p className="flex items-center gap-2.5 text-[12px] text-[var(--ink)]/70">
-                <span
-                  className={`inline-block h-1.5 w-1.5 rounded-full ${
-                    lead.call_status === "answered"
-                      ? "bg-[var(--clay)]"
-                      : "bg-transparent ring-[1.5px] ring-inset ring-[var(--clay)]"
-                  }`}
-                  aria-hidden
-                />
-                {lead.call_status === "answered"
-                  ? "Svarede på opkaldet"
-                  : "Intet svar · SMS afsendt"}
+          {!hasDialled ? (
+            <div className="flex flex-col items-center gap-2 rounded-sm border border-dashed border-[var(--clay)]/40 bg-[var(--clay)]/[0.05] px-4 py-5 text-center">
+              <p className="tabular text-[10px] uppercase tracking-[0.28em] text-[var(--clay)]">
+                Ring først
               </p>
-              <button
-                type="button"
-                onClick={() => void setCallStatus(lead.id, null)}
-                className="text-[10px] uppercase tracking-[0.2em] text-[var(--ink)]/40 underline-offset-4 transition hover:text-[var(--ink)]/75 hover:underline"
-              >
-                Fortryd
-              </button>
+              <p className="text-[12px] text-[var(--ink)]/55">
+                Tryk på telefonikonet for at starte opkaldet — så kan du markere resultatet bagefter.
+              </p>
             </div>
           ) : (
-            <p className="tabular text-[10px] uppercase tracking-[0.28em] text-[var(--ink)]/45">
-              Hvad skete der?
-            </p>
+            <>
+              {lead.call_status ? (
+                <div className="flex items-center justify-between gap-3">
+                  <p className="flex items-center gap-2.5 text-[12px] text-[var(--ink)]/70">
+                    <span
+                      className={`inline-block h-1.5 w-1.5 rounded-full ${
+                        lead.call_status === "answered"
+                          ? "bg-[var(--clay)]"
+                          : "bg-transparent ring-[1.5px] ring-inset ring-[var(--clay)]"
+                      }`}
+                      aria-hidden
+                    />
+                    {lead.call_status === "answered"
+                      ? "Svarede på opkaldet"
+                      : "Intet svar · SMS afsendt"}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => void setCallStatus(lead.id, null)}
+                    className="text-[10px] uppercase tracking-[0.2em] text-[var(--ink)]/40 underline-offset-4 transition hover:text-[var(--ink)]/75 hover:underline"
+                  >
+                    Fortryd
+                  </button>
+                </div>
+              ) : (
+                <p className="tabular text-[10px] uppercase tracking-[0.28em] text-[var(--clay)]">
+                  Hvad skete der?
+                </p>
+              )}
+              <div className="grid grid-cols-2 gap-2">
+                <GhostButton
+                  onClick={() => void setCallStatus(lead.id, "answered")}
+                  active={lead.call_status === "answered"}
+                >
+                  Svarede
+                </GhostButton>
+                {canSms ? (
+                  <GhostAnchor
+                    href={smsHref}
+                    onClick={() => void setCallStatus(lead.id, "no_answer")}
+                    active={lead.call_status === "no_answer"}
+                  >
+                    Intet svar · SMS
+                  </GhostAnchor>
+                ) : (
+                  <GhostButton
+                    onClick={() => void setCallStatus(lead.id, "no_answer")}
+                    active={lead.call_status === "no_answer"}
+                  >
+                    Intet svar
+                  </GhostButton>
+                )}
+              </div>
+            </>
           )}
-          <div className="grid grid-cols-2 gap-2">
-            <GhostButton
-              onClick={() => void setCallStatus(lead.id, "answered")}
-              active={lead.call_status === "answered"}
-            >
-              Svarede
-            </GhostButton>
-            {canSms ? (
-              <GhostAnchor
-                href={smsHref}
-                onClick={() => void setCallStatus(lead.id, "no_answer")}
-                active={lead.call_status === "no_answer"}
-              >
-                Intet svar · SMS
-              </GhostAnchor>
-            ) : (
-              <GhostButton
-                onClick={() => void setCallStatus(lead.id, "no_answer")}
-                active={lead.call_status === "no_answer"}
-              >
-                Intet svar
-              </GhostButton>
-            )}
-          </div>
         </div>
 
         {/* Step 2 — outcome + notes (only after Svarede; no_answer just queues retry) */}
