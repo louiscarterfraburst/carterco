@@ -1787,8 +1787,8 @@ Du kan også booke direkte her: ${CALENDLY_URL}
 function mailtoHref(email: string | null | undefined, name: string | null) {
   if (!email) return "#";
   const { subject, body } = buildEmailDraft(name);
-  const params = new URLSearchParams({ subject, body });
-  return `mailto:${email}?${params.toString()}`;
+  const query = `subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  return `mailto:${email}?${query}`;
 }
 
 function notificationTitle(status: NotificationStatus) {
