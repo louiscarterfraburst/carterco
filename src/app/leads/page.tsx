@@ -18,6 +18,7 @@ import { clampToBusinessHours, wasClamped } from "@/utils/businessHours";
 type CallStatus = "answered" | "no_answer" | null;
 type Outcome =
   | "booked"
+  | "customer"
   | "interested"
   | "follow_up"
   | "not_interested"
@@ -49,7 +50,7 @@ type Lead = {
   last_action_fired_at: string | null;
 };
 
-type View = "active" | "all";
+type View = "active" | "customers" | "all";
 
 type NotificationStatus =
   | "Ikke aktiv"
@@ -62,6 +63,7 @@ type NotificationStatus =
 
 const OUTCOME_LABELS: Record<Exclude<Outcome, null>, string> = {
   booked: "Booket møde",
+  customer: "Kunde",
   interested: "Interesseret",
   follow_up: "Follow up",
   callback: "Ring tilbage",
@@ -77,6 +79,12 @@ const OUTCOME_TONE: Record<
     dot: "bg-[var(--forest)]",
     text: "text-[var(--forest)]",
     surface: "bg-[var(--forest)]/20",
+    edge: "border-l-[var(--forest)]",
+  },
+  customer: {
+    dot: "bg-[var(--forest)] ring-2 ring-offset-1 ring-[var(--forest)]/30",
+    text: "text-[var(--forest)]",
+    surface: "bg-[var(--forest)]/[0.16]",
     edge: "border-l-[var(--forest)]",
   },
   interested: {
@@ -159,16 +167,19 @@ export default function LeadsPage() {
     l.outcome === "follow_up" ||
     (l.outcome === "interested" && !!l.next_action_at);
 
-  const visibleLeads = useMemo(
-    () => (view === "active" ? leads.filter(isActiveLead) : leads),
-    [leads, view],
-  );
+  const visibleLeads = useMemo(() => {
+    if (view === "active") return leads.filter(isActiveLead);
+    if (view === "customers")
+      return leads.filter((l) => l.outcome === "customer");
+    return leads;
+  }, [leads, view]);
 
   const stats = useMemo(() => {
     const active = leads.filter(isActiveLead).length;
+    const customers = leads.filter((l) => l.outcome === "customer").length;
     const total = leads.length;
     const latest = leads[0]?.created_at ?? null;
-    return { active, total, latest };
+    return { active, customers, total, latest };
   }, [leads]);
 
   useEffect(() => {
@@ -778,6 +789,7 @@ export default function LeadsPage() {
 
           <dl className="flex items-end gap-6 sm:gap-10">
             <Stat label="Aktive" value={String(stats.active)} accent />
+            <Stat label="Kunder" value={String(stats.customers)} />
             <Stat label="I alt" value={String(stats.total)} />
             {stats.latest ? (
               <Stat label="Senest" value={formatRelative(stats.latest)} />
@@ -1277,6 +1289,12 @@ function DetailPanel({
                 Resultat
               </p>
               <div className="grid grid-cols-2 gap-2">
+                <OutcomeButton
+                  outcome="customer"
+                  selected={lead.outcome === "customer"}
+                  onClick={() => void setOutcome(lead.id, "customer")}
+                  fullWidth
+                />
                 {(
                   [
                     "booked",
@@ -1700,6 +1718,7 @@ function SegmentedToggle({
       {(
         [
           { key: "active", label: "Aktive" },
+          { key: "customers", label: "Kunder" },
           { key: "all", label: "Alle" },
         ] as const
       ).map(({ key, label }) => {

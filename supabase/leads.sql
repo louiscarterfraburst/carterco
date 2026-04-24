@@ -12,7 +12,7 @@ create table if not exists public.leads (
   user_agent text,
   call_status text check (call_status in ('answered', 'no_answer')),
   call_status_at timestamptz,
-  outcome text check (outcome in ('booked', 'interested', 'not_interested', 'follow_up', 'unqualified', 'callback')),
+  outcome text check (outcome in ('booked', 'interested', 'not_interested', 'follow_up', 'unqualified', 'callback', 'customer')),
   outcome_at timestamptz,
   notes text,
   is_draft boolean not null default false,
@@ -40,7 +40,7 @@ alter table public.leads add column if not exists call_status text
   check (call_status in ('answered', 'no_answer'));
 alter table public.leads add column if not exists call_status_at timestamptz;
 alter table public.leads add column if not exists outcome text
-  check (outcome in ('booked', 'interested', 'not_interested', 'follow_up', 'unqualified', 'callback'));
+  check (outcome in ('booked', 'interested', 'not_interested', 'follow_up', 'unqualified', 'callback', 'customer'));
 alter table public.leads add column if not exists outcome_at timestamptz;
 alter table public.leads add column if not exists notes text;
 alter table public.leads add column if not exists is_draft boolean not null default false;
