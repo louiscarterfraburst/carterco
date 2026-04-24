@@ -626,8 +626,15 @@ export default function LeadsPage() {
   }
 
   function isExpanded(lead: Lead) {
-    if (lead.call_status && !lead.outcome) return true;
-    if (hasRungIds.has(lead.id) && !lead.outcome) return true;
+    // Force-open only while the lead still needs an outcome (answered call).
+    // After "Intet svar" the retry is queued and the row can collapse.
+    if (lead.call_status === "answered" && !lead.outcome) return true;
+    if (
+      hasRungIds.has(lead.id) &&
+      !lead.outcome &&
+      lead.call_status !== "no_answer"
+    )
+      return true;
     return expandedIds.has(lead.id);
   }
 
