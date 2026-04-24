@@ -50,7 +50,7 @@ type Lead = {
   last_action_fired_at: string | null;
 };
 
-type View = "active" | "customers" | "all";
+type View = "active" | "meetings" | "customers" | "all";
 
 type NotificationStatus =
   | "Ikke aktiv"
@@ -171,6 +171,20 @@ export default function LeadsPage() {
     if (view === "active") return leads.filter(isActiveLead);
     if (view === "customers")
       return leads.filter((l) => l.outcome === "customer");
+    if (view === "meetings") {
+      const withMeeting = leads.filter((l) => !!l.meeting_at);
+      withMeeting.sort((a, b) => {
+        const now = Date.now();
+        const aT = new Date(a.meeting_at!).getTime();
+        const bT = new Date(b.meeting_at!).getTime();
+        const aFuture = aT >= now;
+        const bFuture = bT >= now;
+        if (aFuture && bFuture) return aT - bT;
+        if (!aFuture && !bFuture) return bT - aT;
+        return aFuture ? -1 : 1;
+      });
+      return withMeeting;
+    }
     return leads;
   }, [leads, view]);
 
@@ -1183,6 +1197,15 @@ function DetailPanel({
               {lead.notes}
             </p>
           ) : null}
+          {lead.outcome === "booked" ? (
+            <button
+              type="button"
+              onClick={() => void setOutcome(lead.id, "customer")}
+              className="focus-cream mt-1 flex items-center justify-center gap-2 rounded-sm bg-[var(--forest)] px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-[var(--cream)] transition hover:bg-[#2f5e4e] active:bg-[#0e3429]"
+            >
+              Konverter til kunde →
+            </button>
+          ) : null}
         </div>
       </div>
     );
@@ -1718,6 +1741,7 @@ function SegmentedToggle({
       {(
         [
           { key: "active", label: "Aktive" },
+          { key: "meetings", label: "Møder" },
           { key: "customers", label: "Kunder" },
           { key: "all", label: "Alle" },
         ] as const
