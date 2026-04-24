@@ -16,8 +16,6 @@ function sourceLabelFor(source: string | null | undefined) {
   switch (source) {
     case "calendly":
       return "Booket møde";
-    case "dripify":
-      return "LinkedIn lead";
     default:
       return "Nyt lead";
   }
