@@ -1156,7 +1156,7 @@ function DetailPanel({
     ? `sms:${lead.phone}?&body=${encodeURIComponent(buildSmsBody(lead.name))}`
     : "#";
   const hasEmail = !!lead.email && lead.email.includes("@");
-  const showOutcomeSection = !!lead.call_status;
+  const showOutcomeSection = lead.call_status === "answered";
 
   return (
     <div className="ledger-detail border-t border-[var(--ink)]/[0.10] bg-[var(--ink)]/[0.03] px-4 py-5 sm:px-6 sm:py-6">
@@ -1243,7 +1243,7 @@ function DetailPanel({
           </div>
         </div>
 
-        {/* Step 2 — outcome + notes (only after Svarede/Intet svar) */}
+        {/* Step 2 — outcome + notes (only after Svarede; no_answer just queues retry) */}
         {showOutcomeSection ? (
           <div className="ledger-detail flex flex-col gap-5 border-t border-[var(--ink)]/[0.10] pt-5">
             <div>
