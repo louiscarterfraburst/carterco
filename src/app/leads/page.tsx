@@ -154,7 +154,10 @@ export default function LeadsPage() {
   }
 
   const isActiveLead = (l: Lead) =>
-    !l.outcome || l.outcome === "callback" || l.outcome === "follow_up";
+    !l.outcome ||
+    l.outcome === "callback" ||
+    l.outcome === "follow_up" ||
+    (l.outcome === "interested" && !!l.next_action_at);
 
   const visibleLeads = useMemo(
     () => (view === "active" ? leads.filter(isActiveLead) : leads),
@@ -341,12 +344,14 @@ export default function LeadsPage() {
     const nowIso = new Date().toISOString();
     const outcomeAt = outcome ? nowIso : null;
 
+    const currentLead = leads.find((l) => l.id === leadId);
     const payload: Record<string, unknown> = {
       outcome,
       outcome_at: outcomeAt,
     };
     let clampedCallback: string | null = null;
     let followUpAt: string | null = null;
+    let interestedAt: string | null = null;
 
     if (outcome === "callback") {
       if (!callbackAt) {
@@ -371,11 +376,26 @@ export default function LeadsPage() {
       payload.next_action_type = "retry";
       payload.retry_count = 0;
       payload.last_action_fired_at = null;
+    } else if (outcome === "interested" && !currentLead?.meeting_at) {
+      // Said yes but hasn't booked — queue a +2d nudge so they don't rot.
+      interestedAt = clampToBusinessHours(
+        new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
+      );
+      payload.callback_at = null;
+      payload.next_action_at = interestedAt;
+      payload.next_action_type = "retry";
+      payload.retry_count = 0;
+      payload.last_action_fired_at = null;
     } else {
       payload.callback_at = null;
       payload.next_action_at = null;
       payload.next_action_type = null;
     }
+
+    const schedulesAction =
+      outcome === "callback" ||
+      outcome === "follow_up" ||
+      (outcome === "interested" && !!interestedAt);
 
     setLeads((current) =>
       current.map((lead) =>
@@ -390,21 +410,20 @@ export default function LeadsPage() {
                   ? clampedCallback
                   : outcome === "follow_up"
                     ? followUpAt
-                    : null,
+                    : outcome === "interested"
+                      ? interestedAt
+                      : null,
               next_action_type:
                 outcome === "callback"
                   ? "callback"
-                  : outcome === "follow_up"
+                  : outcome === "follow_up" ||
+                    (outcome === "interested" && !!interestedAt)
                     ? "retry"
                     : null,
-              retry_count:
-                outcome === "callback" || outcome === "follow_up"
-                  ? 0
-                  : lead.retry_count,
-              last_action_fired_at:
-                outcome === "callback" || outcome === "follow_up"
-                  ? null
-                  : lead.last_action_fired_at,
+              retry_count: schedulesAction ? 0 : lead.retry_count,
+              last_action_fired_at: schedulesAction
+                ? null
+                : lead.last_action_fired_at,
             }
           : lead,
       ),
@@ -1109,12 +1128,13 @@ function DetailPanel({
   updateNotes: (id: string, v: string) => void;
 }) {
   // Resolved — terminal state, shown only in "Vis alle".
-  // `callback` and `follow_up` stay editable in Aktive because they have pending actions.
+  // `callback`, `follow_up`, and `interested`-with-nudge stay editable in Aktive.
   const outcomeIsTerminal =
     lead.outcome !== null &&
     lead.outcome !== undefined &&
     lead.outcome !== "callback" &&
-    lead.outcome !== "follow_up";
+    lead.outcome !== "follow_up" &&
+    !(lead.outcome === "interested" && !!lead.next_action_at);
   if (outcomeIsTerminal && lead.outcome) {
     return (
       <div className="ledger-detail border-t border-[var(--ink)]/[0.10] bg-[var(--ink)]/[0.03] px-4 py-5 sm:px-6 sm:py-6">
@@ -1271,10 +1291,13 @@ function DetailPanel({
                     selected={lead.outcome === key}
                     onClick={() => void setOutcome(lead.id, key)}
                     subtitle={
-                      key === "follow_up" &&
-                      lead.outcome === "follow_up" &&
-                      lead.next_action_at
-                        ? `Nudge ${formatMeetingTime(lead.next_action_at)}`
+                      (key === "follow_up" &&
+                        lead.outcome === "follow_up" &&
+                        lead.next_action_at) ||
+                      (key === "interested" &&
+                        lead.outcome === "interested" &&
+                        lead.next_action_at)
+                        ? `Nudge ${formatMeetingTime(lead.next_action_at!)}`
                         : undefined
                     }
                   />
@@ -1376,6 +1399,21 @@ function PendingActionChip({ lead }: { lead: Lead }) {
           className="inline-block h-1.5 w-1.5 rounded-full bg-transparent ring-[1.5px] ring-inset ring-[var(--clay)]"
         />
         Follow-up {formatRelativeFuture(lead.next_action_at)}
+      </span>
+    );
+  }
+  if (
+    lead.outcome === "interested" &&
+    lead.next_action_at &&
+    lead.next_action_type === "retry"
+  ) {
+    return (
+      <span className="tabular inline-flex items-center gap-1.5 rounded-full border border-[var(--clay)]/30 bg-[var(--clay)]/[0.10] px-2 py-0.5 text-[10px] text-[var(--clay)]">
+        <span
+          aria-hidden
+          className="inline-block h-1.5 w-1.5 rounded-full bg-[var(--clay)]/70"
+        />
+        Nudge {formatRelativeFuture(lead.next_action_at)}
       </span>
     );
   }

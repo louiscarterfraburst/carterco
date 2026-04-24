@@ -62,6 +62,20 @@ as $$
   end;
 $$;
 
+-- Softer cadence for leads already marked "interested" but not booked.
+-- Two nudges, then we stop bothering the operator.
+create or replace function public.next_interested_nudge(fired int, from_ts timestamptz)
+returns timestamptz
+language sql
+stable
+as $$
+  select case
+    when fired <= 0 then public.clamp_business_hours(from_ts + interval '2 days')
+    when fired = 1 then public.clamp_business_hours(from_ts + interval '7 days')
+    else null
+  end;
+$$;
+
 -- Dispatcher: find due leads, fire push, advance cadence.
 create or replace function public.dispatch_due_retries()
 returns int
@@ -86,33 +100,58 @@ begin
     order by next_action_at asc
     limit 50
   loop
+    -- Interested-lead nudges use a distinct push title via action_type=follow_up.
     perform net.http_post(
       url := fn_url,
       headers := jsonb_build_object('Content-Type', 'application/json'),
       body := jsonb_build_object(
         'record', to_jsonb(due),
-        'action_type', due.next_action_type
+        'action_type',
+        case
+          when due.next_action_type = 'retry' and due.outcome = 'interested'
+            then 'follow_up'
+          else due.next_action_type
+        end
       )
     );
 
     if due.next_action_type = 'retry' then
-      next_ts := public.next_retry_due(due.retry_count + 1, now());
-      if next_ts is null then
-        update public.leads
-        set outcome = 'unqualified',
-            outcome_at = now(),
-            next_action_at = null,
-            next_action_type = null,
-            callback_at = null,
-            last_action_fired_at = now(),
-            retry_count = least(due.retry_count + 1, 4)
-        where id = due.id;
+      if due.outcome = 'interested' then
+        next_ts := public.next_interested_nudge(due.retry_count + 1, now());
+        if next_ts is null then
+          -- Two nudges fired, no booking yet. Stop pushing; let the operator decide.
+          update public.leads
+          set next_action_at = null,
+              next_action_type = null,
+              last_action_fired_at = now(),
+              retry_count = due.retry_count + 1
+          where id = due.id;
+        else
+          update public.leads
+          set retry_count = due.retry_count + 1,
+              next_action_at = next_ts,
+              last_action_fired_at = now()
+          where id = due.id;
+        end if;
       else
-        update public.leads
-        set retry_count = due.retry_count + 1,
-            next_action_at = next_ts,
-            last_action_fired_at = now()
-        where id = due.id;
+        next_ts := public.next_retry_due(due.retry_count + 1, now());
+        if next_ts is null then
+          update public.leads
+          set outcome = 'unqualified',
+              outcome_at = now(),
+              next_action_at = null,
+              next_action_type = null,
+              callback_at = null,
+              last_action_fired_at = now(),
+              retry_count = least(due.retry_count + 1, 4)
+          where id = due.id;
+        else
+          update public.leads
+          set retry_count = due.retry_count + 1,
+              next_action_at = next_ts,
+              last_action_fired_at = now()
+          where id = due.id;
+        end if;
       end if;
     else
       -- Callback fired. Give a 2h grace, then escalate into the no-answer ladder.

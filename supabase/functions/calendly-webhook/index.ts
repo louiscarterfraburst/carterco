@@ -93,6 +93,12 @@ Deno.serve(async (request) => {
           meeting_at: startAt,
           calendly_event_uri: eventUri,
           calendly_invitee_uri: inviteeUri,
+          // Booking supersedes any pending retry / interested nudge.
+          next_action_at: null,
+          next_action_type: null,
+          callback_at: null,
+          retry_count: 0,
+          last_action_fired_at: null,
         })
         .eq("id", existing[0].id);
       if (updateErr) return json({ error: updateErr.message }, 500);
