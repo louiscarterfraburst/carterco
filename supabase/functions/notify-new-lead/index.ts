@@ -70,6 +70,7 @@ Deno.serve(async (request) => {
   const actionType = body?.action_type as
     | "retry"
     | "callback"
+    | "follow_up"
     | undefined;
 
   // Need at least one identifiable field. Drafts and empty rows get skipped.
@@ -96,9 +97,11 @@ Deno.serve(async (request) => {
   const displayName = lead.name ?? lead.email ?? lead.phone ?? "lead";
   let title: string;
   if (actionType === "retry") {
-    title = `Follow-up SMS til ${displayName}`;
+    title = `Prøv igen: ${displayName}`;
   } else if (actionType === "callback") {
-    title = `Ring ${displayName} nu`;
+    title = `Ring tilbage nu: ${displayName}`;
+  } else if (actionType === "follow_up") {
+    title = `Follow-up: ${displayName}`;
   } else {
     title = `${sourceLabelFor(lead.source)}: ${displayName}`;
   }

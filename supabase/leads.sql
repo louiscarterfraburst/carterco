@@ -25,7 +25,8 @@ create table if not exists public.leads (
   callback_at timestamptz,
   next_action_at timestamptz,
   next_action_type text check (next_action_type in ('retry', 'callback')),
-  retry_count int not null default 0
+  retry_count int not null default 0 check (retry_count >= 0 and retry_count <= 4),
+  last_action_fired_at timestamptz
 );
 
 alter table public.leads alter column name          drop not null;
@@ -54,6 +55,22 @@ alter table public.leads add column if not exists next_action_at timestamptz;
 alter table public.leads add column if not exists next_action_type text
   check (next_action_type in ('retry', 'callback'));
 alter table public.leads add column if not exists retry_count int not null default 0;
+alter table public.leads add column if not exists last_action_fired_at timestamptz;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'leads_retry_count_cap'
+  ) then
+    alter table public.leads
+      add constraint leads_retry_count_cap check (retry_count >= 0 and retry_count <= 4);
+  end if;
+end$$;
+
+create index if not exists leads_next_action_due_idx
+  on public.leads (next_action_at)
+  where next_action_at is not null and is_draft = false;
 
 create unique index if not exists leads_draft_session_id_key
   on public.leads (draft_session_id)

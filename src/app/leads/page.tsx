@@ -11,6 +11,7 @@ import {
 import Link from "next/link";
 import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/utils/supabase/client";
+import { clampToBusinessHours, wasClamped } from "@/utils/businessHours";
 
 /* ─── types ─────────────────────────────────────────────────────────── */
 
@@ -45,6 +46,7 @@ type Lead = {
   next_action_at: string | null;
   next_action_type: "retry" | "callback" | null;
   retry_count: number;
+  last_action_fired_at: string | null;
 };
 
 type View = "active" | "all";
@@ -151,18 +153,16 @@ export default function LeadsPage() {
     });
   }
 
+  const isActiveLead = (l: Lead) =>
+    !l.outcome || l.outcome === "callback" || l.outcome === "follow_up";
+
   const visibleLeads = useMemo(
-    () =>
-      view === "active"
-        ? leads.filter((l) => !l.outcome || l.outcome === "callback")
-        : leads,
+    () => (view === "active" ? leads.filter(isActiveLead) : leads),
     [leads, view],
   );
 
   const stats = useMemo(() => {
-    const active = leads.filter(
-      (l) => !l.outcome || l.outcome === "callback",
-    ).length;
+    const active = leads.filter(isActiveLead).length;
     const total = leads.length;
     const latest = leads[0]?.created_at ?? null;
     return { active, total, latest };
@@ -198,7 +198,7 @@ export default function LeadsPage() {
     const { data, error } = await supabase
       .from("leads")
       .select(
-        "id, created_at, name, company, email, phone, monthly_leads, response_time, call_status, call_status_at, outcome, outcome_at, notes, is_draft, draft_updated_at, meeting_at, callback_at, next_action_at, next_action_type, retry_count",
+        "id, created_at, name, company, email, phone, monthly_leads, response_time, call_status, call_status_at, outcome, outcome_at, notes, is_draft, draft_updated_at, meeting_at, callback_at, next_action_at, next_action_type, retry_count, last_action_fired_at",
       )
       .order("created_at", { ascending: false })
       .limit(50);
@@ -268,14 +268,20 @@ export default function LeadsPage() {
     const previous = leads;
     const nowIso = new Date().toISOString();
     const nextAt = status ? nowIso : null;
-    // When marking "Intet svar", queue a retry in 2h as retry #1.
+    const current = leads.find((l) => l.id === leadId);
+    // "Intet svar" queues the next retry. If the backend has already fired
+    // earlier retries, keep the counter advancing through the cadence.
     const scheduleRetry = status === "no_answer";
+    const priorCount = current?.retry_count ?? 0;
+    const nextRetryCount = scheduleRetry ? priorCount : 0;
     const retryAt = scheduleRetry
-      ? new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString()
+      ? clampToBusinessHours(
+          new Date(Date.now() + nextDelayForRetryCount(priorCount)).toISOString(),
+        )
       : null;
 
-    setLeads((current) =>
-      current.map((lead) =>
+    setLeads((curr) =>
+      curr.map((lead) =>
         lead.id === leadId
           ? {
               ...lead,
@@ -291,7 +297,11 @@ export default function LeadsPage() {
                 : status === null
                   ? lead.next_action_type
                   : null,
-              retry_count: scheduleRetry ? 0 : lead.retry_count,
+              retry_count: scheduleRetry
+                ? nextRetryCount
+                : status === "answered"
+                  ? 0
+                  : lead.retry_count,
             }
           : lead,
       ),
@@ -304,9 +314,8 @@ export default function LeadsPage() {
     if (scheduleRetry) {
       payload.next_action_at = retryAt;
       payload.next_action_type = "retry";
-      payload.retry_count = 0;
+      payload.retry_count = nextRetryCount;
     } else if (status === "answered") {
-      // Clearing any pending retry when the call was answered
       payload.next_action_at = null;
       payload.next_action_type = null;
       payload.retry_count = 0;
@@ -336,16 +345,33 @@ export default function LeadsPage() {
       outcome,
       outcome_at: outcomeAt,
     };
+    let clampedCallback: string | null = null;
+    let followUpAt: string | null = null;
+
     if (outcome === "callback") {
       if (!callbackAt) {
         setError("Vælg et tidspunkt for at ringe tilbage.");
         return;
       }
-      payload.callback_at = callbackAt;
-      payload.next_action_at = callbackAt;
+      clampedCallback = clampToBusinessHours(callbackAt);
+      if (wasClamped(callbackAt, clampedCallback)) {
+        setMessage("Tidspunkt flyttet til nærmeste arbejdstid (09–17, man–fre).");
+      }
+      payload.callback_at = clampedCallback;
+      payload.next_action_at = clampedCallback;
       payload.next_action_type = "callback";
+      payload.retry_count = 0;
+      payload.last_action_fired_at = null;
+    } else if (outcome === "follow_up") {
+      followUpAt = clampToBusinessHours(
+        new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
+      );
+      payload.callback_at = null;
+      payload.next_action_at = followUpAt;
+      payload.next_action_type = "retry";
+      payload.retry_count = 0;
+      payload.last_action_fired_at = null;
     } else {
-      // Non-callback outcome (or clearing) cancels pending actions
       payload.callback_at = null;
       payload.next_action_at = null;
       payload.next_action_type = null;
@@ -358,11 +384,27 @@ export default function LeadsPage() {
               ...lead,
               outcome,
               outcome_at: outcomeAt,
-              callback_at:
-                outcome === "callback" ? (callbackAt ?? null) : null,
+              callback_at: outcome === "callback" ? clampedCallback : null,
               next_action_at:
-                outcome === "callback" ? (callbackAt ?? null) : null,
-              next_action_type: outcome === "callback" ? "callback" : null,
+                outcome === "callback"
+                  ? clampedCallback
+                  : outcome === "follow_up"
+                    ? followUpAt
+                    : null,
+              next_action_type:
+                outcome === "callback"
+                  ? "callback"
+                  : outcome === "follow_up"
+                    ? "retry"
+                    : null,
+              retry_count:
+                outcome === "callback" || outcome === "follow_up"
+                  ? 0
+                  : lead.retry_count,
+              last_action_fired_at:
+                outcome === "callback" || outcome === "follow_up"
+                  ? null
+                  : lead.last_action_fired_at,
             }
           : lead,
       ),
@@ -1060,11 +1102,13 @@ function DetailPanel({
   ) => Promise<void>;
   updateNotes: (id: string, v: string) => void;
 }) {
-  // Resolved — terminal state, shown only in "Vis alle" (callback stays editable in Aktive)
+  // Resolved — terminal state, shown only in "Vis alle".
+  // `callback` and `follow_up` stay editable in Aktive because they have pending actions.
   const outcomeIsTerminal =
     lead.outcome !== null &&
     lead.outcome !== undefined &&
-    lead.outcome !== "callback";
+    lead.outcome !== "callback" &&
+    lead.outcome !== "follow_up";
   if (outcomeIsTerminal && lead.outcome) {
     return (
       <div className="ledger-detail border-t border-[var(--ink)]/[0.10] bg-[var(--ink)]/[0.03] px-4 py-5 sm:px-6 sm:py-6">
@@ -1220,6 +1264,13 @@ function DetailPanel({
                     outcome={key}
                     selected={lead.outcome === key}
                     onClick={() => void setOutcome(lead.id, key)}
+                    subtitle={
+                      key === "follow_up" &&
+                      lead.outcome === "follow_up" &&
+                      lead.next_action_at
+                        ? `Nudge ${formatMeetingTime(lead.next_action_at)}`
+                        : undefined
+                    }
                   />
                 ))}
                 <CallbackOutcomeButton
@@ -1308,8 +1359,7 @@ function PendingActionChip({ lead }: { lead: Lead }) {
     );
   }
   if (
-    lead.call_status === "no_answer" &&
-    !lead.outcome &&
+    lead.outcome === "follow_up" &&
     lead.next_action_at &&
     lead.next_action_type === "retry"
   ) {
@@ -1319,7 +1369,35 @@ function PendingActionChip({ lead }: { lead: Lead }) {
           aria-hidden
           className="inline-block h-1.5 w-1.5 rounded-full bg-transparent ring-[1.5px] ring-inset ring-[var(--clay)]"
         />
-        Opfølgning {formatRelativeFuture(lead.next_action_at)}
+        Follow-up {formatRelativeFuture(lead.next_action_at)}
+      </span>
+    );
+  }
+  if (lead.outcome === "unqualified" && lead.retry_count >= 4) {
+    return (
+      <span className="tabular inline-flex items-center gap-1.5 rounded-full border border-[var(--ink)]/15 bg-[var(--ink)]/[0.04] px-2 py-0.5 text-[10px] text-[var(--ink)]/55">
+        <span
+          aria-hidden
+          className="inline-block h-1.5 w-1.5 rounded-full bg-[var(--ink)]/40"
+        />
+        Opgivet — ingen svar
+      </span>
+    );
+  }
+  if (
+    lead.call_status === "no_answer" &&
+    !lead.outcome &&
+    lead.next_action_at &&
+    lead.next_action_type === "retry"
+  ) {
+    const attempt = lead.retry_count + 1;
+    return (
+      <span className="tabular inline-flex items-center gap-1.5 rounded-full border border-[var(--clay)]/30 bg-[var(--clay)]/[0.06] px-2 py-0.5 text-[10px] text-[var(--clay)]">
+        <span
+          aria-hidden
+          className="inline-block h-1.5 w-1.5 rounded-full bg-transparent ring-[1.5px] ring-inset ring-[var(--clay)]"
+        />
+        Opfølgning #{attempt} {formatRelativeFuture(lead.next_action_at)}
       </span>
     );
   }
@@ -1411,11 +1489,13 @@ function OutcomeButton({
   selected,
   onClick,
   fullWidth,
+  subtitle,
 }: {
   outcome: Exclude<Outcome, null>;
   selected: boolean;
   onClick: () => void;
   fullWidth?: boolean;
+  subtitle?: string;
 }) {
   const tone = OUTCOME_TONE[outcome];
   return (
@@ -1430,7 +1510,14 @@ function OutcomeButton({
           : "border-[var(--ink)]/10 text-[var(--ink)]/65 hover:border-[var(--ink)]/30 hover:text-[var(--ink)]"
       }`}
     >
-      <span>{OUTCOME_LABELS[outcome]}</span>
+      <span className="flex flex-col items-start">
+        <span>{OUTCOME_LABELS[outcome]}</span>
+        {selected && subtitle ? (
+          <span className="tabular mt-0.5 text-[9px] text-[var(--ink)]/55 normal-case tracking-normal">
+            {subtitle}
+          </span>
+        ) : null}
+      </span>
       <span
         aria-hidden
         className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${
@@ -1862,6 +1949,18 @@ function splitLeadTime(value: string) {
     minute: "2-digit",
   });
   return { day, time };
+}
+
+const RETRY_LADDER_MS = [
+  2 * 60 * 60 * 1000,
+  24 * 60 * 60 * 1000,
+  3 * 24 * 60 * 60 * 1000,
+  7 * 24 * 60 * 60 * 1000,
+];
+
+function nextDelayForRetryCount(fired: number): number {
+  if (fired < 0) return RETRY_LADDER_MS[0];
+  return RETRY_LADDER_MS[Math.min(fired, RETRY_LADDER_MS.length - 1)];
 }
 
 function formatRelativeFuture(isoTime: string) {
