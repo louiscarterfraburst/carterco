@@ -257,16 +257,8 @@ export default function Home() {
         return;
       }
 
-      const { error: notificationError } = await supabase.functions.invoke(
-        "notify-new-lead",
-        {
-          body: leadPayload,
-        },
-      );
-
-      if (notificationError) {
-        console.error("Lead notification failed", notificationError);
-      }
+      // Notifications fire automatically via the leads_notify_new_lead
+      // trigger — no need to invoke the function explicitly.
 
       const draftId =
         typeof window !== "undefined"

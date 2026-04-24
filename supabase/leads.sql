@@ -12,7 +12,7 @@ create table if not exists public.leads (
   user_agent text,
   call_status text check (call_status in ('answered', 'no_answer')),
   call_status_at timestamptz,
-  outcome text check (outcome in ('booked', 'interested', 'not_interested', 'follow_up', 'unqualified')),
+  outcome text check (outcome in ('booked', 'interested', 'not_interested', 'follow_up', 'unqualified', 'callback')),
   outcome_at timestamptz,
   notes text,
   is_draft boolean not null default false,
@@ -20,7 +20,12 @@ create table if not exists public.leads (
   draft_updated_at timestamptz,
   meeting_at timestamptz,
   calendly_event_uri text,
-  calendly_invitee_uri text
+  calendly_invitee_uri text,
+  linkedin_url text,
+  callback_at timestamptz,
+  next_action_at timestamptz,
+  next_action_type text check (next_action_type in ('retry', 'callback')),
+  retry_count int not null default 0
 );
 
 alter table public.leads alter column name          drop not null;
@@ -34,7 +39,7 @@ alter table public.leads add column if not exists call_status text
   check (call_status in ('answered', 'no_answer'));
 alter table public.leads add column if not exists call_status_at timestamptz;
 alter table public.leads add column if not exists outcome text
-  check (outcome in ('booked', 'interested', 'not_interested', 'follow_up', 'unqualified'));
+  check (outcome in ('booked', 'interested', 'not_interested', 'follow_up', 'unqualified', 'callback'));
 alter table public.leads add column if not exists outcome_at timestamptz;
 alter table public.leads add column if not exists notes text;
 alter table public.leads add column if not exists is_draft boolean not null default false;
@@ -43,6 +48,12 @@ alter table public.leads add column if not exists draft_updated_at timestamptz;
 alter table public.leads add column if not exists meeting_at timestamptz;
 alter table public.leads add column if not exists calendly_event_uri text;
 alter table public.leads add column if not exists calendly_invitee_uri text;
+alter table public.leads add column if not exists linkedin_url text;
+alter table public.leads add column if not exists callback_at timestamptz;
+alter table public.leads add column if not exists next_action_at timestamptz;
+alter table public.leads add column if not exists next_action_type text
+  check (next_action_type in ('retry', 'callback'));
+alter table public.leads add column if not exists retry_count int not null default 0;
 
 create unique index if not exists leads_draft_session_id_key
   on public.leads (draft_session_id)
@@ -51,6 +62,10 @@ create unique index if not exists leads_draft_session_id_key
 create unique index if not exists leads_calendly_event_uri_key
   on public.leads (calendly_event_uri)
   where calendly_event_uri is not null;
+
+create unique index if not exists leads_linkedin_url_key
+  on public.leads (linkedin_url)
+  where linkedin_url is not null;
 
 alter table public.leads enable row level security;
 

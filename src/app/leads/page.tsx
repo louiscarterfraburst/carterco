@@ -21,6 +21,7 @@ type Outcome =
   | "follow_up"
   | "not_interested"
   | "unqualified"
+  | "callback"
   | null;
 
 type Lead = {
@@ -40,6 +41,10 @@ type Lead = {
   is_draft: boolean;
   draft_updated_at: string | null;
   meeting_at: string | null;
+  callback_at: string | null;
+  next_action_at: string | null;
+  next_action_type: "retry" | "callback" | null;
+  retry_count: number;
 };
 
 type View = "active" | "all";
@@ -57,6 +62,7 @@ const OUTCOME_LABELS: Record<Exclude<Outcome, null>, string> = {
   booked: "Booket møde",
   interested: "Interesseret",
   follow_up: "Follow up",
+  callback: "Ring tilbage",
   not_interested: "Ikke interesseret",
   unqualified: "Ikke kvalificeret",
 };
@@ -82,6 +88,12 @@ const OUTCOME_TONE: Record<
     text: "text-[var(--ink)]/80",
     surface: "bg-[var(--ink)]/[0.05]",
     edge: "border-l-[var(--ink)]/40",
+  },
+  callback: {
+    dot: "bg-[var(--clay)] ring-2 ring-offset-1 ring-[var(--clay)]/30",
+    text: "text-[var(--clay)]",
+    surface: "bg-[var(--clay)]/[0.10]",
+    edge: "border-l-[var(--clay)]",
   },
   not_interested: {
     dot: "bg-[var(--ink)]/30",
@@ -140,12 +152,17 @@ export default function LeadsPage() {
   }
 
   const visibleLeads = useMemo(
-    () => (view === "active" ? leads.filter((l) => !l.outcome) : leads),
+    () =>
+      view === "active"
+        ? leads.filter((l) => !l.outcome || l.outcome === "callback")
+        : leads,
     [leads, view],
   );
 
   const stats = useMemo(() => {
-    const active = leads.filter((l) => !l.outcome).length;
+    const active = leads.filter(
+      (l) => !l.outcome || l.outcome === "callback",
+    ).length;
     const total = leads.length;
     const latest = leads[0]?.created_at ?? null;
     return { active, total, latest };
@@ -181,7 +198,7 @@ export default function LeadsPage() {
     const { data, error } = await supabase
       .from("leads")
       .select(
-        "id, created_at, name, company, email, phone, monthly_leads, response_time, call_status, call_status_at, outcome, outcome_at, notes, is_draft, draft_updated_at, meeting_at",
+        "id, created_at, name, company, email, phone, monthly_leads, response_time, call_status, call_status_at, outcome, outcome_at, notes, is_draft, draft_updated_at, meeting_at, callback_at, next_action_at, next_action_type, retry_count",
       )
       .order("created_at", { ascending: false })
       .limit(50);
@@ -249,18 +266,55 @@ export default function LeadsPage() {
 
   async function setCallStatus(leadId: string, status: CallStatus) {
     const previous = leads;
-    const nextAt = status ? new Date().toISOString() : null;
+    const nowIso = new Date().toISOString();
+    const nextAt = status ? nowIso : null;
+    // When marking "Intet svar", queue a retry in 2h as retry #1.
+    const scheduleRetry = status === "no_answer";
+    const retryAt = scheduleRetry
+      ? new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString()
+      : null;
+
     setLeads((current) =>
       current.map((lead) =>
         lead.id === leadId
-          ? { ...lead, call_status: status, call_status_at: nextAt }
+          ? {
+              ...lead,
+              call_status: status,
+              call_status_at: nextAt,
+              next_action_at: scheduleRetry
+                ? retryAt
+                : status === null
+                  ? lead.next_action_at
+                  : null,
+              next_action_type: scheduleRetry
+                ? "retry"
+                : status === null
+                  ? lead.next_action_type
+                  : null,
+              retry_count: scheduleRetry ? 0 : lead.retry_count,
+            }
           : lead,
       ),
     );
 
+    const payload: Record<string, unknown> = {
+      call_status: status,
+      call_status_at: nextAt,
+    };
+    if (scheduleRetry) {
+      payload.next_action_at = retryAt;
+      payload.next_action_type = "retry";
+      payload.retry_count = 0;
+    } else if (status === "answered") {
+      // Clearing any pending retry when the call was answered
+      payload.next_action_at = null;
+      payload.next_action_type = null;
+      payload.retry_count = 0;
+    }
+
     const { error } = await supabase
       .from("leads")
-      .update({ call_status: status, call_status_at: nextAt })
+      .update(payload)
       .eq("id", leadId);
 
     if (error) {
@@ -269,18 +323,54 @@ export default function LeadsPage() {
     }
   }
 
-  async function setOutcome(leadId: string, outcome: Outcome) {
+  async function setOutcome(
+    leadId: string,
+    outcome: Outcome,
+    callbackAt?: string,
+  ) {
     const previous = leads;
-    const nextAt = outcome ? new Date().toISOString() : null;
+    const nowIso = new Date().toISOString();
+    const outcomeAt = outcome ? nowIso : null;
+
+    const payload: Record<string, unknown> = {
+      outcome,
+      outcome_at: outcomeAt,
+    };
+    if (outcome === "callback") {
+      if (!callbackAt) {
+        setError("Vælg et tidspunkt for at ringe tilbage.");
+        return;
+      }
+      payload.callback_at = callbackAt;
+      payload.next_action_at = callbackAt;
+      payload.next_action_type = "callback";
+    } else {
+      // Non-callback outcome (or clearing) cancels pending actions
+      payload.callback_at = null;
+      payload.next_action_at = null;
+      payload.next_action_type = null;
+    }
+
     setLeads((current) =>
       current.map((lead) =>
-        lead.id === leadId ? { ...lead, outcome, outcome_at: nextAt } : lead,
+        lead.id === leadId
+          ? {
+              ...lead,
+              outcome,
+              outcome_at: outcomeAt,
+              callback_at:
+                outcome === "callback" ? (callbackAt ?? null) : null,
+              next_action_at:
+                outcome === "callback" ? (callbackAt ?? null) : null,
+              next_action_type: outcome === "callback" ? "callback" : null,
+            }
+          : lead,
       ),
     );
 
     const { error } = await supabase
       .from("leads")
-      .update({ outcome, outcome_at: nextAt })
+      .update(payload)
       .eq("id", leadId);
 
     if (error) {
@@ -770,7 +860,11 @@ function LeadRow({
   onToggle: () => void;
   onRung: () => void;
   setCallStatus: (id: string, s: CallStatus) => Promise<void>;
-  setOutcome: (id: string, o: Outcome) => Promise<void>;
+  setOutcome: (
+    id: string,
+    o: Outcome,
+    callbackAt?: string,
+  ) => Promise<void>;
   updateNotes: (id: string, v: string) => void;
 }) {
   const urgent =
@@ -839,7 +933,7 @@ function LeadRow({
                 {time}
               </span>
             </div>
-            {lead.monthly_leads || lead.response_time ? (
+            {lead.monthly_leads || lead.response_time || lead.next_action_at ? (
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 {lead.monthly_leads ? (
                   <MetaTag>{lead.monthly_leads}</MetaTag>
@@ -851,6 +945,7 @@ function LeadRow({
                     {lead.response_time}
                   </MetaTag>
                 ) : null}
+                <PendingActionChip lead={lead} />
               </div>
             ) : null}
           </div>
@@ -878,6 +973,11 @@ function LeadRow({
                 <span className="text-[var(--ink)]/30">—</span>
               )}
             </p>
+            {lead.next_action_at || lead.outcome === "callback" ? (
+              <div className="mt-1">
+                <PendingActionChip lead={lead} />
+              </div>
+            ) : null}
           </div>
 
           <div className="hidden md:block">
@@ -953,11 +1053,19 @@ function DetailPanel({
 }: {
   lead: Lead;
   setCallStatus: (id: string, s: CallStatus) => Promise<void>;
-  setOutcome: (id: string, o: Outcome) => Promise<void>;
+  setOutcome: (
+    id: string,
+    o: Outcome,
+    callbackAt?: string,
+  ) => Promise<void>;
   updateNotes: (id: string, v: string) => void;
 }) {
-  // Resolved — terminal state, shown only in "Vis alle"
-  if (lead.outcome) {
+  // Resolved — terminal state, shown only in "Vis alle" (callback stays editable in Aktive)
+  const outcomeIsTerminal =
+    lead.outcome !== null &&
+    lead.outcome !== undefined &&
+    lead.outcome !== "callback";
+  if (outcomeIsTerminal && lead.outcome) {
     return (
       <div className="ledger-detail border-t border-[var(--ink)]/[0.10] bg-[var(--ink)]/[0.03] px-4 py-5 sm:px-6 sm:py-6">
         <div className="mx-auto flex w-full max-w-xl flex-col gap-4">
@@ -1114,11 +1222,18 @@ function DetailPanel({
                     onClick={() => void setOutcome(lead.id, key)}
                   />
                 ))}
+                <CallbackOutcomeButton
+                  selected={lead.outcome === "callback"}
+                  callbackAt={lead.callback_at}
+                  onPick={(isoTime) =>
+                    void setOutcome(lead.id, "callback", isoTime)
+                  }
+                  onClear={() => void setOutcome(lead.id, null)}
+                />
                 <OutcomeButton
                   outcome="unqualified"
                   selected={lead.outcome === "unqualified"}
                   onClick={() => void setOutcome(lead.id, "unqualified")}
-                  fullWidth
                 />
               </div>
             </div>
@@ -1178,6 +1293,37 @@ function StatusDot({ lead }: { lead: Lead }) {
       className="dot-pulse inline-block h-2 w-2 rounded-full bg-[var(--forest)]"
     />
   );
+}
+
+function PendingActionChip({ lead }: { lead: Lead }) {
+  if (lead.outcome === "callback" && lead.callback_at) {
+    return (
+      <span className="tabular inline-flex items-center gap-1.5 rounded-full border border-[var(--clay)]/30 bg-[var(--clay)]/[0.08] px-2 py-0.5 text-[10px] text-[var(--clay)]">
+        <span
+          aria-hidden
+          className="inline-block h-1.5 w-1.5 rounded-full bg-[var(--clay)]"
+        />
+        Ring tilbage {formatMeetingTime(lead.callback_at)}
+      </span>
+    );
+  }
+  if (
+    lead.call_status === "no_answer" &&
+    !lead.outcome &&
+    lead.next_action_at &&
+    lead.next_action_type === "retry"
+  ) {
+    return (
+      <span className="tabular inline-flex items-center gap-1.5 rounded-full border border-[var(--clay)]/30 bg-[var(--clay)]/[0.06] px-2 py-0.5 text-[10px] text-[var(--clay)]">
+        <span
+          aria-hidden
+          className="inline-block h-1.5 w-1.5 rounded-full bg-transparent ring-[1.5px] ring-inset ring-[var(--clay)]"
+        />
+        Opfølgning {formatRelativeFuture(lead.next_action_at)}
+      </span>
+    );
+  }
+  return null;
 }
 
 function DraftBadge() {
@@ -1293,6 +1439,118 @@ function OutcomeButton({
       />
     </button>
   );
+}
+
+function CallbackOutcomeButton({
+  selected,
+  callbackAt,
+  onPick,
+  onClear,
+}: {
+  selected: boolean;
+  callbackAt: string | null;
+  onPick: (isoTime: string) => void;
+  onClear: () => void;
+}) {
+  const tone = OUTCOME_TONE.callback;
+  const [picking, setPicking] = useState(false);
+  const [draftValue, setDraftValue] = useState("");
+
+  useEffect(() => {
+    if (selected && callbackAt) {
+      // Keep the input showing the current scheduled time if edited.
+      setDraftValue(toDatetimeLocal(callbackAt));
+    }
+  }, [selected, callbackAt]);
+
+  if (picking && !selected) {
+    return (
+      <div className="col-span-2 flex flex-col gap-2 rounded-sm border border-[var(--clay)]/40 bg-[var(--clay)]/[0.06] p-3">
+        <label className="tabular text-[10px] uppercase tracking-[0.22em] text-[var(--clay)]">
+          Ring tilbage — vælg tidspunkt
+        </label>
+        <div className="flex items-center gap-2">
+          <input
+            type="datetime-local"
+            value={draftValue}
+            onChange={(e) => setDraftValue(e.target.value)}
+            className="focus-cream flex-1 rounded-sm border border-[var(--ink)]/15 bg-transparent px-3 py-2 text-sm text-[var(--ink)] outline-none focus:border-[var(--clay)]"
+          />
+          <button
+            type="button"
+            onClick={() => {
+              if (!draftValue) return;
+              const iso = new Date(draftValue).toISOString();
+              onPick(iso);
+              setPicking(false);
+            }}
+            disabled={!draftValue}
+            className="rounded-sm bg-[var(--forest)] px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-[var(--cream)] transition hover:bg-[#2f5e4e] disabled:opacity-40"
+          >
+            OK
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setPicking(false);
+              setDraftValue("");
+            }}
+            className="rounded-sm border border-[var(--ink)]/15 px-3 py-2 text-[10px] uppercase tracking-[0.2em] text-[var(--ink)]/60 transition hover:text-[var(--ink)]"
+          >
+            Afbryd
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (selected) {
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          setPicking(true);
+          setDraftValue(callbackAt ? toDatetimeLocal(callbackAt) : "");
+          // Selected → tapping opens re-picker. Clear the outcome so UI shows picker.
+          onClear();
+        }}
+        className={`focus-cream flex items-center justify-between gap-3 rounded-sm border border-transparent ${tone.surface} ${tone.text} px-3 py-3 text-left text-[11px] uppercase tracking-[0.16em] transition`}
+      >
+        <span className="flex flex-col items-start">
+          <span>Ring tilbage</span>
+          {callbackAt ? (
+            <span className="tabular mt-0.5 text-[9px] text-[var(--ink)]/55 normal-case tracking-normal">
+              {formatMeetingTime(callbackAt)}
+            </span>
+          ) : null}
+        </span>
+        <span
+          aria-hidden
+          className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${tone.dot}`}
+        />
+      </button>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => setPicking(true)}
+      className="focus-cream flex items-center justify-between gap-3 rounded-sm border border-[var(--ink)]/10 px-3 py-3 text-left text-[11px] uppercase tracking-[0.16em] text-[var(--ink)]/65 transition hover:border-[var(--ink)]/30 hover:text-[var(--ink)]"
+    >
+      <span>Ring tilbage</span>
+      <span
+        aria-hidden
+        className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--ink)]/15"
+      />
+    </button>
+  );
+}
+
+function toDatetimeLocal(iso: string) {
+  const d = new Date(iso);
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 function SegmentedToggle({
@@ -1604,6 +1862,17 @@ function splitLeadTime(value: string) {
     minute: "2-digit",
   });
   return { day, time };
+}
+
+function formatRelativeFuture(isoTime: string) {
+  const diffMs = new Date(isoTime).getTime() - Date.now();
+  if (diffMs <= 0) return "nu";
+  const mins = Math.round(diffMs / 60000);
+  if (mins < 60) return `om ${mins} min`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `om ${hrs} t`;
+  const days = Math.round(hrs / 24);
+  return `om ${days} d`;
 }
 
 function formatRelative(value: string) {

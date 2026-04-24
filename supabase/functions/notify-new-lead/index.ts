@@ -3,13 +3,25 @@ import webpush from "npm:web-push@3.6.7";
 
 type Lead = {
   id?: string;
-  name?: string;
-  company?: string;
-  email?: string;
-  phone?: string;
-  monthly_leads?: string;
-  response_time?: string;
+  name?: string | null;
+  company?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  monthly_leads?: string | null;
+  response_time?: string | null;
+  source?: string | null;
 };
+
+function sourceLabelFor(source: string | null | undefined) {
+  switch (source) {
+    case "calendly":
+      return "Booket møde";
+    case "dripify":
+      return "LinkedIn lead";
+    default:
+      return "Nyt lead";
+  }
+}
 
 type PushSubscriptionRow = {
   endpoint: string;
@@ -57,8 +69,13 @@ Deno.serve(async (request) => {
 
   const body = await request.json().catch(() => null);
   const lead = (body?.record ?? body) as Lead | null;
+  const actionType = body?.action_type as
+    | "retry"
+    | "callback"
+    | undefined;
 
-  if (!lead?.name || !lead?.phone) {
+  // Need at least one identifiable field. Drafts and empty rows get skipped.
+  if (!lead || (!lead.name && !lead.email && !lead.phone)) {
     return json({ error: "Missing lead payload" }, 400);
   }
 
@@ -78,10 +95,22 @@ Deno.serve(async (request) => {
     return json({ error: error.message }, 500);
   }
 
+  const displayName = lead.name ?? lead.email ?? lead.phone ?? "lead";
+  let title: string;
+  if (actionType === "retry") {
+    title = `Follow-up SMS til ${displayName}`;
+  } else if (actionType === "callback") {
+    title = `Ring ${displayName} nu`;
+  } else {
+    title = `${sourceLabelFor(lead.source)}: ${displayName}`;
+  }
+  const bodyLine = [lead.company, lead.phone ?? lead.email]
+    .filter(Boolean)
+    .join(" — ");
   const payload = JSON.stringify({
-    title: `Nyt lead: ${lead.name}`,
-    body: `${lead.company ?? "CarterCo"} - ${lead.phone}`,
-    phone: lead.phone,
+    title,
+    body: bodyLine || "Åbn CarterCo for at se leadet.",
+    phone: lead.phone ?? "",
     url: "/leads",
   });
 
