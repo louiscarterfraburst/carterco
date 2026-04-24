@@ -188,13 +188,19 @@ export default function LeadsPage() {
     return leads;
   }, [leads, view]);
 
+  const pendingOutcomeLeads = useMemo(
+    () => leads.filter((l) => l.call_status === "answered" && !l.outcome),
+    [leads],
+  );
+
   const stats = useMemo(() => {
     const active = leads.filter(isActiveLead).length;
     const customers = leads.filter((l) => l.outcome === "customer").length;
+    const pending = pendingOutcomeLeads.length;
     const total = leads.length;
     const latest = leads[0]?.created_at ?? null;
-    return { active, customers, total, latest };
-  }, [leads]);
+    return { active, customers, pending, total, latest };
+  }, [leads, pendingOutcomeLeads]);
 
   useEffect(() => {
     let mounted = true;
@@ -786,6 +792,14 @@ export default function LeadsPage() {
           </div>
         </div>
       </div>
+
+      {pendingOutcomeLeads.length > 0 ? (
+        <PendingOutcomeBar
+          lead={pendingOutcomeLeads[0]}
+          remaining={pendingOutcomeLeads.length - 1}
+          setOutcome={setOutcome}
+        />
+      ) : null}
 
       {/* Masthead */}
       <section className="relative mx-auto w-full max-w-[1400px] min-w-0 px-4 pt-10 pb-8 sm:px-8 sm:pt-16 sm:pb-10 lg:px-12">
@@ -1433,6 +1447,99 @@ function StatusDot({ lead }: { lead: Lead }) {
       aria-hidden
       className="dot-pulse inline-block h-2 w-2 rounded-full bg-[var(--forest)]"
     />
+  );
+}
+
+function PendingOutcomeBar({
+  lead,
+  remaining,
+  setOutcome,
+}: {
+  lead: Lead;
+  remaining: number;
+  setOutcome: (
+    id: string,
+    o: Outcome,
+    callbackAt?: string,
+  ) => Promise<void>;
+}) {
+  const displayName = lead.name ?? lead.email ?? "Unavngivet";
+  return (
+    <div className="sticky top-[56px] z-10 border-b border-[var(--clay)]/30 bg-[var(--clay)]/[0.08] backdrop-blur-xl">
+      <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-8 lg:px-12">
+        <div className="min-w-0">
+          <p className="tabular text-[10px] uppercase tracking-[0.26em] text-[var(--clay)]">
+            Vælg resultat{remaining > 0 ? ` · ${remaining} til` : ""}
+          </p>
+          <p className="font-display mt-0.5 truncate text-lg italic leading-tight text-[var(--ink)]">
+            {displayName}
+            {lead.company ? (
+              <span className="tabular ml-2 text-xs not-italic text-[var(--ink)]/55">
+                {lead.company}
+              </span>
+            ) : null}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <PendingQuickButton
+            onClick={() => void setOutcome(lead.id, "customer")}
+            tone="accent"
+          >
+            Kunde
+          </PendingQuickButton>
+          <PendingQuickButton
+            onClick={() => void setOutcome(lead.id, "booked")}
+          >
+            Booket
+          </PendingQuickButton>
+          <PendingQuickButton
+            onClick={() => void setOutcome(lead.id, "interested")}
+          >
+            Interesseret
+          </PendingQuickButton>
+          <PendingQuickButton
+            onClick={() => void setOutcome(lead.id, "follow_up")}
+          >
+            Follow up
+          </PendingQuickButton>
+          <PendingQuickButton
+            onClick={() => void setOutcome(lead.id, "not_interested")}
+          >
+            Ikke int.
+          </PendingQuickButton>
+          <PendingQuickButton
+            onClick={() => void setOutcome(lead.id, "unqualified")}
+          >
+            Ukval.
+          </PendingQuickButton>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PendingQuickButton({
+  children,
+  onClick,
+  tone,
+}: {
+  children: ReactNode;
+  onClick: () => void;
+  tone?: "accent";
+}) {
+  const accent = tone === "accent";
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`focus-cream tabular rounded-sm px-2.5 py-1.5 text-[10px] uppercase tracking-[0.16em] transition ${
+        accent
+          ? "bg-[var(--forest)] text-[var(--cream)] hover:bg-[#2f5e4e]"
+          : "border border-[var(--ink)]/15 text-[var(--ink)]/75 hover:border-[var(--ink)]/35 hover:text-[var(--ink)]"
+      }`}
+    >
+      {children}
+    </button>
   );
 }
 
