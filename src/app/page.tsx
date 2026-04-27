@@ -100,6 +100,171 @@ type FieldErrors = Partial<Record<StepKey, string>>;
 
 const calendlyUrl = "https://calendly.com/louis-carterco/30min";
 
+// Logos render at a default height. Square/stacked marks need more height
+// than wordmarks to read at the same visual weight — override per logo.
+// Multi-color logos that shouldn't be flattened to cream set preserveColor.
+const logoFiles: {
+  file: string;
+  sizeClass?: string;
+  offsetClass?: string;
+  preserveColor?: boolean;
+}[] = [
+  { file: "logo-mavico.png" },
+  { file: "logo-tresyv.svg", sizeClass: "h-10 w-auto sm:h-12" },
+  { file: "logo-murph.png" },
+  { file: "logo-burst.png", sizeClass: "h-7 w-auto sm:h-9", offsetClass: "mb-3 sm:mb-4" },
+  { file: "logo-wono.png" },
+  { file: "logo-studio404.png", sizeClass: "h-6 w-auto sm:h-7" },
+  {
+    file: "logo-vinduespudserskolen.png",
+    sizeClass: "h-10 w-auto sm:h-12",
+    preserveColor: true,
+  },
+];
+
+const DEFAULT_LOGO_CLASS = "h-5 w-auto sm:h-7";
+
+const cases: {
+  metric: string;
+  metricLabel: string;
+  copy: string;
+  client: string;
+  industry: string;
+  kind: "heat" | "won";
+}[] = [
+  {
+    metric: "4×",
+    metricLabel: "flere bookede møder",
+    copy: "Vi automatiserede leadrespons til under 60 sekunder døgnet rundt — og koblede CRM, telefoni og kalender sammen i ét flow.",
+    client: "Klient A",
+    industry: "Forsikring",
+    kind: "heat",
+  },
+  {
+    metric: "<90s",
+    metricLabel: "gennemsnitlig responstid",
+    copy: "Et nyt nurture-spor fanger leads, der ikke svarer første gang, og holder dem varme indtil de er klar til samtalen.",
+    client: "Klient B",
+    industry: "SaaS",
+    kind: "heat",
+  },
+  {
+    metric: "+38%",
+    metricLabel: "højere konverteringsrate",
+    copy: "Routing efter postnummer, sælgerkapacitet og leadkvalitet — bygget oven på deres eksisterende stack uden migrering.",
+    client: "Klient C",
+    industry: "E-handel",
+    kind: "won",
+  },
+];
+
+type JourneyStage = {
+  n: string;
+  verb: string;
+  label: string;
+  title: string;
+  titleAccent: string;
+  body: string;
+  bullets: string[];
+  visual: "outbound" | "pipeline" | "sms";
+};
+
+const journey: JourneyStage[] = [
+  {
+    n: "01",
+    verb: "Fange",
+    label: "LinkedIn-outreach · Meta-annoncer",
+    title: "Vi henter dem ind",
+    titleAccent: "der hvor de allerede er.",
+    body: "Målrettede beskeder på LinkedIn til dem der bestemmer, og Meta-annoncer der rammer lige præcis dem du gerne vil have fat i. Ingen spam — kun leads der matcher din ideelle kunde.",
+    bullets: [
+      "Personlige beskeder i stor skala",
+      "Lookalikes og retargeting på Meta",
+      "A/B-testede annoncer",
+      "Ugentlig status på pipelinen",
+    ],
+    visual: "outbound",
+  },
+  {
+    n: "02",
+    verb: "Føre",
+    label: "CRM · automatisering · fordeling",
+    title: "Saml dem op",
+    titleAccent: "i ét fælles overblik.",
+    body: "Vi bygger CRM'et op fra bunden — eller rydder op i det du allerede har. Hver lead lander det rigtige sted, hos den rigtige sælger, med fuld kontekst. Helt af sig selv.",
+    bullets: [
+      "HubSpot, Pipedrive eller skræddersyet",
+      "Fordeling efter postnummer og kapacitet",
+      "Lead-scoring og livscyklus-stadier",
+      "Integration med telefoni og kalender",
+    ],
+    visual: "pipeline",
+  },
+  {
+    n: "03",
+    verb: "Lukke",
+    label: "SMS-flows · opfølgning",
+    title: "Hold dem varme —",
+    titleAccent: "også når du sover.",
+    body: "Automatiske SMS-flows der svarer inden for 60 sekunder, følger op på udeblivelser og henter de leads tilbage der ellers var faldet fra. Med en menneskelig tone.",
+    bullets: [
+      "Svar på under 60 sek. — døgnet rundt",
+      "Vækker kolde leads til live igen",
+      "Påmindelser og opfølgning på udeblivelser",
+      "Helt på linje med markedsføringsloven",
+    ],
+    visual: "sms",
+  },
+];
+
+const outboundCards = [
+  {
+    type: "linkedin" as const,
+    name: "Sara El-Khouri",
+    title: "Adm. direktør · Tagværk ApS",
+    initials: "SE",
+    preview:
+      "Hej Sara — så at I lige har vundet udbuddet på Frederiksberg. Hvis I vil have flere lignende leads, har vi…",
+    chip: "2. grads",
+  },
+  {
+    type: "meta" as const,
+    sponsor: "Sponsoreret · Carter & Co",
+    headline: "Få varme leads inden for 60 sekunder.",
+    body: "Vi bygger systemet. Du lukker aftalerne.",
+    cta: "Book demo",
+  },
+];
+
+const pipelineColumns = [
+  { key: "ny", label: "Ny", count: 12, accent: "bg-[var(--cream)]/40" },
+  { key: "kontaktet", label: "Kontaktet", count: 7, accent: "bg-[#ffb86b]" },
+  { key: "booket", label: "Booket", count: 4, accent: "bg-[#ff6b2c]" },
+  { key: "vundet", label: "Vundet", count: 2, accent: "bg-[var(--forest)]" },
+] as const;
+
+const pipelineCards = [
+  { col: 0, name: "Mette Sørensen", company: "Nordlys A/S", source: "LinkedIn", initials: "MS" },
+  { col: 1, name: "Jonas Holm", company: "Bygma Vest", source: "Meta", initials: "JH" },
+  { col: 1, name: "Sara El-Khouri", company: "Tagværk", source: "LinkedIn", initials: "SE" },
+  { col: 2, name: "Anders Kjær", company: "Boligformidling", source: "Meta", initials: "AK", note: "I morgen 10:00" },
+  { col: 3, name: "Lise Damgaard", company: "Kompas Tag", source: "LinkedIn", initials: "LD", note: "32.500 kr" },
+];
+
+const smsThread = [
+  {
+    from: "us" as const,
+    text: "Hej Mette — tak for din interesse i Nordlys-pakken. Har du tid til en kort snak i morgen kl. 10?",
+    time: "14:32",
+  },
+  { from: "them" as const, text: "Ja, det passer fint :)", time: "14:34" },
+  {
+    from: "us" as const,
+    text: "Perfekt — jeg sender en kalenderinvitation nu.",
+    time: "14:35",
+  },
+];
+
 const initial: FormState = {
   name: "",
   company: "",
@@ -312,17 +477,18 @@ export default function Home() {
   }
 
   return (
-    <main className="relative flex h-screen flex-col overflow-hidden bg-[#0f0d0a] text-[var(--cream)]">
-      <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_75%_60%,rgba(218,96,34,0.32),transparent_55%),radial-gradient(ellipse_at_15%_10%,rgba(25,70,58,0.28),transparent_50%)]" />
-      <div
-        className="pointer-events-none absolute inset-0 -z-10 opacity-[0.06] mix-blend-overlay"
-        style={{
-          backgroundImage:
-            "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>\")",
-        }}
-      />
+    <main className="relative flex min-h-screen flex-col bg-[#0f0d0a] text-[var(--cream)]">
+      <section className="relative flex min-h-screen flex-col overflow-hidden">
+        <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_75%_60%,rgba(218,96,34,0.32),transparent_55%),radial-gradient(ellipse_at_15%_10%,rgba(25,70,58,0.28),transparent_50%)]" />
+        <div
+          className="pointer-events-none absolute inset-0 -z-10 opacity-[0.06] mix-blend-overlay"
+          style={{
+            backgroundImage:
+              "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>\")",
+          }}
+        />
 
-      <nav className="mx-auto flex w-full max-w-[1400px] items-center justify-between px-8 pt-8 sm:px-12">
+        <nav className="mx-auto flex w-full max-w-[1400px] items-center justify-between px-8 pt-8 sm:px-12">
         <div className="flex items-center gap-3">
           <span className="h-2 w-2 animate-pulse rounded-full bg-[#ff6b2c] shadow-[0_0_12px_rgba(255,107,44,0.9)]" />
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -462,7 +628,527 @@ export default function Home() {
             </button>
           </div>
         </div>
-      </div>
+        </div>
+      </section>
+
+      <section className="relative border-t border-[var(--cream)]/5 bg-[#0f0d0a] py-16 sm:py-20">
+        <p className="text-center text-[10px] font-bold uppercase tracking-[0.3em] text-[var(--clay)]">
+          Bygget for
+        </p>
+        <div className="mt-10 overflow-hidden [mask-image:linear-gradient(to_right,transparent,black_10%,black_90%,transparent)] [-webkit-mask-image:linear-gradient(to_right,transparent,black_10%,black_90%,transparent)]">
+          <div className="flex w-max animate-marquee">
+            {[0, 1].map((dup) => (
+              <div
+                key={dup}
+                aria-hidden={dup === 1}
+                className="flex shrink-0 items-center gap-16 pr-16 sm:gap-24 sm:pr-24"
+              >
+                {logoFiles.map(({ file, sizeClass, offsetClass, preserveColor }) => (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img
+                    key={file}
+                    src={`/logos/${file}`}
+                    alt=""
+                    draggable={false}
+                    className={`${sizeClass ?? DEFAULT_LOGO_CLASS} ${offsetClass ?? ""} shrink-0 opacity-70 transition hover:opacity-100`}
+                    style={
+                      preserveColor
+                        ? undefined
+                        : { filter: "brightness(0) invert(1)" }
+                    }
+                  />
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="relative bg-[#0f0d0a] py-24 sm:py-32">
+        <div className="mx-auto w-full max-w-[1400px] px-8 sm:px-12">
+          <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-[var(--clay)]">
+            Resultater
+          </p>
+          <h2 className="mt-4 font-display text-[10vw] leading-[0.9] tracking-[-0.04em] sm:text-6xl lg:text-7xl">
+            Varme leads,
+            <br />
+            <span className="italic text-[var(--clay)]">lukkede aftaler.</span>
+          </h2>
+
+          <div className="mt-16 grid gap-px overflow-hidden rounded-2xl border border-[var(--cream)]/10 bg-[var(--cream)]/10 sm:mt-20 sm:grid-cols-3">
+            {cases.map((c) => (
+              <article
+                key={c.client}
+                className="group relative flex flex-col gap-6 bg-[#0f0d0a] p-10 transition hover:bg-[#15110c] sm:p-12"
+              >
+                <div className="flex flex-col gap-2">
+                  <span className="font-display text-6xl leading-none tracking-tight sm:text-7xl">
+                    <span
+                      className={`bg-clip-text text-transparent ${
+                        c.kind === "won"
+                          ? "bg-gradient-to-b from-[#5fae8b] via-[#2f7a5d] to-[var(--forest)]"
+                          : "bg-gradient-to-b from-[#ffb86b] via-[#ff6b2c] to-[#c93c0a]"
+                      }`}
+                    >
+                      {c.metric}
+                    </span>
+                  </span>
+                  <span className="text-[11px] font-bold uppercase tracking-[0.25em] text-[var(--cream)]/55">
+                    {c.metricLabel}
+                  </span>
+                </div>
+
+                <p className="text-base leading-relaxed text-[var(--cream)]/70">
+                  {c.copy}
+                </p>
+
+                <div className="mt-auto flex items-baseline gap-3 pt-6">
+                  <span className="font-display text-lg text-[var(--cream)]">
+                    {c.client}
+                  </span>
+                  <span className="text-[10px] font-bold uppercase tracking-[0.3em] text-[var(--cream)]/40">
+                    {c.industry}
+                  </span>
+                </div>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="relative overflow-hidden bg-[#0a0907] py-32 sm:py-40">
+        {/* Atmospheric backdrop */}
+        <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
+          <div className="absolute left-1/2 top-[12%] h-[700px] w-[900px] -translate-x-1/2 rounded-full bg-[radial-gradient(ellipse_at_center,rgba(255,107,44,0.10),transparent_65%)] blur-2xl" />
+          <div className="absolute bottom-0 left-0 right-0 h-[40%] bg-[linear-gradient(180deg,transparent,#0a0907)]" />
+        </div>
+
+        <div className="mx-auto w-full max-w-[1400px] px-8 sm:px-12">
+          {/* Header */}
+          <div className="grid gap-10 sm:grid-cols-[1fr_auto] sm:items-end">
+            <div>
+              <div className="flex items-center gap-3">
+                <span aria-hidden className="h-px w-10 bg-[#ff6b2c]" />
+                <p className="text-[10px] font-bold uppercase tracking-[0.4em] text-[#ff6b2c]">
+                  Sådan virker det · i tre takter
+                </p>
+              </div>
+              <h2 className="mt-7 font-display text-[13vw] leading-[0.86] tracking-[-0.045em] sm:text-7xl lg:text-[7.25rem]">
+                Fra fremmede,
+                <br />
+                <span className="italic text-[var(--clay)]/85">til fans, til</span>
+                <br />
+                <span className="bg-gradient-to-b from-[#ffb86b] via-[#ff6b2c] to-[#c93c0a] bg-clip-text text-transparent">
+                  faste kunder.
+                </span>
+              </h2>
+            </div>
+            <div className="hidden max-w-[18rem] sm:block sm:text-right">
+              <p className="text-sm leading-relaxed text-[var(--cream)]/55">
+                Tre systemer der spiller sammen.
+                <br />
+                Ét resultat der kan måles:
+              </p>
+              <p className="mt-1 font-display text-xl italic text-[var(--cream)]">
+                flere aftaler i kalenderen.
+              </p>
+            </div>
+          </div>
+
+          {/* Stages with continuous wire */}
+          <div className="relative mt-28 sm:mt-36">
+            {/* Wire down the left side */}
+            <div
+              aria-hidden
+              className="absolute left-2 top-0 hidden h-full w-px bg-[linear-gradient(180deg,transparent,rgba(185,112,65,0.55)_6%,rgba(185,112,65,0.55)_50%,rgba(25,70,58,0.6)_94%,transparent)] sm:block"
+            />
+            <div
+              aria-hidden
+              className="absolute left-[5px] top-0 hidden h-full w-[2px] sm:block"
+              style={{ ["--wire-length" as string]: "100%" }}
+            >
+              <span className="wire-travel block h-2 w-2 -translate-x-[3px] rounded-full bg-[#ff6b2c] shadow-[0_0_18px_3px_rgba(255,107,44,0.55)]" />
+            </div>
+
+            <div className="flex flex-col gap-28 sm:gap-36">
+              {journey.map((stage, i) => {
+                const isReverse = i === 1;
+                return (
+                  <article
+                    key={stage.n}
+                    className="relative grid gap-12 sm:grid-cols-12 sm:gap-12 sm:pl-14"
+                  >
+                    {/* Rail node */}
+                    <span
+                      aria-hidden
+                      className="absolute -left-1 top-2 hidden h-3.5 w-3.5 rounded-full bg-[#ff6b2c] ring-4 ring-[#0a0907] sm:block"
+                    />
+                    <span
+                      aria-hidden
+                      className="glow-pulse absolute -left-[14px] top-[-3px] hidden h-7 w-7 rounded-full bg-[#ff6b2c]/30 blur-md sm:block"
+                    />
+
+                    {/* Ghost numeral */}
+                    <span
+                      aria-hidden
+                      className="ghost-numeral pointer-events-none absolute -top-16 right-0 select-none text-[18rem] leading-none sm:-top-24 sm:right-auto sm:left-[-1rem] sm:text-[22rem]"
+                    >
+                      {stage.n}
+                    </span>
+
+                    {/* Copy column */}
+                    <div
+                      className={`relative ${isReverse ? "sm:col-span-5 sm:col-start-8" : "sm:col-span-5"} flex flex-col`}
+                    >
+                      <div className="flex items-baseline gap-4">
+                        <span className="font-display text-6xl italic leading-none tracking-tight sm:text-7xl">
+                          <span className="bg-gradient-to-b from-[#ffb86b] via-[#ff6b2c] to-[#c93c0a] bg-clip-text text-transparent">
+                            {stage.verb}
+                          </span>
+                          <span className="text-[#ff6b2c]">.</span>
+                        </span>
+                        <span className="tabular text-[11px] font-bold uppercase tracking-[0.3em] text-[var(--cream)]/35">
+                          {stage.n} / 03
+                        </span>
+                      </div>
+
+                      <p className="mt-7 text-[10px] font-bold uppercase tracking-[0.35em] text-[var(--clay)]">
+                        {stage.label}
+                      </p>
+                      <h3 className="mt-3 font-display text-3xl leading-[1.08] tracking-tight sm:text-4xl lg:text-[2.75rem]">
+                        {stage.title}{" "}
+                        <span className="italic text-[var(--clay)]/90">
+                          {stage.titleAccent}
+                        </span>
+                      </h3>
+                      <p className="mt-5 max-w-md text-[15px] leading-relaxed text-[var(--cream)]/72">
+                        {stage.body}
+                      </p>
+                      <ul className="mt-8 flex flex-col gap-3 text-[14px] text-[var(--cream)]/72">
+                        {stage.bullets.map((b, j) => (
+                          <li
+                            key={b}
+                            className="flex items-baseline gap-4 border-t border-[var(--cream)]/10 pt-3 first:border-t-0 first:pt-0"
+                          >
+                            <span className="tabular w-7 shrink-0 font-display text-xs text-[var(--clay)]">
+                              .{String(j + 1).padStart(2, "0")}
+                            </span>
+                            <span>{b}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    {/* Visual column */}
+                    <div
+                      className={`relative ${isReverse ? "sm:col-span-6 sm:col-start-1 sm:row-start-1" : "sm:col-span-6 sm:col-start-7"} flex items-center justify-center`}
+                    >
+                      {stage.visual === "outbound" && (
+                        <div className="relative h-[28rem] w-full max-w-[34rem] sm:h-[30rem]">
+                          {/* LinkedIn DM card — back, tilted left */}
+                          <div
+                            className="subtle-float-slow absolute right-0 top-0 w-[80%] origin-bottom-left"
+                            style={{ ["--float-base" as string]: "rotate(-2.5deg)" }}
+                          >
+                            <div className="rounded-2xl border border-[var(--cream)]/10 bg-[#14110d]/95 p-5 shadow-[0_40px_80px_-30px_rgba(0,0,0,0.7)] backdrop-blur-sm">
+                              <div className="flex items-center gap-3">
+                                <div className="grid h-10 w-10 place-items-center rounded-full bg-[linear-gradient(135deg,#3a4654,#525e6c)] font-display text-sm text-[var(--cream)]">
+                                  {outboundCards[0].initials}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <div className="truncate text-sm text-[var(--cream)]">
+                                    {outboundCards[0].name}
+                                  </div>
+                                  <div className="truncate text-[11px] text-[var(--cream)]/50">
+                                    {outboundCards[0].title}
+                                  </div>
+                                </div>
+                                <span className="rounded-full border border-[var(--clay)]/40 bg-[var(--clay)]/15 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.15em] text-[var(--clay)]">
+                                  in · {outboundCards[0].chip}
+                                </span>
+                              </div>
+                              <p className="mt-4 text-[13px] leading-relaxed text-[var(--cream)]/75">
+                                {outboundCards[0].preview}
+                              </p>
+                              <div className="mt-4 flex gap-2">
+                                <button
+                                  type="button"
+                                  className="rounded-full border border-[var(--cream)]/15 bg-[var(--cream)]/5 px-4 py-1.5 text-[11px] font-semibold text-[var(--cream)]/80"
+                                >
+                                  Forbind
+                                </button>
+                                <button
+                                  type="button"
+                                  className="rounded-full bg-[var(--clay)] px-4 py-1.5 text-[11px] font-semibold text-[#0a0907]"
+                                >
+                                  Send besked
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Meta ad card — front, tilted right */}
+                          <div
+                            className="subtle-float absolute bottom-0 left-0 w-[72%] origin-top-right"
+                            style={{
+                              ["--float-base" as string]: "rotate(2.5deg)",
+                              animationDelay: "1.5s",
+                            }}
+                          >
+                            <div className="overflow-hidden rounded-2xl border border-[var(--cream)]/10 bg-[#14110d] shadow-[0_40px_80px_-30px_rgba(0,0,0,0.8)]">
+                              <div className="flex items-center justify-between border-b border-[var(--cream)]/8 px-4 py-2.5">
+                                <div className="flex items-center gap-2">
+                                  <div className="grid h-7 w-7 place-items-center rounded-full bg-[linear-gradient(135deg,#1877f2,#42a5f5)] text-[10px] font-bold text-white">
+                                    f
+                                  </div>
+                                  <div className="text-[11px] text-[var(--cream)]/55">
+                                    {outboundCards[1].sponsor}
+                                  </div>
+                                </div>
+                                <span className="text-[var(--cream)]/30">···</span>
+                              </div>
+                              <div className="relative aspect-[16/9] bg-[radial-gradient(ellipse_at_30%_40%,rgba(255,107,44,0.45),transparent_60%),radial-gradient(ellipse_at_75%_70%,rgba(25,70,58,0.55),transparent_65%),linear-gradient(135deg,#14110d,#0a0907)]">
+                                <div className="absolute inset-0 grid place-items-center">
+                                  <span className="font-display text-3xl italic tracking-tight text-[var(--cream)]/85">
+                                    Smed mens jernet er <em className="not-italic text-[#ff6b2c]">varmt</em>.
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="px-4 py-3.5">
+                                <div className="text-[13px] font-semibold text-[var(--cream)]">
+                                  {outboundCards[1].headline}
+                                </div>
+                                <div className="mt-0.5 text-[11px] text-[var(--cream)]/55">
+                                  {outboundCards[1].body}
+                                </div>
+                                <button
+                                  type="button"
+                                  className="mt-3 w-full rounded-md bg-[var(--cream)]/10 py-2 text-[11px] font-semibold text-[var(--cream)] transition hover:bg-[var(--cream)]/15"
+                                >
+                                  {outboundCards[1].cta}  →
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {stage.visual === "pipeline" && (
+                        <div className="w-full max-w-[42rem]">
+                          <div className="rounded-2xl border border-[var(--cream)]/10 bg-[#14110d] p-5 shadow-[0_50px_100px_-40px_rgba(0,0,0,0.85)] sm:p-6">
+                            <div className="mb-5 flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <div className="grid h-7 w-7 place-items-center rounded-md bg-[#ff6b2c]/15">
+                                  <span className="h-2 w-2 rounded-full bg-[#ff6b2c] dot-pulse" />
+                                </div>
+                                <div>
+                                  <div className="text-[12px] font-semibold text-[var(--cream)]">
+                                    Pipeline · København
+                                  </div>
+                                  <div className="text-[10px] uppercase tracking-[0.2em] text-[var(--cream)]/40">
+                                    25 åbne · live
+                                  </div>
+                                </div>
+                              </div>
+                              <span className="tabular text-[10px] text-[var(--cream)]/40">
+                                opdateret 14:32
+                              </span>
+                            </div>
+
+                            <div className="relative grid grid-cols-4 gap-3">
+                              {/* Animated ghost card moving across columns */}
+                              <div
+                                aria-hidden
+                                className="pipeline-glide pointer-events-none absolute left-0 top-9 z-10 w-[calc(25%-0.5625rem)]"
+                              >
+                                <div className="rounded-lg border border-[#ff6b2c]/40 bg-[#1a120c] p-2.5 shadow-[0_20px_40px_-15px_rgba(255,107,44,0.35)]">
+                                  <div className="flex items-center gap-2">
+                                    <div className="grid h-5 w-5 place-items-center rounded-full bg-[#ff6b2c]/20 text-[9px] font-bold text-[#ff6b2c]">
+                                      KH
+                                    </div>
+                                    <div className="text-[10px] text-[var(--cream)]/85">
+                                      Karen Hjort
+                                    </div>
+                                  </div>
+                                  <div className="mt-1 text-[9px] text-[var(--cream)]/45">
+                                    Tagteam Aps
+                                  </div>
+                                </div>
+                              </div>
+
+                              {pipelineColumns.map((col, ci) => (
+                                <div key={col.key} className="flex min-w-0 flex-col">
+                                  <div className="mb-2 flex items-center justify-between">
+                                    <div className="flex items-center gap-1.5">
+                                      <span className={`h-1.5 w-1.5 rounded-full ${col.accent}`} />
+                                      <span className="text-[9px] font-bold uppercase tracking-[0.18em] text-[var(--cream)]/55">
+                                        {col.label}
+                                      </span>
+                                    </div>
+                                    <span className="tabular text-[9px] text-[var(--cream)]/35">
+                                      {col.count}
+                                    </span>
+                                  </div>
+                                  <div className="flex flex-col gap-1.5">
+                                    {pipelineCards
+                                      .filter((c) => c.col === ci)
+                                      .map((card, ki) => (
+                                        <div
+                                          key={card.name}
+                                          className="ledger-row rounded-lg border border-[var(--cream)]/8 bg-[#0f0d0a] p-2.5 transition hover:border-[var(--cream)]/15"
+                                          style={{ animationDelay: `${(ci * 2 + ki) * 0.08}s` }}
+                                        >
+                                          <div className="flex items-center gap-1.5">
+                                            <div className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-[var(--cream)]/8 text-[9px] font-bold text-[var(--cream)]/70">
+                                              {card.initials}
+                                            </div>
+                                            <div className="min-w-0 flex-1 truncate text-[10px] text-[var(--cream)]/85">
+                                              {card.name}
+                                            </div>
+                                          </div>
+                                          <div className="mt-1 truncate text-[9px] text-[var(--cream)]/45">
+                                            {card.company}
+                                          </div>
+                                          {card.note && (
+                                            <div className={`mt-1.5 truncate text-[9px] ${ci === 3 ? "tabular text-[var(--forest)]" : "text-[#ff6b2c]"}`}>
+                                              {ci === 3 ? "✓ " : "→ "}
+                                              {card.note}
+                                            </div>
+                                          )}
+                                        </div>
+                                      ))}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+
+                            <div className="mt-5 flex items-center justify-between border-t border-[var(--cream)]/8 pt-4 text-[10px] text-[var(--cream)]/45">
+                              <span className="flex items-center gap-2">
+                                <span className="h-1.5 w-1.5 rounded-full bg-[var(--forest)] dot-pulse" />
+                                Fordeling aktiv · Postnr. 1000–2999
+                              </span>
+                              <span className="tabular">⌘K</span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {stage.visual === "sms" && (
+                        <div className="relative">
+                          {/* Phone-frame chrome */}
+                          <div className="relative w-[19rem] rounded-[2.5rem] border border-[var(--cream)]/15 bg-gradient-to-b from-[#14110d] to-[#0a0907] p-2 shadow-[0_60px_120px_-40px_rgba(0,0,0,0.9)]">
+                            <div className="rounded-[2rem] bg-[#0a0907] px-4 pb-5 pt-9">
+                              {/* Status bar */}
+                              <div className="mb-3 flex items-center justify-between text-[10px] text-[var(--cream)]/55">
+                                <span className="tabular">14:35</span>
+                                <span className="flex items-center gap-1">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-[var(--cream)]/60" />
+                                  <span className="h-2 w-3 rounded-sm border border-[var(--cream)]/50" />
+                                </span>
+                              </div>
+                              {/* Contact header */}
+                              <div className="mb-4 flex flex-col items-center gap-1.5 border-b border-[var(--cream)]/8 pb-4">
+                                <div className="grid h-10 w-10 place-items-center rounded-full bg-[var(--cream)]/8 font-display text-xs text-[var(--cream)]/70">
+                                  MS
+                                </div>
+                                <div className="text-[12px] text-[var(--cream)]">
+                                  Mette Sørensen
+                                </div>
+                                <div className="text-[9px] uppercase tracking-[0.2em] text-[var(--cream)]/40">
+                                  Nordlys A/S · sms
+                                </div>
+                              </div>
+
+                              {/* Bubbles */}
+                              <div className="flex flex-col gap-2.5">
+                                {smsThread.map((m, k) => (
+                                  <div
+                                    key={k}
+                                    className={`bubble-in flex flex-col ${m.from === "us" ? "items-end" : "items-start"}`}
+                                    style={{ animationDelay: `${k * 0.45 + 0.2}s` }}
+                                  >
+                                    <div
+                                      className={`max-w-[80%] rounded-2xl px-3 py-2 text-[12px] leading-snug ${
+                                        m.from === "us"
+                                          ? "bg-[#ff6b2c] text-white"
+                                          : "bg-[var(--cream)]/10 text-[var(--cream)]/90"
+                                      }`}
+                                    >
+                                      {m.text}
+                                    </div>
+                                    <span className="mt-0.5 px-1 text-[9px] tabular text-[var(--cream)]/35">
+                                      {m.time}
+                                    </span>
+                                  </div>
+                                ))}
+
+                                {/* Typing indicator */}
+                                <div
+                                  className="bubble-in flex items-center gap-1 self-start rounded-2xl bg-[var(--cream)]/10 px-3 py-2"
+                                  style={{ animationDelay: "1.7s" }}
+                                >
+                                  <span className="typing-dot h-1.5 w-1.5 rounded-full bg-[var(--cream)]/55" style={{ animationDelay: "0s" }} />
+                                  <span className="typing-dot h-1.5 w-1.5 rounded-full bg-[var(--cream)]/55" style={{ animationDelay: "0.18s" }} />
+                                  <span className="typing-dot h-1.5 w-1.5 rounded-full bg-[var(--cream)]/55" style={{ animationDelay: "0.36s" }} />
+                                </div>
+
+                                {/* Booket confirmation chip */}
+                                <div
+                                  className="bubble-in mt-2 flex items-center gap-2 self-center rounded-full border border-[var(--forest)]/40 bg-[var(--forest)]/15 px-3 py-1.5 text-[10px] text-[var(--cream)]/85"
+                                  style={{ animationDelay: "2.1s" }}
+                                >
+                                  <span className="h-1.5 w-1.5 rounded-full bg-[var(--forest)]" />
+                                  Booket møde · I morgen 10:00
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Floating timing chip */}
+                          <div
+                            className="subtle-float absolute -right-6 top-20 hidden rounded-xl border border-[var(--cream)]/10 bg-[#14110d] px-3 py-2 shadow-[0_30px_60px_-25px_rgba(0,0,0,0.7)] sm:block"
+                            style={{ animationDelay: "0.8s" }}
+                          >
+                            <div className="text-[9px] uppercase tracking-[0.2em] text-[var(--cream)]/40">
+                              Svartid
+                            </div>
+                            <div className="font-display text-2xl leading-none">
+                              <span className="bg-gradient-to-b from-[#5fae8b] to-[var(--forest)] bg-clip-text text-transparent">
+                                42s
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+
+            {/* Closing flourish — wire terminates in green (closed/won) */}
+            <div aria-hidden className="relative mt-10 hidden h-8 sm:block">
+              <span className="absolute left-0 top-0 h-3.5 w-3.5 rounded-full bg-[var(--forest)] ring-4 ring-[#0a0907]" />
+              <span className="glow-pulse absolute -left-3 -top-2.5 h-8 w-8 rounded-full bg-[var(--forest)]/45 blur-md" />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <footer className="border-t border-[var(--cream)]/5 py-12">
+        <div className="mx-auto flex w-full max-w-[1400px] flex-col items-center justify-center gap-2 px-8 text-center text-[10px] font-bold uppercase tracking-[0.3em] text-[var(--cream)]/40 sm:flex-row sm:gap-6 sm:px-12">
+          <span>© 2026 Carter &amp; Co</span>
+          <span className="hidden sm:inline">·</span>
+          <span>København</span>
+          <span className="hidden sm:inline">·</span>
+          <a
+            href="mailto:louis@carterco.dk"
+            className="transition hover:text-[var(--cream)]"
+          >
+            louis@carterco.dk
+          </a>
+        </div>
+      </footer>
 
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
