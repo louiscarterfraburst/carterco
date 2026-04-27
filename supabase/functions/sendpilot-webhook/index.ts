@@ -1,0 +1,225 @@
+// Receives SendPilot webhooks (delivered via Svix). Verifies the standard
+// Svix signature scheme: HMAC-SHA256(base64-decoded(whsec_<...>),
+// `${svix-id}.${svix-timestamp}.${body}`) base64-encoded, prefixed with v1,
+// in the svix-signature header.
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { createClient } from "npm:@supabase/supabase-js@2.103.3";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
+type SendPilotEvent = {
+  eventId: string;
+  eventType: string;
+  timestamp?: string;
+  workspaceId?: string;
+  data: {
+    leadId?: string;
+    linkedinUrl?: string;
+    campaignId?: string;
+    senderId?: string;
+    [k: string]: unknown;
+  };
+};
+
+const supabase = createClient(
+  Deno.env.get("SUPABASE_URL") ?? "",
+  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+);
+
+const SP_WEBHOOK_SECRET = Deno.env.get("SENDPILOT_WEBHOOK_SECRET") ?? "";
+const SS_API_KEY = Deno.env.get("SENDSPARK_API_KEY") ?? "";
+const SS_API_SECRET = Deno.env.get("SENDSPARK_API_SECRET") ?? "";
+const SS_WORKSPACE = Deno.env.get("SENDSPARK_WORKSPACE") ?? "";
+const SS_DYNAMIC = Deno.env.get("SENDSPARK_DYNAMIC") ?? "";
+
+Deno.serve(async (request) => {
+  if (request.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
+
+  const rawBody = await request.text();
+
+  if (SP_WEBHOOK_SECRET) {
+    const ok = await verifySvix(request.headers, rawBody, SP_WEBHOOK_SECRET);
+    if (!ok) {
+      console.warn("svix verify failed", {
+        sigPresent: !!request.headers.get("svix-signature"),
+        idPresent: !!request.headers.get("svix-id"),
+        tsPresent: !!request.headers.get("svix-timestamp"),
+      });
+      return json({ error: "Invalid signature" }, 401);
+    }
+  }
+
+  let evt: SendPilotEvent;
+  try { evt = JSON.parse(rawBody); }
+  catch { return json({ error: "Invalid JSON" }, 400); }
+  if (!evt.eventId || !evt.eventType) return json({ error: "Missing eventId/eventType" }, 400);
+
+  const { error: evtErr } = await supabase.from("outreach_events").insert({
+    event_id: evt.eventId,
+    source: "sendpilot",
+    event_type: evt.eventType,
+    workspace_id: evt.workspaceId ?? null,
+    payload: evt,
+  });
+  if (evtErr && !`${evtErr.message}`.includes("duplicate key")) {
+    console.error("event insert error", evtErr);
+    return json({ error: "DB error", details: evtErr.message }, 500);
+  }
+  if (evtErr) return json({ ok: true, duplicate: true });
+
+  const data = evt.data ?? {};
+  const leadId = (data.leadId ?? "").toString();
+  const linkedinUrl = (data.linkedinUrl ?? "").toString();
+  if (!leadId) return json({ ok: true, ignored: "no leadId" });
+
+  const lead = await lookupLead(leadId, linkedinUrl);
+  const now = new Date().toISOString();
+
+  if (evt.eventType === "connection.sent") {
+    await supabase.rpc("outreach_record_invite", {
+      _lead_id: leadId,
+      _linkedin_url: linkedinUrl,
+      _contact_email: lead?.contact_email ?? "",
+      _invited_at: now,
+    });
+    return json({ ok: true, recorded: "invited" });
+  }
+
+  if (evt.eventType === "connection.accepted") {
+    const { data: existing } = await supabase
+      .from("outreach_pipeline")
+      .select("status,is_cold,contact_email")
+      .eq("sendpilot_lead_id", leadId)
+      .maybeSingle();
+    const cold = existing?.status === "invited";
+
+    if (!lead?.contact_email) {
+      await supabase.from("outreach_pipeline").upsert({
+        sendpilot_lead_id: leadId,
+        linkedin_url: linkedinUrl,
+        contact_email: "",
+        is_cold: cold,
+        status: "failed",
+        accepted_at: now,
+        error: "lead not in outreach_leads CSV",
+      }, { onConflict: "sendpilot_lead_id" });
+      return json({ ok: true, recorded: "accepted_no_lead" });
+    }
+
+    await supabase.from("outreach_pipeline").upsert({
+      sendpilot_lead_id: leadId,
+      linkedin_url: linkedinUrl,
+      contact_email: lead.contact_email,
+      is_cold: cold,
+      status: "rendering",
+      accepted_at: now,
+    }, { onConflict: "sendpilot_lead_id" });
+
+    const renderRes = await sendsparkRender(lead);
+    if (!renderRes.ok) {
+      await supabase.from("outreach_pipeline").update({
+        status: "failed",
+        error: `sendspark render failed: HTTP ${renderRes.status}`,
+      }).eq("sendpilot_lead_id", leadId);
+      return json({ ok: false, error: "sendspark render failed", status: renderRes.status });
+    }
+    return json({ ok: true, recorded: "accepted_rendering", cold });
+  }
+
+  return json({ ok: true, ignored: evt.eventType });
+});
+
+async function lookupLead(sendpilotLeadId: string, linkedinUrl: string) {
+  const { data: byId } = await supabase
+    .from("outreach_leads")
+    .select("*")
+    .eq("sendpilot_lead_id", sendpilotLeadId)
+    .maybeSingle();
+  if (byId) return byId;
+  if (linkedinUrl) {
+    const slug = linkedinSlug(linkedinUrl);
+    const { data: bySlug } = await supabase
+      .from("outreach_leads")
+      .select("*")
+      .eq("slug", slug)
+      .maybeSingle();
+    if (bySlug) {
+      await supabase.from("outreach_leads")
+        .update({ sendpilot_lead_id: sendpilotLeadId })
+        .eq("linkedin_url", bySlug.linkedin_url);
+      return bySlug;
+    }
+  }
+  return null;
+}
+
+function linkedinSlug(url: string): string {
+  try {
+    const path = new URL(url).pathname.replace(/\/+$/, "");
+    return (path.split("/").pop() ?? "").toLowerCase().replace(/[^a-z0-9-]+/g, "-");
+  } catch { return ""; }
+}
+
+async function sendsparkRender(lead: Record<string, unknown>) {
+  const payload = {
+    processAndAuthorizeCharge: true,
+    prospect: {
+      contactName: ((lead.first_name as string) ?? "").trim() || "there",
+      contactEmail: lead.contact_email as string,
+      company: ((lead.company as string) ?? "").slice(0, 80),
+      jobTitle: ((lead.title as string) ?? "").slice(0, 120),
+      backgroundUrl: (lead.website as string) ?? "",
+    },
+  };
+  const url = `https://api-gw.sendspark.com/v1/workspaces/${SS_WORKSPACE}/dynamics/${SS_DYNAMIC}/prospect`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "x-api-key": SS_API_KEY,
+      "x-api-secret": SS_API_SECRET,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+  return { ok: res.ok, status: res.status };
+}
+
+async function verifySvix(headers: Headers, rawBody: string, secret: string): Promise<boolean> {
+  const svixId = headers.get("svix-id");
+  const svixTs = headers.get("svix-timestamp");
+  const svixSig = headers.get("svix-signature");
+  if (!svixId || !svixTs || !svixSig) return false;
+  const ts = Number(svixTs);
+  if (!Number.isFinite(ts) || Math.abs(Date.now() / 1000 - ts) > 600) return false;
+
+  // Svix signing: secret is base64 after stripping whsec_ prefix.
+  const b64 = secret.startsWith("whsec_") ? secret.slice("whsec_".length) : secret;
+  let secretBytes: Uint8Array;
+  try {
+    const padded = b64 + "=".repeat((4 - (b64.length % 4)) % 4);
+    const bin = atob(padded);
+    secretBytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
+  } catch {
+    secretBytes = new TextEncoder().encode(secret);
+  }
+  const key = await crypto.subtle.importKey(
+    "raw", secretBytes, { name: "HMAC", hash: "SHA-256" }, false, ["sign"],
+  );
+  const data = `${svixId}.${svixTs}.${rawBody}`;
+  const sig = new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(data)));
+  const expected = btoa(String.fromCharCode(...sig));
+  const candidates = svixSig.split(/\s+/);
+  return candidates.some((c) => c.replace(/^v1,/, "") === expected);
+}
+
+function json(obj: unknown, status = 200) {
+  return new Response(JSON.stringify(obj), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
