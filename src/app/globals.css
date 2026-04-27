@@ -125,3 +125,107 @@ body {
   outline: 1px solid rgba(58, 115, 96, 0.8);
   outline-offset: 2px;
 }
+
+/* ─── Process section motion ────────────────────────────── */
+
+/* Orange traveler dot down the rail */
+@keyframes wire-travel {
+  0%   { transform: translateY(0);    opacity: 0; }
+  8%   { opacity: 1; }
+  92%  { opacity: 1; }
+  100% { transform: translateY(var(--wire-length, 100%)); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .wire-travel {
+    animation: wire-travel 9s linear infinite;
+  }
+}
+
+/* Chat bubble entrance */
+@keyframes bubble-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.bubble-in {
+  animation: bubble-in 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+/* Typing indicator dots */
+@keyframes typing-blink {
+  0%, 60%, 100% { opacity: 0.25; transform: translateY(0); }
+  30%           { opacity: 1;    transform: translateY(-2px); }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .typing-dot { animation: typing-blink 1.4s ease-in-out infinite; }
+}
+
+/* Pipeline ghost card glide column → column */
+@keyframes pipeline-glide {
+  0%,  18% { transform: translate(0, 0);                opacity: 0.95; }
+  25%, 43% { transform: translate(calc(100% + 0.75rem), -0.25rem);   opacity: 0.95; }
+  50%, 68% { transform: translate(calc(200% + 1.5rem),   0);         opacity: 0.95; }
+  75%, 92% { transform: translate(calc(300% + 2.25rem),  0.25rem);   opacity: 0.95; }
+  98%      { opacity: 0; }
+  100%     { transform: translate(0, 0);                opacity: 0; }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .pipeline-glide {
+    animation: pipeline-glide 14s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+  }
+}
+
+/* Gentle drift for stacked cards */
+@keyframes subtle-float {
+  0%, 100% { transform: var(--float-base, none) translateY(0); }
+  50%      { transform: var(--float-base, none) translateY(-6px); }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .subtle-float      { animation: subtle-float 7s ease-in-out infinite; }
+  .subtle-float-slow { animation: subtle-float 11s ease-in-out infinite; }
+}
+
+/* Soft glow halo behind active dots */
+@keyframes glow-pulse {
+  0%, 100% { opacity: 0.5; }
+  50%      { opacity: 1;   }
+}
+
+.glow-pulse {
+  animation: glow-pulse 3s ease-in-out infinite;
+}
+
+/* Ghost numeral — sits behind content as massive editorial detail */
+.ghost-numeral {
+  font-family: var(--font-display);
+  font-feature-settings: "lnum" 1, "ss01" 1;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 184, 107, 0.10) 0%,
+    rgba(255, 107, 44, 0.07) 45%,
+    rgba(201, 60, 10, 0.025) 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  letter-spacing: -0.05em;
+}
+
+/* Logo marquee — static for reduced-motion users, scrolling otherwise */
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .animate-marquee {
+    animation: marquee 40s linear infinite;
+  }
+  .animate-marquee:hover {
+    animation-play-state: paused;
+  }
+}
