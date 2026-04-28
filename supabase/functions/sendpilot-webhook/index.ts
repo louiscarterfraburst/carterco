@@ -59,11 +59,19 @@ Deno.serve(async (request) => {
   catch { return json({ error: "Invalid JSON" }, 400); }
   if (!evt.eventId || !evt.eventType) return json({ error: "Missing eventId/eventType" }, 400);
 
+  // Look up lead first so we know which workspace owns this event.
+  const data = evt.data ?? {};
+  const leadId = (data.leadId ?? "").toString();
+  const linkedinUrl = (data.linkedinUrl ?? "").toString();
+  const lead = leadId ? await lookupLead(leadId, linkedinUrl) : null;
+  const workspaceId = lead?.workspace_id ?? null;
+
   const { error: evtErr } = await supabase.from("outreach_events").insert({
     event_id: evt.eventId,
     source: "sendpilot",
     event_type: evt.eventType,
-    workspace_id: evt.workspaceId ?? null,
+    source_workspace_id: evt.workspaceId ?? null,
+    workspace_id: workspaceId,
     payload: evt,
   });
   if (evtErr && !`${evtErr.message}`.includes("duplicate key")) {
@@ -72,12 +80,8 @@ Deno.serve(async (request) => {
   }
   if (evtErr) return json({ ok: true, duplicate: true });
 
-  const data = evt.data ?? {};
-  const leadId = (data.leadId ?? "").toString();
-  const linkedinUrl = (data.linkedinUrl ?? "").toString();
   if (!leadId) return json({ ok: true, ignored: "no leadId" });
 
-  const lead = await lookupLead(leadId, linkedinUrl);
   const now = new Date().toISOString();
 
   if (evt.eventType === "connection.sent") {
@@ -106,6 +110,7 @@ Deno.serve(async (request) => {
         is_cold: cold,
         status: "failed",
         accepted_at: now,
+        workspace_id: workspaceId,
         error: "lead not in outreach_leads CSV",
       }, { onConflict: "sendpilot_lead_id" });
       return json({ ok: true, recorded: "accepted_no_lead" });
@@ -118,6 +123,7 @@ Deno.serve(async (request) => {
       is_cold: cold,
       status: "rendering",
       accepted_at: now,
+      workspace_id: workspaceId,
     }, { onConflict: "sendpilot_lead_id" });
 
     const renderRes = await sendsparkRender(lead);
@@ -145,6 +151,7 @@ Deno.serve(async (request) => {
         sendpilot_lead_id: leadId,
         linkedin_url: linkedinUrl,
         message: replyText,
+        workspace_id: workspaceId,
       })
       .select()
       .single();
