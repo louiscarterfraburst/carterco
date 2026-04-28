@@ -129,6 +129,100 @@ end $$;
 revoke all on function public.suggest_slots(text, timestamptz, int, int, int) from public;
 grant execute on function public.suggest_slots(text, timestamptz, int, int, int) to authenticated, service_role;
 
+-- suggest_free_blocks: contiguous free blocks per day (≥ _min_minutes),
+-- starting at _from (defaults to start of tomorrow in user's TZ). Returns one
+-- row per block; UI typically picks the biggest block per day for the
+-- "Hvordan ser din kalender ud i morgen mellem 10-13?" phrasing.
+create or replace function public.suggest_free_blocks(
+    _user_email text,
+    _from timestamptz default null,
+    _days int default 2,
+    _min_minutes int default 60
+)
+returns table (
+    day_local date,
+    block_start timestamptz,
+    block_end timestamptz
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+    s public.user_settings%rowtype;
+    has_settings boolean;
+    cur_date date;
+    cap_date date;
+    days_with_blocks int := 0;
+    day_had_block boolean;
+    day_start timestamptz;
+    day_end timestamptz;
+    cur_ts timestamptz;
+    busy_rec record;
+    min_dur interval;
+begin
+    select * into s from public.user_settings where user_email = _user_email;
+    has_settings := FOUND;
+    if not has_settings then
+        s.tz := 'Europe/Copenhagen';
+        s.business_hours_start := '09:00';
+        s.business_hours_end := '17:00';
+        s.business_days := '{1,2,3,4,5}'::int[];
+    end if;
+
+    min_dur := make_interval(mins => _min_minutes);
+
+    if _from is null then
+        _from := ((current_date + 1)::timestamp at time zone s.tz);
+    end if;
+
+    cur_date := (_from at time zone s.tz)::date;
+    cap_date := cur_date + 30;
+
+    while cur_date <= cap_date and days_with_blocks < _days loop
+        if extract(isodow from cur_date)::int = any(s.business_days) then
+            day_start := (cur_date + s.business_hours_start)::timestamp at time zone s.tz;
+            day_end   := (cur_date + s.business_hours_end)::timestamp at time zone s.tz;
+            day_start := greatest(day_start, _from);
+
+            cur_ts := day_start;
+            day_had_block := false;
+
+            for busy_rec in
+                select start_at, end_at from public.user_busy_intervals
+                where user_email = _user_email
+                  and end_at > day_start and start_at < day_end
+                order by start_at asc
+            loop
+                if cur_ts < busy_rec.start_at and busy_rec.start_at - cur_ts >= min_dur then
+                    day_local := cur_date;
+                    block_start := cur_ts;
+                    block_end := least(busy_rec.start_at, day_end);
+                    return next;
+                    day_had_block := true;
+                end if;
+                cur_ts := greatest(cur_ts, busy_rec.end_at);
+            end loop;
+            if cur_ts < day_end and day_end - cur_ts >= min_dur then
+                day_local := cur_date;
+                block_start := cur_ts;
+                block_end := day_end;
+                return next;
+                day_had_block := true;
+            end if;
+
+            if day_had_block then
+                days_with_blocks := days_with_blocks + 1;
+            end if;
+        end if;
+        cur_date := cur_date + 1;
+    end loop;
+    return;
+end $$;
+
+revoke all on function public.suggest_free_blocks(text, timestamptz, int, int) from public;
+grant execute on function public.suggest_free_blocks(text, timestamptz, int, int) to authenticated, service_role;
+
 -- Schedule cal-poll every 15 minutes.
 select cron.unschedule(jobname) from cron.job where jobname = 'cal-poll-15min';
 select cron.schedule(

@@ -225,17 +225,19 @@ export default function LeadsPage() {
     if (!user?.email) return;
     let cancelled = false;
     (async () => {
-      const { data, error } = await supabase.rpc("suggest_slots", {
+      const { data, error } = await supabase.rpc("suggest_free_blocks", {
         _user_email: user.email,
+        _days: 2,
+        _min_minutes: 60,
       });
       if (cancelled || error || !data) return;
-      const slotIsoArr = (data as Array<{ slot: string }>).map((r) => r.slot);
+      const blocks = data as Array<{ day_local: string; block_start: string; block_end: string }>;
       const { data: settings } = await supabase
         .from("user_settings")
         .select("tz")
         .eq("user_email", user.email)
         .maybeSingle();
-      setSlotsLine(formatSlotsLine(slotIsoArr, settings?.tz ?? "Europe/Copenhagen"));
+      setSlotsLine(formatBlocksLine(blocks, settings?.tz ?? "Europe/Copenhagen"));
     })();
     return () => { cancelled = true; };
   }, [user, supabase]);
@@ -2101,8 +2103,8 @@ function firstName(name: string | null) {
 }
 
 function buildSmsBody(name: string | null, slotsLine?: string) {
-  const slot = slotsLine ? ` Eksempelvis ${slotsLine}.` : "";
-  return `Hej ${firstName(name)}, det er Louis fra CarterCo - jeg prøvede lige at ringe.${slot} Skriv når det passer, så finder vi et tidspunkt. /Louis`;
+  const slot = slotsLine ? ` Hvordan ser din kalender ud ${slotsLine}?` : "";
+  return `Hej ${firstName(name)}, det er Louis fra CarterCo - jeg prøvede lige at ringe.${slot} /Louis`;
 }
 
 const CALENDLY_URL = "https://calendly.com/louis-carter/30min";
@@ -2110,11 +2112,11 @@ const CALENDLY_URL = "https://calendly.com/louis-carter/30min";
 function buildEmailDraft(name: string | null, slotsLine?: string) {
   const subject = "Kort follow-up fra CarterCo";
   const slotPara = slotsLine
-    ? `Passer en af disse: ${slotsLine}? Eller foreslå selv et tidspunkt.\n\n`
+    ? `Hvordan ser din kalender ud ${slotsLine}? Ellers foreslå selv et tidspunkt.\n\n`
     : "";
   const body = `Hej ${firstName(name)},
 
-Det er Louis fra CarterCo. Jeg prøvede lige at ringe dig efter din henvendelse — har du 20 minutter senere i denne uge til at snakke om, hvordan vi kan gøre dine leads varme hurtigere?
+Det er Louis fra CarterCo. Jeg prøvede lige at ringe dig efter din henvendelse — har du 20 minutter til at snakke om, hvordan vi kan gøre dine leads varme hurtigere?
 
 ${slotPara}Du kan også booke direkte her: ${CALENDLY_URL}
 
@@ -2129,18 +2131,44 @@ function mailtoHref(email: string | null | undefined, name: string | null, slots
   return `mailto:${email}?${query}`;
 }
 
-// Format ISO timestamps as Danish prose: "tirsdag 14:00, onsdag 10:00 eller torsdag 13:00"
-function formatSlotsLine(slots: string[], tz: string): string {
-  if (!slots.length) return "";
-  const parts = slots.map((s) => {
-    const d = new Date(s);
-    const day = d.toLocaleDateString("da-DK", { weekday: "long", timeZone: tz });
-    const time = d.toLocaleTimeString("da-DK", { hour: "2-digit", minute: "2-digit", timeZone: tz });
-    return `${day} kl. ${time}`;
-  });
+// Pick the biggest free block per day, then format Danish prose:
+//   "i morgen mellem 09:00-13:00 og onsdag mellem 09:00-17:00"
+function formatBlocksLine(
+  blocks: Array<{ day_local: string; block_start: string; block_end: string }>,
+  tz: string,
+): string {
+  if (!blocks.length) return "";
+  // Group by day, pick longest block per day.
+  const byDay = new Map<string, { block_start: string; block_end: string; dur: number }>();
+  for (const b of blocks) {
+    const dur = new Date(b.block_end).getTime() - new Date(b.block_start).getTime();
+    const cur = byDay.get(b.day_local);
+    if (!cur || dur > cur.dur) {
+      byDay.set(b.day_local, { block_start: b.block_start, block_end: b.block_end, dur });
+    }
+  }
+  // Compute today/tomorrow/day-after labels in user TZ.
+  const today = new Date();
+  const todayKey = today.toLocaleDateString("en-CA", { timeZone: tz });
+  const tomorrow = new Date(today.getTime() + 86400000).toLocaleDateString("en-CA", { timeZone: tz });
+  const dayAfter = new Date(today.getTime() + 2 * 86400000).toLocaleDateString("en-CA", { timeZone: tz });
+  const parts: string[] = [];
+  // Sort by day key
+  const days = Array.from(byDay.keys()).sort();
+  for (const day of days) {
+    const blk = byDay.get(day)!;
+    let label: string;
+    if (day === todayKey) label = "i dag";
+    else if (day === tomorrow) label = "i morgen";
+    else if (day === dayAfter) label = "i overmorgen";
+    else label = new Date(`${day}T12:00:00Z`).toLocaleDateString("da-DK", { weekday: "long", timeZone: tz });
+    const startT = new Date(blk.block_start).toLocaleTimeString("da-DK", { hour: "2-digit", minute: "2-digit", timeZone: tz });
+    const endT = new Date(blk.block_end).toLocaleTimeString("da-DK", { hour: "2-digit", minute: "2-digit", timeZone: tz });
+    parts.push(`${label} mellem ${startT}-${endT}`);
+  }
   if (parts.length === 1) return parts[0];
-  if (parts.length === 2) return `${parts[0]} eller ${parts[1]}`;
-  return `${parts.slice(0, -1).join(", ")} eller ${parts[parts.length - 1]}`;
+  if (parts.length === 2) return `${parts[0]} og ${parts[1]}`;
+  return `${parts.slice(0, -1).join(", ")} og ${parts[parts.length - 1]}`;
 }
 
 function notificationTitle(status: NotificationStatus) {
