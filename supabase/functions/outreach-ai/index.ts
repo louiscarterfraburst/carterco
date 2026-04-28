@@ -114,7 +114,7 @@ async function classifyReply(
     }),
   });
   if (!res.ok) {
-    console.error("anthropic error", res.status, await res.text());
+    console.error("ai provider error", res.status, await res.text());
     return null;
   }
   const data = await res.json();

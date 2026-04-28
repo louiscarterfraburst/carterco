@@ -2,7 +2,7 @@
 """For misses that have currentCompany but no currentCompanyLink:
   1) Serper-search "{company} linkedin" → first linkedin.com/company URL
   2) Jina Reader on that URL → extract the Website field
-  3) Verify the LI page name matches source company (token match, then Haiku)
+  3) Verify the LI page name matches source company (token match, then AI)
 
 Env vars required:
   SERPER_API_KEY
@@ -84,7 +84,7 @@ def names_match(csv_name, li_page_title, threshold=0.5):
     return overlap >= 1 and overlap / min(len(a), len(b)) >= threshold
 
 
-def haiku_verify(csv_name, li_page_title, li_description=""):
+def ai_verify(csv_name, li_page_title, li_description=""):
     prompt = (
         f"A LinkedIn company page and a source record may refer to the same company.\n"
         f"Source company name: {csv_name!r}\n"
@@ -115,7 +115,7 @@ def haiku_verify(csv_name, li_page_title, li_description=""):
         txt = d.get("content", [{}])[0].get("text", "").strip().upper()
         return txt.startswith("YES")
     except Exception as e:
-        print(f"  haiku err: {e}", file=sys.stderr)
+        print(f"  ai provider err: {e}", file=sys.stderr)
         return False
 
 
@@ -148,7 +148,7 @@ def fetch_website(company_linkedin_url, source_name, retries=3):
                     time.sleep(3 * (attempt + 1))
                     continue
                 return "", "no_page_title"
-            if not haiku_verify(source_name, page_title, page_desc):
+            if not ai_verify(source_name, page_title, page_desc):
                 return "", f"rejected: LI page = {page_title!r}"
 
         m = WEBSITE_RE.search(body)

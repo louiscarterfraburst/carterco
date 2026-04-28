@@ -58,6 +58,13 @@ type PipelineRow = {
   decided_by: string | null;
   last_reply_at: string | null;
   last_reply_intent: Intent | null;
+  viewed_at: string | null;
+  played_at: string | null;
+  watched_end_at: string | null;
+  cta_clicked_at: string | null;
+  liked_at: string | null;
+  render_failed_at: string | null;
+  last_engagement_at: string | null;
   error: string | null;
   updated_at: string;
   lead?: LeadEnrich;

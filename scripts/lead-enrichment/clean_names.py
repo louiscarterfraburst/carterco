@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Detect rows where firstName/lastName has been polluted with emojis, job
-titles, or taglines (from LinkedIn scrape noise). Use Claude Haiku to clean
+titles, or taglines (from LinkedIn scrape noise). Use AI to clean
 the affected rows. Writes a new CSV with cleaned names.
 
 Env var required:
@@ -51,7 +51,7 @@ def is_polluted(first, last):
     return None
 
 
-def haiku_clean(first, last, title, company):
+def ai_clean(first, last, title, company):
     prompt = (
         "You are cleaning up a name record. The firstName and lastName fields "
         "have been polluted with taglines, job titles, or emojis from the "
@@ -91,7 +91,7 @@ def haiku_clean(first, last, title, company):
             return None
         return json.loads(m.group(0))
     except Exception as e:
-        print(f"  haiku err: {e}", file=sys.stderr)
+        print(f"  ai provider err: {e}", file=sys.stderr)
         return None
 
 
@@ -112,12 +112,12 @@ def main():
         print(f"  [{reason}] {r['firstName']!r} / {r['lastName']!r}")
 
     if args.dry_run:
-        print("\nDry run — not calling Haiku or writing CSV.")
+        print("\nDry run — not calling AI or writing CSV.")
         return
 
     changes = []
     for i, r, _ in flagged:
-        cleaned = haiku_clean(r["firstName"], r["lastName"],
+        cleaned = ai_clean(r["firstName"], r["lastName"],
                               r.get("title", ""), r.get("company", ""))
         if not cleaned:
             continue

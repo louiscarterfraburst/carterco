@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, KeyboardEvent, ReactNode, useEffect, useRef, useState } from "react";
 import { createClient } from "@/utils/supabase/client";
 
 const DRAFT_STORAGE_KEY = "carterco.lead_draft_id";
@@ -115,6 +115,7 @@ const logoFiles: {
   { file: "logo-burst.png", sizeClass: "h-7 w-auto sm:h-9", offsetClass: "mb-3 sm:mb-4" },
   { file: "logo-wono.png" },
   { file: "logo-studio404.png", sizeClass: "h-6 w-auto sm:h-7" },
+  { file: "logo-swob.png", sizeClass: "h-9 w-auto sm:h-11" },
   {
     file: "logo-vinduespudserskolen.png",
     sizeClass: "h-10 w-auto sm:h-12",
@@ -129,43 +130,49 @@ const cases: {
   metricLabel: string;
   copy: string;
   client: string;
-  industry: string;
+  industry?: string;
   kind: "heat" | "won";
+  url?: string;
+  logo?: string;
+  logoClass?: string;
 }[] = [
   {
-    metric: "4×",
-    metricLabel: "flere bookede møder",
-    copy: "Vi automatiserede leadrespons til under 60 sekunder døgnet rundt — og koblede CRM, telefoni og kalender sammen i ét flow.",
-    client: "Klient A",
-    industry: "Forsikring",
+    metric: "31×",
+    metricLabel: "outreach-volumen",
+    copy: "Vi byggede et AI-system der genererer personlig video-outreach til hver enkelt prospect — hver besked føles optaget kun til dem, men kører i en skala et team aldrig kunne ramme manuelt.",
+    client: "Tresyv",
     kind: "heat",
+    logo: "/logos/logo-tresyv.svg",
+    logoClass: "h-11",
   },
   {
-    metric: "<90s",
+    metric: "<3 min",
     metricLabel: "gennemsnitlig responstid",
-    copy: "Et nyt nurture-spor fanger leads, der ikke svarer første gang, og holder dem varme indtil de er klar til samtalen.",
-    client: "Klient B",
-    industry: "SaaS",
+    copy: "Hvert nyt lead pinger sælgeren direkte på telefonen — med navn, firma og kontekst. Ring op eller følg op med ét tryk, uden at åbne CRM'et.",
+    client: "Murph",
+    url: "https://www.trymurph.com/",
+    logo: "/logos/logo-murph.png",
+    logoClass: "h-6",
     kind: "heat",
   },
   {
-    metric: "+38%",
-    metricLabel: "højere konverteringsrate",
-    copy: "Routing efter postnummer, sælgerkapacitet og leadkvalitet — bygget oven på deres eksisterende stack uden migrering.",
-    client: "Klient C",
-    industry: "E-handel",
+    metric: "4×",
+    metricLabel: "lead-konvertering",
+    copy: "Vi byggede et intro-tilbud der var uimodståeligt for målgruppen, finpudsede annoncerne så de ramte de rigtige mennesker, og lagde et email- og SMS-flow oven på der svarer hvert lead personligt inden for få minutter.",
+    client: "Burst",
     kind: "won",
+    url: "https://burstcreators.com",
+    logo: "/logos/logo-burst.png",
   },
 ];
 
 type JourneyStage = {
   n: string;
   verb: string;
-  label: string;
   title: string;
   titleAccent: string;
   body: string;
-  bullets: string[];
+  proof?: { metric: string; unit: string; note: string };
   visual: "outbound" | "pipeline" | "sms";
 };
 
@@ -173,46 +180,25 @@ const journey: JourneyStage[] = [
   {
     n: "01",
     verb: "Fange",
-    label: "LinkedIn-outreach · Meta-annoncer",
     title: "Vi henter dem ind",
     titleAccent: "der hvor de allerede er.",
-    body: "Målrettede beskeder på LinkedIn til dem der bestemmer, og Meta-annoncer der rammer lige præcis dem du gerne vil have fat i. Ingen spam — kun leads der matcher din ideelle kunde.",
-    bullets: [
-      "Personlige beskeder i stor skala",
-      "Lookalikes og retargeting på Meta",
-      "A/B-testede annoncer",
-      "Ugentlig status på pipelinen",
-    ],
+    body: "Målrettede beskeder på LinkedIn og email til dem der bestemmer, og Meta-annoncer der rammer lige præcis dem du gerne vil have fat i. Ingen spam — kun leads der matcher din ideelle kunde.",
     visual: "outbound",
   },
   {
     n: "02",
     verb: "Føre",
-    label: "CRM · automatisering · fordeling",
     title: "Saml dem op",
     titleAccent: "i ét fælles overblik.",
     body: "Vi bygger CRM'et op fra bunden — eller rydder op i det du allerede har. Hver lead lander det rigtige sted, hos den rigtige sælger, med fuld kontekst. Helt af sig selv.",
-    bullets: [
-      "HubSpot, Pipedrive eller skræddersyet",
-      "Fordeling efter postnummer og kapacitet",
-      "Lead-scoring og livscyklus-stadier",
-      "Integration med telefoni og kalender",
-    ],
     visual: "pipeline",
   },
   {
     n: "03",
     verb: "Lukke",
-    label: "SMS-flows · opfølgning",
     title: "Hold dem varme —",
     titleAccent: "også når du sover.",
     body: "Automatiske SMS-flows der svarer inden for 60 sekunder, følger op på udeblivelser og henter de leads tilbage der ellers var faldet fra. Med en menneskelig tone.",
-    bullets: [
-      "Svar på under 60 sek. — døgnet rundt",
-      "Vækker kolde leads til live igen",
-      "Påmindelser og opfølgning på udeblivelser",
-      "Helt på linje med markedsføringsloven",
-    ],
     visual: "sms",
   },
 ];
@@ -262,6 +248,130 @@ const smsThread = [
     from: "us" as const,
     text: "Perfekt — jeg sender en kalenderinvitation nu.",
     time: "14:35",
+  },
+];
+
+type IntegrationTile = {
+  id: string;
+  x: number;
+  y: number;
+  size: number;
+  rot: number;
+  bg: string;
+  border?: string;
+  iconSrc?: string;   // path to local SVG (preferred — used for SimpleIcons brands)
+  glyph?: ReactNode;  // inline JSX fallback (used when no canonical SVG available)
+};
+
+const integrationTiles: IntegrationTile[] = [
+  // — Top arc —
+  {
+    // Monday: stylized rainbow vertical bars (their actual mark is colored bars; we render mono)
+    id: "monday",
+    x: 14, y: 16, size: 64, rot: -6, bg: "#FF3D57",
+    glyph: (
+      <g fill="white">
+        <rect x="5" y="8" width="3.4" height="8" rx="1.7" />
+        <rect x="10.3" y="6" width="3.4" height="12" rx="1.7" />
+        <rect x="15.6" y="9" width="3.4" height="6" rx="1.7" />
+      </g>
+    ),
+  },
+  {
+    // Pipedrive: stylized P with internal pipe — mirrors the brand's "P with a tail" mark
+    id: "pipedrive",
+    x: 28, y: 6, size: 72, rot: 4, bg: "#017737",
+    glyph: (
+      <g fill="white">
+        <path d="M 8 4 L 13 4 a 5 5 0 0 1 0 10 L 11 14 L 11 20 L 8 20 Z M 11 7 L 11 11 L 13 11 a 2 2 0 0 0 0 -4 Z" />
+      </g>
+    ),
+  },
+  {
+    // HubSpot: real SimpleIcons sprocket
+    id: "hubspot",
+    x: 50, y: 4, size: 68, rot: -3, bg: "#FF7A59",
+    iconSrc: "/icons/integrations/hubspot.svg",
+  },
+  {
+    // Salesforce: cloud silhouette (their iconic mark)
+    id: "salesforce",
+    x: 72, y: 8, size: 76, rot: 5, bg: "#00A1E0",
+    glyph: (
+      <g fill="white">
+        <path d="M 6.5 16.5 a 3 3 0 0 1 -0.4 -5.9 a 3.8 3.8 0 0 1 1.6 -2.3 a 4 4 0 0 1 6.4 0.9 a 3.5 3.5 0 0 1 4.6 2 a 2.7 2.7 0 0 1 -1 5.3 Z" />
+      </g>
+    ),
+  },
+  // — Middle band —
+  {
+    // Microsoft Dynamics 365: 4-square Microsoft-style grid
+    id: "dynamics",
+    x: 6, y: 44, size: 68, rot: 6, bg: "#0078D4",
+    glyph: (
+      <g fill="white">
+        <rect x="4" y="4" width="7.5" height="7.5" rx="0.5" />
+        <rect x="12.5" y="4" width="7.5" height="7.5" rx="0.5" />
+        <rect x="4" y="12.5" width="7.5" height="7.5" rx="0.5" />
+        <rect x="12.5" y="12.5" width="7.5" height="7.5" rx="0.5" />
+      </g>
+    ),
+  },
+  {
+    // ActiveCampaign: triangle play-arrow with horizontal accent (their signature shape)
+    id: "activecampaign",
+    x: 90, y: 48, size: 72, rot: 5, bg: "#356AE6",
+    glyph: (
+      <g fill="white">
+        <path d="M 5 19 L 12 5 L 19 19 L 16 19 L 12 11 L 8 19 Z" />
+        <rect x="10.5" y="14" width="6" height="1.8" rx="0.4" />
+      </g>
+    ),
+  },
+
+  // — Lower band —
+  {
+    // LinkedIn: classic boxy "in" letterform
+    id: "linkedin",
+    x: 12, y: 76, size: 72, rot: -5, bg: "#0A66C2",
+    glyph: (
+      <g fill="white">
+        <rect x="4" y="9" width="3.5" height="11" rx="0.3" />
+        <circle cx="5.75" cy="5.5" r="1.9" />
+        <path d="M 10 9 L 13 9 L 13 10.6 Q 14.5 8.7 17 8.7 Q 20.5 8.7 20.5 13 L 20.5 20 L 17 20 L 17 13.5 Q 17 11.6 15.4 11.6 Q 13.5 11.6 13.5 14 L 13.5 20 L 10 20 Z" />
+      </g>
+    ),
+  },
+  {
+    // Zapier: real SimpleIcons asterisk-cross
+    id: "zapier",
+    x: 30, y: 88, size: 76, rot: 3, bg: "#FF4A00",
+    iconSrc: "/icons/integrations/zapier.svg",
+  },
+  {
+    // Google: multi-color G (kept inline since SimpleIcons single-color version isn't iconic)
+    id: "google",
+    x: 50, y: 92, size: 64, rot: -4, bg: "#FFFFFF", border: "#E5E0D5",
+    glyph: (
+      <g>
+        <path d="M 12 5 a 7 7 0 0 1 5 2 L 15 9 a 4.5 4.5 0 1 0 1.3 4.5 L 12 13.5 L 12 11 L 19 11 a 7 7 0 1 1 -7 -6 Z" fill="#4285F4" />
+        <path d="M 12 19 a 7 7 0 0 0 5.5 -2.5 L 14.8 14 a 4.5 4.5 0 0 1 -2.8 1 Z" fill="#34A853" />
+        <path d="M 7.5 13 a 4.5 4.5 0 0 1 0 -2 L 5 9 a 7 7 0 0 0 0 6 Z" fill="#FBBC05" />
+        <path d="M 7.5 11 a 4.5 4.5 0 0 1 4.5 -3 a 4.5 4.5 0 0 1 3 1 L 17 7 a 7 7 0 0 0 -12 2 Z" fill="#EA4335" />
+      </g>
+    ),
+  },
+  {
+    // Make (formerly Integromat): real SimpleIcons mark
+    id: "make",
+    x: 70, y: 86, size: 68, rot: 5, bg: "#6D00CC",
+    iconSrc: "/icons/integrations/make.svg",
+  },
+  {
+    // Meta: real SimpleIcons swirl
+    id: "meta",
+    x: 88, y: 78, size: 72, rot: -3, bg: "#0866FF",
+    iconSrc: "/icons/integrations/meta.svg",
   },
 ];
 
@@ -633,7 +743,7 @@ export default function Home() {
 
       <section className="relative border-t border-[var(--cream)]/5 bg-[#0f0d0a] py-16 sm:py-20">
         <p className="text-center text-[10px] font-bold uppercase tracking-[0.3em] text-[var(--clay)]">
-          Bygget for
+          Bag systemet hos
         </p>
         <div className="mt-10 overflow-hidden [mask-image:linear-gradient(to_right,transparent,black_10%,black_90%,transparent)] [-webkit-mask-image:linear-gradient(to_right,transparent,black_10%,black_90%,transparent)]">
           <div className="flex w-max animate-marquee">
@@ -664,51 +774,101 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="relative bg-[#0f0d0a] py-24 sm:py-32">
-        <div className="mx-auto w-full max-w-[1400px] px-8 sm:px-12">
+      <section className="relative overflow-hidden bg-[#f6efe4] py-28 text-[#29261f] sm:py-36">
+        <div aria-hidden className="paper-grain" />
+
+        {/* EmberSpark — top: bridges down from dark marquee */}
+        <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-10 bg-[linear-gradient(180deg,rgba(255,107,44,0.18),transparent)]" />
+        <div aria-hidden className="pointer-events-none absolute left-1/2 top-0 h-[2px] w-[min(680px,60%)] -translate-x-1/2 bg-[linear-gradient(90deg,transparent,#ff6b2c_30%,#ff6b2c_70%,transparent)] shadow-[0_0_28px_rgba(255,107,44,0.7)]" />
+
+        {/* EmberSpark — bottom: bridges up to dark process */}
+        <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-[linear-gradient(0deg,rgba(255,107,44,0.18),transparent)]" />
+        <div aria-hidden className="pointer-events-none absolute bottom-0 left-1/2 h-[2px] w-[min(680px,60%)] -translate-x-1/2 bg-[linear-gradient(90deg,transparent,#ff6b2c_30%,#ff6b2c_70%,transparent)] shadow-[0_0_28px_rgba(255,107,44,0.7)]" />
+
+        <div className="relative z-[1] mx-auto w-full max-w-[1400px] px-8 sm:px-12">
           <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-[var(--clay)]">
-            Resultater
+            Resultater · udvalgte
           </p>
-          <h2 className="mt-4 font-display text-[10vw] leading-[0.9] tracking-[-0.04em] sm:text-6xl lg:text-7xl">
+          <h2 className="mt-4 font-display text-[10vw] leading-[0.9] tracking-[-0.04em] text-[#29261f] sm:text-6xl lg:text-7xl">
             Varme leads,
             <br />
             <span className="italic text-[var(--clay)]">lukkede aftaler.</span>
           </h2>
 
-          <div className="mt-16 grid gap-px overflow-hidden rounded-2xl border border-[var(--cream)]/10 bg-[var(--cream)]/10 sm:mt-20 sm:grid-cols-3">
+          <div className="mt-16 grid gap-px overflow-hidden rounded-2xl border border-[#29261f]/12 bg-[#29261f]/12 sm:mt-20 sm:grid-cols-3">
             {cases.map((c) => (
               <article
                 key={c.client}
-                className="group relative flex flex-col gap-6 bg-[#0f0d0a] p-10 transition hover:bg-[#15110c] sm:p-12"
+                className="group relative flex flex-col gap-6 bg-[#f6efe4] p-10 transition hover:bg-[#efe6d6] sm:p-12"
               >
                 <div className="flex flex-col gap-2">
-                  <span className="font-display text-6xl leading-none tracking-tight sm:text-7xl">
+                  <span className="font-display text-6xl italic leading-none tracking-tight sm:text-7xl">
                     <span
                       className={`bg-clip-text text-transparent ${
                         c.kind === "won"
-                          ? "bg-gradient-to-b from-[#5fae8b] via-[#2f7a5d] to-[var(--forest)]"
+                          ? "bg-gradient-to-b from-[#3d8a6c] via-[#19463a] to-[#0c2a22]"
                           : "bg-gradient-to-b from-[#ffb86b] via-[#ff6b2c] to-[#c93c0a]"
                       }`}
                     >
                       {c.metric}
                     </span>
                   </span>
-                  <span className="text-[11px] font-bold uppercase tracking-[0.25em] text-[var(--cream)]/55">
+                  <span className="text-[11px] font-bold uppercase tracking-[0.25em] text-[#29261f]/60">
                     {c.metricLabel}
                   </span>
                 </div>
 
-                <p className="text-base leading-relaxed text-[var(--cream)]/70">
+                <p className="text-base leading-relaxed text-[#29261f]/75">
                   {c.copy}
                 </p>
 
-                <div className="mt-auto flex items-baseline gap-3 pt-6">
-                  <span className="font-display text-lg text-[var(--cream)]">
-                    {c.client}
-                  </span>
-                  <span className="text-[10px] font-bold uppercase tracking-[0.3em] text-[var(--cream)]/40">
-                    {c.industry}
-                  </span>
+                <div className="mt-auto flex items-center gap-3 pt-6">
+                  {c.logo ? (
+                    c.url ? (
+                      <a
+                        href={c.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label={c.client}
+                        className="group/link inline-flex items-center gap-2 opacity-80 transition hover:opacity-100"
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={c.logo}
+                          alt={c.client}
+                          className={`${c.logoClass ?? "h-7"} w-auto`}
+                          style={{ filter: "brightness(0)" }}
+                        />
+                        <span className="text-[12px] text-[#29261f]/55 transition group-hover/link:text-[#29261f]">↗</span>
+                      </a>
+                    ) : (
+                      /* eslint-disable-next-line @next/next/no-img-element */
+                      <img
+                        src={c.logo}
+                        alt={c.client}
+                        className={`${c.logoClass ?? "h-7"} w-auto opacity-80`}
+                        style={{ filter: "brightness(0)" }}
+                      />
+                    )
+                  ) : c.url ? (
+                    <a
+                      href={c.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-display text-lg italic text-[#29261f] decoration-[var(--clay)] decoration-2 underline-offset-4 transition hover:underline"
+                    >
+                      {c.client} ↗
+                    </a>
+                  ) : (
+                    <span className="font-display text-lg italic text-[#29261f]">
+                      {c.client}
+                    </span>
+                  )}
+                  {c.industry && (
+                    <span className="text-[10px] font-bold uppercase tracking-[0.3em] text-[#29261f]/50">
+                      {c.industry}
+                    </span>
+                  )}
                 </div>
               </article>
             ))}
@@ -725,34 +885,22 @@ export default function Home() {
 
         <div className="mx-auto w-full max-w-[1400px] px-8 sm:px-12">
           {/* Header */}
-          <div className="grid gap-10 sm:grid-cols-[1fr_auto] sm:items-end">
-            <div>
-              <div className="flex items-center gap-3">
-                <span aria-hidden className="h-px w-10 bg-[#ff6b2c]" />
-                <p className="text-[10px] font-bold uppercase tracking-[0.4em] text-[#ff6b2c]">
-                  Sådan virker det · i tre takter
-                </p>
-              </div>
-              <h2 className="mt-7 font-display text-[13vw] leading-[0.86] tracking-[-0.045em] sm:text-7xl lg:text-[7.25rem]">
-                Fra fremmede,
-                <br />
-                <span className="italic text-[var(--clay)]/85">til fans, til</span>
-                <br />
-                <span className="bg-gradient-to-b from-[#ffb86b] via-[#ff6b2c] to-[#c93c0a] bg-clip-text text-transparent">
-                  faste kunder.
-                </span>
-              </h2>
-            </div>
-            <div className="hidden max-w-[18rem] sm:block sm:text-right">
-              <p className="text-sm leading-relaxed text-[var(--cream)]/55">
-                Tre systemer der spiller sammen.
-                <br />
-                Ét resultat der kan måles:
-              </p>
-              <p className="mt-1 font-display text-xl italic text-[var(--cream)]">
-                flere aftaler i kalenderen.
+          <div>
+            <div className="flex items-center gap-3">
+              <span aria-hidden className="h-px w-10 bg-[#ff6b2c]" />
+              <p className="text-[10px] font-bold uppercase tracking-[0.4em] text-[#ff6b2c]">
+                Sådan virker det · i tre takter
               </p>
             </div>
+            <h2 className="mt-7 font-display text-[13vw] leading-[0.86] tracking-[-0.045em] sm:text-7xl lg:text-[7.25rem]">
+              Fra fremmede,
+              <br />
+              <span className="italic text-[var(--clay)]/85">til fans, til</span>
+              <br />
+              <span className="bg-gradient-to-b from-[#ffb86b] via-[#ff6b2c] to-[#c93c0a] bg-clip-text text-transparent">
+                faste kunder.
+              </span>
+            </h2>
           </div>
 
           {/* Stages with continuous wire */}
@@ -800,22 +948,14 @@ export default function Home() {
                     <div
                       className={`relative ${isReverse ? "sm:col-span-5 sm:col-start-8" : "sm:col-span-5"} flex flex-col`}
                     >
-                      <div className="flex items-baseline gap-4">
-                        <span className="font-display text-6xl italic leading-none tracking-tight sm:text-7xl">
-                          <span className="bg-gradient-to-b from-[#ffb86b] via-[#ff6b2c] to-[#c93c0a] bg-clip-text text-transparent">
-                            {stage.verb}
-                          </span>
-                          <span className="text-[#ff6b2c]">.</span>
+                      <span className="font-display text-6xl italic leading-none tracking-tight sm:text-7xl">
+                        <span className="bg-gradient-to-b from-[#ffb86b] via-[#ff6b2c] to-[#c93c0a] bg-clip-text text-transparent">
+                          {stage.verb}
                         </span>
-                        <span className="tabular text-[11px] font-bold uppercase tracking-[0.3em] text-[var(--cream)]/35">
-                          {stage.n} / 03
-                        </span>
-                      </div>
+                        <span className="text-[#ff6b2c]">.</span>
+                      </span>
 
-                      <p className="mt-7 text-[10px] font-bold uppercase tracking-[0.35em] text-[var(--clay)]">
-                        {stage.label}
-                      </p>
-                      <h3 className="mt-3 font-display text-3xl leading-[1.08] tracking-tight sm:text-4xl lg:text-[2.75rem]">
+                      <h3 className="mt-7 font-display text-3xl leading-[1.08] tracking-tight sm:text-4xl lg:text-[2.75rem]">
                         {stage.title}{" "}
                         <span className="italic text-[var(--clay)]/90">
                           {stage.titleAccent}
@@ -824,24 +964,28 @@ export default function Home() {
                       <p className="mt-5 max-w-md text-[15px] leading-relaxed text-[var(--cream)]/72">
                         {stage.body}
                       </p>
-                      <ul className="mt-8 flex flex-col gap-3 text-[14px] text-[var(--cream)]/72">
-                        {stage.bullets.map((b, j) => (
-                          <li
-                            key={b}
-                            className="flex items-baseline gap-4 border-t border-[var(--cream)]/10 pt-3 first:border-t-0 first:pt-0"
-                          >
-                            <span className="tabular w-7 shrink-0 font-display text-xs text-[var(--clay)]">
-                              .{String(j + 1).padStart(2, "0")}
-                            </span>
-                            <span>{b}</span>
-                          </li>
-                        ))}
-                      </ul>
+
+                      {/* Proof point — replaces the 4-bullet list */}
+                      {stage.proof && (
+                        <div className="mt-9 flex items-baseline gap-5 border-t border-[var(--cream)]/10 pt-7">
+                          <span className="font-display text-5xl italic leading-none tracking-tight text-[var(--cream)] sm:text-6xl">
+                            {stage.proof.metric}
+                          </span>
+                          <div className="min-w-0">
+                            <div className="text-[10px] font-bold uppercase tracking-[0.25em] text-[var(--clay)]">
+                              {stage.proof.unit}
+                            </div>
+                            <div className="mt-1.5 text-[13px] leading-snug text-[var(--cream)]/55">
+                              {stage.proof.note}
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* Visual column */}
                     <div
-                      className={`relative ${isReverse ? "sm:col-span-6 sm:col-start-1 sm:row-start-1" : "sm:col-span-6 sm:col-start-7"} flex items-center justify-center`}
+                      className={`relative ${isReverse ? "sm:col-span-6 sm:col-start-1 sm:row-start-1" : "sm:col-span-6 sm:col-start-7"} flex items-start justify-center pt-4`}
                     >
                       {stage.visual === "outbound" && (
                         <div className="relative h-[28rem] w-full max-w-[34rem] sm:h-[30rem]">
@@ -850,36 +994,36 @@ export default function Home() {
                             className="subtle-float-slow absolute right-0 top-0 w-[80%] origin-bottom-left"
                             style={{ ["--float-base" as string]: "rotate(-2.5deg)" }}
                           >
-                            <div className="rounded-2xl border border-[var(--cream)]/10 bg-[#14110d]/95 p-5 shadow-[0_40px_80px_-30px_rgba(0,0,0,0.7)] backdrop-blur-sm">
+                            <div className="rounded-2xl border border-[#29261f]/12 bg-[#fff8ea]/98 p-5 shadow-[0_40px_80px_-30px_rgba(0,0,0,0.55)] backdrop-blur-sm">
                               <div className="flex items-center gap-3">
-                                <div className="grid h-10 w-10 place-items-center rounded-full bg-[linear-gradient(135deg,#3a4654,#525e6c)] font-display text-sm text-[var(--cream)]">
+                                <div className="grid h-10 w-10 place-items-center rounded-full bg-[linear-gradient(135deg,#3a4654,#525e6c)] font-display text-sm text-[#fff8ea]">
                                   {outboundCards[0].initials}
                                 </div>
                                 <div className="min-w-0 flex-1">
-                                  <div className="truncate text-sm text-[var(--cream)]">
+                                  <div className="truncate text-sm text-[#29261f]">
                                     {outboundCards[0].name}
                                   </div>
-                                  <div className="truncate text-[11px] text-[var(--cream)]/50">
+                                  <div className="truncate text-[11px] text-[#29261f]/55">
                                     {outboundCards[0].title}
                                   </div>
                                 </div>
-                                <span className="rounded-full border border-[var(--clay)]/40 bg-[var(--clay)]/15 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.15em] text-[var(--clay)]">
+                                <span className="rounded-full border border-[var(--clay)]/45 bg-[var(--clay)]/12 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.15em] text-[var(--clay)]">
                                   in · {outboundCards[0].chip}
                                 </span>
                               </div>
-                              <p className="mt-4 text-[13px] leading-relaxed text-[var(--cream)]/75">
+                              <p className="mt-4 text-[13px] leading-relaxed text-[#29261f]/80">
                                 {outboundCards[0].preview}
                               </p>
                               <div className="mt-4 flex gap-2">
                                 <button
                                   type="button"
-                                  className="rounded-full border border-[var(--cream)]/15 bg-[var(--cream)]/5 px-4 py-1.5 text-[11px] font-semibold text-[var(--cream)]/80"
+                                  className="rounded-full border border-[#29261f]/15 bg-[#29261f]/5 px-4 py-1.5 text-[11px] font-semibold text-[#29261f]/80"
                                 >
                                   Forbind
                                 </button>
                                 <button
                                   type="button"
-                                  className="rounded-full bg-[var(--clay)] px-4 py-1.5 text-[11px] font-semibold text-[#0a0907]"
+                                  className="rounded-full bg-[var(--clay)] px-4 py-1.5 text-[11px] font-semibold text-[#fff8ea]"
                                 >
                                   Send besked
                                 </button>
@@ -895,17 +1039,17 @@ export default function Home() {
                               animationDelay: "1.5s",
                             }}
                           >
-                            <div className="overflow-hidden rounded-2xl border border-[var(--cream)]/10 bg-[#14110d] shadow-[0_40px_80px_-30px_rgba(0,0,0,0.8)]">
-                              <div className="flex items-center justify-between border-b border-[var(--cream)]/8 px-4 py-2.5">
+                            <div className="overflow-hidden rounded-2xl border border-[#29261f]/12 bg-[#fff8ea] shadow-[0_40px_80px_-30px_rgba(0,0,0,0.55)]">
+                              <div className="flex items-center justify-between border-b border-[#29261f]/10 px-4 py-2.5">
                                 <div className="flex items-center gap-2">
                                   <div className="grid h-7 w-7 place-items-center rounded-full bg-[linear-gradient(135deg,#1877f2,#42a5f5)] text-[10px] font-bold text-white">
                                     f
                                   </div>
-                                  <div className="text-[11px] text-[var(--cream)]/55">
+                                  <div className="text-[11px] text-[#29261f]/60">
                                     {outboundCards[1].sponsor}
                                   </div>
                                 </div>
-                                <span className="text-[var(--cream)]/30">···</span>
+                                <span className="text-[#29261f]/35">···</span>
                               </div>
                               <div className="relative aspect-[16/9] bg-[radial-gradient(ellipse_at_30%_40%,rgba(255,107,44,0.45),transparent_60%),radial-gradient(ellipse_at_75%_70%,rgba(25,70,58,0.55),transparent_65%),linear-gradient(135deg,#14110d,#0a0907)]">
                                 <div className="absolute inset-0 grid place-items-center">
@@ -915,15 +1059,15 @@ export default function Home() {
                                 </div>
                               </div>
                               <div className="px-4 py-3.5">
-                                <div className="text-[13px] font-semibold text-[var(--cream)]">
+                                <div className="text-[13px] font-semibold text-[#29261f]">
                                   {outboundCards[1].headline}
                                 </div>
-                                <div className="mt-0.5 text-[11px] text-[var(--cream)]/55">
+                                <div className="mt-0.5 text-[11px] text-[#29261f]/60">
                                   {outboundCards[1].body}
                                 </div>
                                 <button
                                   type="button"
-                                  className="mt-3 w-full rounded-md bg-[var(--cream)]/10 py-2 text-[11px] font-semibold text-[var(--cream)] transition hover:bg-[var(--cream)]/15"
+                                  className="mt-3 w-full rounded-md bg-[#29261f]/8 py-2 text-[11px] font-semibold text-[#29261f] transition hover:bg-[#29261f]/12"
                                 >
                                   {outboundCards[1].cta}  →
                                 </button>
@@ -935,22 +1079,22 @@ export default function Home() {
 
                       {stage.visual === "pipeline" && (
                         <div className="w-full max-w-[42rem]">
-                          <div className="rounded-2xl border border-[var(--cream)]/10 bg-[#14110d] p-5 shadow-[0_50px_100px_-40px_rgba(0,0,0,0.85)] sm:p-6">
+                          <div className="rounded-2xl border border-[#29261f]/12 bg-[#fff8ea] p-5 shadow-[0_50px_100px_-40px_rgba(0,0,0,0.55)] sm:p-6">
                             <div className="mb-5 flex items-center justify-between">
                               <div className="flex items-center gap-3">
                                 <div className="grid h-7 w-7 place-items-center rounded-md bg-[#ff6b2c]/15">
                                   <span className="h-2 w-2 rounded-full bg-[#ff6b2c] dot-pulse" />
                                 </div>
                                 <div>
-                                  <div className="text-[12px] font-semibold text-[var(--cream)]">
+                                  <div className="text-[12px] font-semibold text-[#29261f]">
                                     Pipeline · København
                                   </div>
-                                  <div className="text-[10px] uppercase tracking-[0.2em] text-[var(--cream)]/40">
+                                  <div className="text-[10px] uppercase tracking-[0.2em] text-[#29261f]/55">
                                     25 åbne · live
                                   </div>
                                 </div>
                               </div>
-                              <span className="tabular text-[10px] text-[var(--cream)]/40">
+                              <span className="tabular text-[10px] text-[#29261f]/55">
                                 opdateret 14:32
                               </span>
                             </div>
@@ -961,16 +1105,16 @@ export default function Home() {
                                 aria-hidden
                                 className="pipeline-glide pointer-events-none absolute left-0 top-9 z-10 w-[calc(25%-0.5625rem)]"
                               >
-                                <div className="rounded-lg border border-[#ff6b2c]/40 bg-[#1a120c] p-2.5 shadow-[0_20px_40px_-15px_rgba(255,107,44,0.35)]">
+                                <div className="rounded-lg border border-[#ff6b2c]/45 bg-[#fff3df] p-2.5 shadow-[0_20px_40px_-15px_rgba(255,107,44,0.30)]">
                                   <div className="flex items-center gap-2">
                                     <div className="grid h-5 w-5 place-items-center rounded-full bg-[#ff6b2c]/20 text-[9px] font-bold text-[#ff6b2c]">
                                       KH
                                     </div>
-                                    <div className="text-[10px] text-[var(--cream)]/85">
+                                    <div className="text-[10px] text-[#29261f]">
                                       Karen Hjort
                                     </div>
                                   </div>
-                                  <div className="mt-1 text-[9px] text-[var(--cream)]/45">
+                                  <div className="mt-1 text-[9px] text-[#29261f]/55">
                                     Tagteam Aps
                                   </div>
                                 </div>
@@ -981,11 +1125,11 @@ export default function Home() {
                                   <div className="mb-2 flex items-center justify-between">
                                     <div className="flex items-center gap-1.5">
                                       <span className={`h-1.5 w-1.5 rounded-full ${col.accent}`} />
-                                      <span className="text-[9px] font-bold uppercase tracking-[0.18em] text-[var(--cream)]/55">
+                                      <span className="text-[9px] font-bold uppercase tracking-[0.18em] text-[#29261f]/65">
                                         {col.label}
                                       </span>
                                     </div>
-                                    <span className="tabular text-[9px] text-[var(--cream)]/35">
+                                    <span className="tabular text-[9px] text-[#29261f]/45">
                                       {col.count}
                                     </span>
                                   </div>
@@ -995,18 +1139,18 @@ export default function Home() {
                                       .map((card, ki) => (
                                         <div
                                           key={card.name}
-                                          className="ledger-row rounded-lg border border-[var(--cream)]/8 bg-[#0f0d0a] p-2.5 transition hover:border-[var(--cream)]/15"
+                                          className="ledger-row rounded-lg border border-[#29261f]/10 bg-[#f6efe4] p-2.5 transition hover:border-[#29261f]/18"
                                           style={{ animationDelay: `${(ci * 2 + ki) * 0.08}s` }}
                                         >
                                           <div className="flex items-center gap-1.5">
-                                            <div className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-[var(--cream)]/8 text-[9px] font-bold text-[var(--cream)]/70">
+                                            <div className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-[#29261f]/10 text-[9px] font-bold text-[#29261f]/75">
                                               {card.initials}
                                             </div>
-                                            <div className="min-w-0 flex-1 truncate text-[10px] text-[var(--cream)]/85">
+                                            <div className="min-w-0 flex-1 truncate text-[10px] text-[#29261f]">
                                               {card.name}
                                             </div>
                                           </div>
-                                          <div className="mt-1 truncate text-[9px] text-[var(--cream)]/45">
+                                          <div className="mt-1 truncate text-[9px] text-[#29261f]/55">
                                             {card.company}
                                           </div>
                                           {card.note && (
@@ -1022,7 +1166,7 @@ export default function Home() {
                               ))}
                             </div>
 
-                            <div className="mt-5 flex items-center justify-between border-t border-[var(--cream)]/8 pt-4 text-[10px] text-[var(--cream)]/45">
+                            <div className="mt-5 flex items-center justify-between border-t border-[#29261f]/10 pt-4 text-[10px] text-[#29261f]/55">
                               <span className="flex items-center gap-2">
                                 <span className="h-1.5 w-1.5 rounded-full bg-[var(--forest)] dot-pulse" />
                                 Fordeling aktiv · Postnr. 1000–2999
@@ -1036,25 +1180,25 @@ export default function Home() {
                       {stage.visual === "sms" && (
                         <div className="relative">
                           {/* Phone-frame chrome */}
-                          <div className="relative w-[19rem] rounded-[2.5rem] border border-[var(--cream)]/15 bg-gradient-to-b from-[#14110d] to-[#0a0907] p-2 shadow-[0_60px_120px_-40px_rgba(0,0,0,0.9)]">
-                            <div className="rounded-[2rem] bg-[#0a0907] px-4 pb-5 pt-9">
+                          <div className="relative w-[19rem] rounded-[2.5rem] border border-[#29261f]/15 bg-gradient-to-b from-[#fff8ea] to-[#f6efe4] p-2 shadow-[0_60px_120px_-40px_rgba(0,0,0,0.55)]">
+                            <div className="rounded-[2rem] bg-[#fff8ea] px-4 pb-5 pt-9">
                               {/* Status bar */}
-                              <div className="mb-3 flex items-center justify-between text-[10px] text-[var(--cream)]/55">
+                              <div className="mb-3 flex items-center justify-between text-[10px] text-[#29261f]/65">
                                 <span className="tabular">14:35</span>
                                 <span className="flex items-center gap-1">
-                                  <span className="h-1.5 w-1.5 rounded-full bg-[var(--cream)]/60" />
-                                  <span className="h-2 w-3 rounded-sm border border-[var(--cream)]/50" />
+                                  <span className="h-1.5 w-1.5 rounded-full bg-[#29261f]/65" />
+                                  <span className="h-2 w-3 rounded-sm border border-[#29261f]/55" />
                                 </span>
                               </div>
                               {/* Contact header */}
-                              <div className="mb-4 flex flex-col items-center gap-1.5 border-b border-[var(--cream)]/8 pb-4">
-                                <div className="grid h-10 w-10 place-items-center rounded-full bg-[var(--cream)]/8 font-display text-xs text-[var(--cream)]/70">
+                              <div className="mb-4 flex flex-col items-center gap-1.5 border-b border-[#29261f]/10 pb-4">
+                                <div className="grid h-10 w-10 place-items-center rounded-full bg-[#29261f]/10 font-display text-xs text-[#29261f]/75">
                                   MS
                                 </div>
-                                <div className="text-[12px] text-[var(--cream)]">
+                                <div className="text-[12px] text-[#29261f]">
                                   Mette Sørensen
                                 </div>
-                                <div className="text-[9px] uppercase tracking-[0.2em] text-[var(--cream)]/40">
+                                <div className="text-[9px] uppercase tracking-[0.2em] text-[#29261f]/50">
                                   Nordlys A/S · sms
                                 </div>
                               </div>
@@ -1070,13 +1214,13 @@ export default function Home() {
                                     <div
                                       className={`max-w-[80%] rounded-2xl px-3 py-2 text-[12px] leading-snug ${
                                         m.from === "us"
-                                          ? "bg-[#ff6b2c] text-white"
-                                          : "bg-[var(--cream)]/10 text-[var(--cream)]/90"
+                                          ? "bg-[var(--forest)] text-[#fff8ea]"
+                                          : "bg-[#29261f]/10 text-[#29261f]"
                                       }`}
                                     >
                                       {m.text}
                                     </div>
-                                    <span className="mt-0.5 px-1 text-[9px] tabular text-[var(--cream)]/35">
+                                    <span className="mt-0.5 px-1 text-[9px] tabular text-[#29261f]/45">
                                       {m.time}
                                     </span>
                                   </div>
@@ -1084,17 +1228,17 @@ export default function Home() {
 
                                 {/* Typing indicator */}
                                 <div
-                                  className="bubble-in flex items-center gap-1 self-start rounded-2xl bg-[var(--cream)]/10 px-3 py-2"
+                                  className="bubble-in flex items-center gap-1 self-start rounded-2xl bg-[#29261f]/10 px-3 py-2"
                                   style={{ animationDelay: "1.7s" }}
                                 >
-                                  <span className="typing-dot h-1.5 w-1.5 rounded-full bg-[var(--cream)]/55" style={{ animationDelay: "0s" }} />
-                                  <span className="typing-dot h-1.5 w-1.5 rounded-full bg-[var(--cream)]/55" style={{ animationDelay: "0.18s" }} />
-                                  <span className="typing-dot h-1.5 w-1.5 rounded-full bg-[var(--cream)]/55" style={{ animationDelay: "0.36s" }} />
+                                  <span className="typing-dot h-1.5 w-1.5 rounded-full bg-[#29261f]/55" style={{ animationDelay: "0s" }} />
+                                  <span className="typing-dot h-1.5 w-1.5 rounded-full bg-[#29261f]/55" style={{ animationDelay: "0.18s" }} />
+                                  <span className="typing-dot h-1.5 w-1.5 rounded-full bg-[#29261f]/55" style={{ animationDelay: "0.36s" }} />
                                 </div>
 
                                 {/* Booket confirmation chip */}
                                 <div
-                                  className="bubble-in mt-2 flex items-center gap-2 self-center rounded-full border border-[var(--forest)]/40 bg-[var(--forest)]/15 px-3 py-1.5 text-[10px] text-[var(--cream)]/85"
+                                  className="bubble-in mt-2 flex items-center gap-2 self-center rounded-full border border-[var(--forest)]/45 bg-[var(--forest)]/12 px-3 py-1.5 text-[10px] text-[#29261f]"
                                   style={{ animationDelay: "2.1s" }}
                                 >
                                   <span className="h-1.5 w-1.5 rounded-full bg-[var(--forest)]" />
@@ -1106,10 +1250,10 @@ export default function Home() {
 
                           {/* Floating timing chip */}
                           <div
-                            className="subtle-float absolute -right-6 top-20 hidden rounded-xl border border-[var(--cream)]/10 bg-[#14110d] px-3 py-2 shadow-[0_30px_60px_-25px_rgba(0,0,0,0.7)] sm:block"
+                            className="subtle-float absolute -right-6 top-20 hidden rounded-xl border border-[#29261f]/12 bg-[#fff8ea] px-3 py-2 shadow-[0_30px_60px_-25px_rgba(0,0,0,0.55)] sm:block"
                             style={{ animationDelay: "0.8s" }}
                           >
-                            <div className="text-[9px] uppercase tracking-[0.2em] text-[var(--cream)]/40">
+                            <div className="text-[9px] uppercase tracking-[0.2em] text-[#29261f]/55">
                               Svartid
                             </div>
                             <div className="font-display text-2xl leading-none">
@@ -1131,6 +1275,102 @@ export default function Home() {
               <span className="absolute left-0 top-0 h-3.5 w-3.5 rounded-full bg-[var(--forest)] ring-4 ring-[#0a0907]" />
               <span className="glow-pulse absolute -left-3 -top-2.5 h-8 w-8 rounded-full bg-[var(--forest)]/45 blur-md" />
             </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="relative overflow-hidden bg-[#f6efe4] py-32 text-[#29261f] sm:py-44">
+        <div aria-hidden className="paper-grain" />
+
+        {/* EmberSpark — top: bridges down from dark process */}
+        <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-10 bg-[linear-gradient(180deg,rgba(255,107,44,0.18),transparent)]" />
+        <div aria-hidden className="pointer-events-none absolute left-1/2 top-0 h-[2px] w-[min(680px,60%)] -translate-x-1/2 bg-[linear-gradient(90deg,transparent,#ff6b2c_30%,#ff6b2c_70%,transparent)] shadow-[0_0_28px_rgba(255,107,44,0.7)]" />
+
+        {/* EmberSpark — bottom: bridges up to dark footer */}
+        <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-[linear-gradient(0deg,rgba(255,107,44,0.18),transparent)]" />
+        <div aria-hidden className="pointer-events-none absolute bottom-0 left-1/2 h-[2px] w-[min(680px,60%)] -translate-x-1/2 bg-[linear-gradient(90deg,transparent,#ff6b2c_30%,#ff6b2c_70%,transparent)] shadow-[0_0_28px_rgba(255,107,44,0.7)]" />
+
+        <div className="relative z-[1] mx-auto h-[min(820px,90vh)] w-full max-w-[1280px] px-8 sm:px-12">
+          {/* Centered headline + CTA — anchors the scatter */}
+          <div className="absolute left-1/2 top-1/2 z-[3] w-[calc(100%-4rem)] max-w-[40rem] -translate-x-1/2 -translate-y-1/2 text-center sm:w-[calc(100%-7.5rem)]">
+            <p className="text-[10px] font-bold uppercase tracking-[0.4em] text-[var(--clay)]">
+              Plumbing · ikke platform
+            </p>
+            <h2 className="mt-6 font-display text-4xl leading-[0.96] tracking-[-0.035em] sm:text-5xl lg:text-[3.75rem]">
+              Du beholder alt du har.
+              <br />
+              <span className="italic text-[var(--clay)]">Vi får det bare til at tale sammen.</span>
+            </h2>
+            <p className="mx-auto mt-6 max-w-[28rem] text-[15px] leading-relaxed text-[#29261f]/70">
+              Annonce → CRM → kalender. Vi forbinder dine værktøjer og lægger dem oven på systemet — uden migrering, uden ny stack.
+            </p>
+
+            {/* CTA stack — forest-green pill (won-color CTA on paper) + email link */}
+            <div className="mt-9 flex flex-col items-center gap-4">
+              <button
+                type="button"
+                onClick={resetAndOpen}
+                className="inline-flex items-center gap-3 rounded-full bg-[var(--forest)] px-8 py-4 text-xs font-bold uppercase tracking-[0.25em] text-[#fff8ea] shadow-[0_18px_50px_-16px_rgba(25,70,58,0.5)] transition hover:-translate-y-0.5 hover:shadow-[0_24px_60px_-16px_rgba(25,70,58,0.6)]"
+              >
+                Book et opkald <span aria-hidden>→</span>
+              </button>
+              <a
+                href="mailto:louis@carterco.dk"
+                className="text-[10px] font-bold uppercase tracking-[0.25em] text-[#29261f]/55 transition hover:text-[#29261f]"
+              >
+                louis@carterco.dk →
+              </a>
+            </div>
+
+            <p className="mt-8 text-[10px] font-bold uppercase tracking-[0.3em] text-[#29261f]/45">
+              + 30 andre · Calendly · Twilio · Gmail · Outlook · Aircall · Slack · Notion · …
+            </p>
+          </div>
+
+          {/* Scattered tiles — desktop only (mobile gets the text caption above as substitute) */}
+          <div aria-hidden className="hidden sm:block">
+            {integrationTiles.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                aria-label={t.id}
+                className="absolute z-[2] grid origin-center place-items-center transition-transform duration-300"
+                style={{
+                  left: `${t.x}%`,
+                  top: `${t.y}%`,
+                  width: t.size,
+                  height: t.size,
+                  borderRadius: t.size * 0.22,
+                  background: t.bg,
+                  border: t.border ? `1px solid ${t.border}` : undefined,
+                  transform: `translate(-50%, -50%) rotate(${t.rot}deg)`,
+                  boxShadow: `0 ${t.size * 0.18}px ${t.size * 0.4}px -${t.size * 0.12}px rgba(41,38,31,0.18)`,
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform =
+                    "translate(-50%, -50%) rotate(0deg) scale(1.08)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = `translate(-50%, -50%) rotate(${t.rot}deg)`;
+                }}
+              >
+                {t.iconSrc ? (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img
+                    src={t.iconSrc}
+                    alt=""
+                    width={t.size * 0.55}
+                    height={t.size * 0.55}
+                    className="select-none"
+                    draggable={false}
+                  />
+                ) : (
+                  <svg viewBox="0 0 24 24" width={t.size * 0.55} height={t.size * 0.55} aria-hidden>
+                    {t.glyph}
+                  </svg>
+                )}
+              </button>
+            ))}
           </div>
         </div>
       </section>

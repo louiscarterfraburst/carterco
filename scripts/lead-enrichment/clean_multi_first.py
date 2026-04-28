@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Resumable, rate-limited Haiku cleanup of multi-word firstName rows.
+"""Resumable, rate-limited AI cleanup of multi-word firstName rows.
 Normalizes firstName for use as "Hi {{firstName}}," greeting.
 
 Env var required:
@@ -29,7 +29,7 @@ name the person would be addressed by in a casual first-name greeting.
 
 Judge the input. Common patterns:
 - Compound first names people actually go by ("Anne Marie", "Marie Louise",
-  "Jean Claude") → KEEP the compound.
+  "Jean Luc") → KEEP the compound.
 - Merged firstName + middleName ("Thomas Sehested Skovshoved") → KEEP only
   the first given name as firstName; move the rest to the START of lastName.
 - Title prefix ("Dr. Suren", "Mr. John") → STRIP the title; firstName is the
@@ -47,7 +47,7 @@ lastName:  %s
 headline:  %s"""
 
 
-def haiku(first, last, title, retries=5):
+def normalize_name_via_api(first, last, title, retries=5):
     body = json.dumps({
         "model": "claude-haiku-4-5",
         "max_tokens": 200,
@@ -120,7 +120,7 @@ def main():
     start = time.time()
     for k, (i, r) in enumerate(todo, 1):
         try:
-            out = haiku(r["firstName"], r["lastName"], r.get("title", ""))
+            out = normalize_name_via_api(r["firstName"], r["lastName"], r.get("title", ""))
             nf = (out.get("firstName") or "").strip()
             nl = (out.get("lastName") or "").strip()
             rec = {"linkedinUrl": r["linkedinUrl"],

@@ -15,7 +15,7 @@ raw CSV (from SendPilot Lead Extractor)
     │
     ▼
   find_co_link.py       for rows with no currentCompanyLink:
-                        Serper → LinkedIn company page → Haiku-verify → Website
+                        Serper → LinkedIn company page → AI-verify → Website
     │
     ▼
   build_master.py       combine all passes into one master.csv
@@ -36,7 +36,7 @@ These must be set in your shell (e.g. `.env.local` read by your shell, or export
 
 - `SENDPILOT_API_KEY` — SendPilot workspace key
 - `SERPER_API_KEY` — Serper.dev Google Search API
-- `ANTHROPIC_API_KEY` — Claude API (used by Haiku for verification + name cleanup)
+- `ANTHROPIC_API_KEY` — AI API used for verification and name cleanup
 
 ## Typical run
 
@@ -54,7 +54,7 @@ python3 retry_misses.py \
   --csv ~/Downloads/my-leads.csv \
   --progress data/progress_li.jsonl
 
-# 3. Serper+Haiku fallback for leads missing currentCompanyLink
+# 3. Serper+AI fallback for leads missing currentCompanyLink
 # First generate the misses CSV from master (build it once to find misses):
 python3 build_master.py --csv ~/Downloads/my-leads.csv --out data/master.csv
 # Then export misses from that master (shell one-liner):
@@ -73,7 +73,7 @@ python3 build_master.py --csv ~/Downloads/my-leads.csv --out data/master.csv
 # 5. Clean polluted names (emojis, taglines)
 python3 clean_names.py --in data/master.csv --out data/master_v2.csv
 
-# 6. Normalize multi-word first names (~1.3s/row, rate-limited by Anthropic)
+# 6. Normalize multi-word first names (~1.3s/row, rate-limited by the AI provider)
 python3 clean_multi_first.py --in data/master_v2.csv --out data/master_final.csv
 ```
 
@@ -96,5 +96,5 @@ data/
 
 - **SendPilot API can't PATCH `customFields` on existing leads.** `customFields` is write-once at lead-creation time. If you need to add website to leads that already exist in a campaign, you must create a new campaign and POST fresh.
 - **Jina Reader rate-limits anonymously** — pass 1 runs 5 concurrent; pass 2 (retry) drops to 2.
-- **Anthropic tier 1 = 50 RPM Haiku** — `clean_multi_first.py` runs serially with 1.3s delay to stay under.
+- **AI provider tier = 50 RPM** — `clean_multi_first.py` runs serially with 1.3s delay to stay under.
 - **Serper free tier = 2,500 queries/account.** Plenty for one 2,500-lead batch.

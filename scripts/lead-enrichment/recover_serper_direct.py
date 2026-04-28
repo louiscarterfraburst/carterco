@@ -3,7 +3,7 @@
 yield a Website field but a company NAME is known.
 
 Strategy: Serper search '"{company}"', pick the first organic result that's a
-real homepage (not LinkedIn / social / aggregator), then Haiku-verify the
+real homepage (not LinkedIn / social / aggregator), then AI-verify the
 domain plausibly belongs to the company.
 
 Reads `--master` (data/master.csv), processes rows with no website but a
@@ -82,7 +82,7 @@ def homepage_url(url):
     return f"{p.scheme}://{p.netloc}/"
 
 
-def haiku_verify(company, domain, snippet):
+def ai_verify(company, domain, snippet):
     prompt = (
         f"A Google search for a company returned this top result. Decide if "
         f"the domain is plausibly the company's official website.\n\n"
@@ -114,7 +114,7 @@ def haiku_verify(company, domain, snippet):
         txt = d.get("content", [{}])[0].get("text", "").strip().upper()
         return txt.startswith("YES")
     except Exception as e:
-        print(f"  haiku err: {e}", file=sys.stderr)
+        print(f"  ai provider err: {e}", file=sys.stderr)
         return False
 
 
@@ -131,7 +131,7 @@ def find_website(company):
             continue
         # ignore obvious non-homepage URLs that are deep articles
         snippet = hit.get("snippet", "") + " " + hit.get("title", "")
-        if haiku_verify(company, host, snippet):
+        if ai_verify(company, host, snippet):
             return homepage_url(link), ""
     return "", "no_plausible_site"
 

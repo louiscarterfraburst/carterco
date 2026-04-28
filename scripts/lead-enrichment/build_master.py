@@ -3,7 +3,7 @@
 Combines:
   - data/progress_li.jsonl        (first LinkedIn enrichment)
   - data/recovered.json           (retry pass)
-  - data/progress_find_co.jsonl   (Serper + Haiku fallback)
+  - data/progress_find_co.jsonl   (Serper + AI fallback)
 into a single master.csv with `website` and `website_source` columns.
 
 Usage:
