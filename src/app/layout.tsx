@@ -1,7 +1,10 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, Homemade_Apple, Caveat } from "next/font/google";
+import Script from "next/script";
 import { PwaRegistrar } from "./pwa-registrar";
 import "./globals.css";
+
+const SITE_URL = "https://carterco.dk";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -24,16 +27,20 @@ const caveat = Caveat({
   subsets: ["latin"],
 });
 
+const SITE_TITLE = "Carter & Co — Smed mens jernet er varmt";
+const SITE_DESCRIPTION =
+  "Vi kontakter dine leads inden for 5 minutter — 21× mere tilbøjelige til at blive kvalificeret. Carter & Co bygger systemet, der fanger dem varme og ikke slipper før de er lukket.";
+
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   applicationName: "CarterCo",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
     title: "CarterCo",
   },
-  title: "Carter & Co — Smed mens jernet er varmt",
-  description:
-    "Vi kontakter dine leads inden for 5 minutter — 21× mere tilbøjelige til at blive kvalificeret. Carter & Co bygger systemet, der fanger dem varme og ikke slipper før de er lukket.",
+  title: SITE_TITLE,
+  description: SITE_DESCRIPTION,
   formatDetection: {
     telephone: true,
   },
@@ -41,6 +48,19 @@ export const metadata: Metadata = {
   icons: {
     icon: "/icon.png",
     apple: "/apple-icon.png",
+  },
+  openGraph: {
+    type: "website",
+    locale: "da_DK",
+    url: SITE_URL,
+    siteName: "Carter & Co",
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
   },
 };
 
@@ -63,6 +83,15 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} ${homemadeApple.variable} ${caveat.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
+        <Script
+          defer
+          data-domain="carterco.dk"
+          src="https://plausible.io/js/script.tagged-events.js"
+          strategy="afterInteractive"
+        />
+        <Script id="plausible-init" strategy="afterInteractive">
+          {`window.plausible = window.plausible || function() { (window.plausible.q = window.plausible.q || []).push(arguments) }`}
+        </Script>
         <PwaRegistrar />
         {children}
       </body>
