@@ -171,3 +171,41 @@ create policy push_subscriptions_owner_all on public.push_subscriptions
     for all to authenticated
     using ((auth.jwt() ->> 'email') in ('louis@carterco.dk','rm@tresyv.dk','haugefrom@haugefrom.com'))
     with check ((auth.jwt() ->> 'email') in ('louis@carterco.dk','rm@tresyv.dk','haugefrom@haugefrom.com'));
+
+-- 6. Pending-approval notification trigger ----------------------------------
+-- Fires notify-pending-approval edge function on transitions into
+-- pending_approval. Equivalent to a Supabase Database Webhook configured
+-- in the dashboard, but defined as code so it ships with the migration.
+create or replace function public.outreach_notify_pending()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+    transitioned boolean;
+begin
+    transitioned := new.status = 'pending_approval'
+        and (tg_op = 'INSERT' or coalesce(old.status::text, '') <> 'pending_approval');
+    if not transitioned then
+        return new;
+    end if;
+    perform net.http_post(
+        url := 'https://znpaevzwlcfuzqxsbyie.supabase.co/functions/v1/notify-pending-approval',
+        body := jsonb_build_object(
+            'type', tg_op,
+            'table', 'outreach_pipeline',
+            'schema', 'public',
+            'record', row_to_json(new),
+            'old_record', case when tg_op = 'UPDATE' then row_to_json(old) else null end
+        ),
+        headers := '{"Content-Type":"application/json"}'::jsonb,
+        timeout_milliseconds := 5000
+    );
+    return new;
+end $$;
+
+drop trigger if exists outreach_pipeline_notify_pending on public.outreach_pipeline;
+create trigger outreach_pipeline_notify_pending
+after insert or update on public.outreach_pipeline
+for each row execute function public.outreach_notify_pending();
