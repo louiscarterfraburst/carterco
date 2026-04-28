@@ -40,13 +40,26 @@ export const SEQUENCES: Sequence[] = [
     {
         id: "post_send_followup_v1",
         description:
-            "After we send the video, follow up at +48h. Branch on whether they watched.",
+            "After we send the video, react to engagement. cta_clicked fires " +
+            "instantly via the lead-mode bypassWait path; the rest waits 48h " +
+            "and branches on watch state.",
         trigger: { signal: "sent" },
         steps: [
             {
                 id: "followup_48h",
                 waitHours: 48,
                 branches: [
+                    // cta_clicked is the strongest intent we get; instant DB
+                    // trigger + bypassWait makes this fire the moment the
+                    // SendSpark webhook lands, even before 48h elapses.
+                    {
+                        requires: ["cta_clicked"],
+                        action: {
+                            type: "queue_approval",
+                            template:
+                                "Hej {firstName}, jeg kunne se du klikkede dig videre fra videoen — vil du sætte 15 min af så vi kan tale konkret om {company}?",
+                        },
+                    },
                     {
                         requires: ["watched_end"],
                         action: {
