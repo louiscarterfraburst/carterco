@@ -26,8 +26,14 @@ type BusyRow = {
 
 const HORIZON_DAYS = 30;
 
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
+};
+
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok");
+  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST" && req.method !== "GET") {
     return json({ error: "Method not allowed" }, 405);
   }
@@ -250,6 +256,6 @@ function wallTimeInZoneToUtc(localIsoNoZ: string, tz: string): Date {
 
 function json(obj: unknown, status = 200) {
   return new Response(JSON.stringify(obj), {
-    status, headers: { "Content-Type": "application/json" },
+    status, headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 }
