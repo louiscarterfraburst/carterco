@@ -131,8 +131,82 @@ Deno.serve(async (request) => {
     return json({ ok: true, recorded: "accepted_rendering", cold });
   }
 
+  if (evt.eventType === "message.received") {
+    const replyText = String(
+      (data as Record<string, unknown>)["message"]
+        ?? (data as Record<string, unknown>)["messagePreview"]
+        ?? "",
+    ).trim();
+    if (!replyText) return json({ ok: true, recorded: "reply_empty" });
+
+    const { data: replyRow, error: insErr } = await supabase
+      .from("outreach_replies")
+      .insert({
+        sendpilot_lead_id: leadId,
+        linkedin_url: linkedinUrl,
+        message: replyText,
+      })
+      .select()
+      .single();
+    if (insErr) {
+      console.error("reply insert error", insErr);
+      return json({ ok: false, error: "reply insert failed", details: insErr.message }, 500);
+    }
+
+    // Fire intent classification (best effort).
+    classifyReplyAsync(replyRow.id, replyText, leadId, lead);
+    return json({ ok: true, recorded: "reply", replyId: replyRow.id });
+  }
+
   return json({ ok: true, ignored: evt.eventType });
 });
+
+function classifyReplyAsync(
+  replyId: string,
+  text: string,
+  leadId: string,
+  lead: { first_name?: string; company?: string } | null,
+) {
+  // Don't await — let the response return immediately.
+  (async () => {
+    try {
+      const url = `${Deno.env.get("SUPABASE_URL")}/functions/v1/outreach-ai?op=classify_reply`;
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          text,
+          lead: { firstName: lead?.first_name, company: lead?.company },
+        }),
+      });
+      if (!res.ok) {
+        console.error("classify_reply non-200", res.status, await res.text());
+        return;
+      }
+      const j = await res.json() as {
+        intent: string;
+        confidence: number;
+        reasoning: string;
+      };
+      const now = new Date().toISOString();
+      await supabase.from("outreach_replies").update({
+        intent: j.intent,
+        confidence: j.confidence,
+        reasoning: j.reasoning,
+        classified_at: now,
+      }).eq("id", replyId);
+      await supabase.from("outreach_pipeline").update({
+        last_reply_at: now,
+        last_reply_intent: j.intent,
+      }).eq("sendpilot_lead_id", leadId);
+    } catch (e) {
+      console.error("classifyReplyAsync error", e);
+    }
+  })();
+}
 
 async function lookupLead(sendpilotLeadId: string, linkedinUrl: string) {
   const { data: byId } = await supabase

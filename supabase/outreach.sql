@@ -113,17 +113,61 @@ alter table public.outreach_pipeline enable row level security;
 drop policy if exists outreach_leads_owner_all on public.outreach_leads;
 create policy outreach_leads_owner_all on public.outreach_leads
     for all to authenticated
-    using ((auth.jwt() ->> 'email') = 'louis@carterco.dk')
-    with check ((auth.jwt() ->> 'email') = 'louis@carterco.dk');
+    using ((auth.jwt() ->> 'email') in ('louis@carterco.dk','rm@tresyv.dk','haugefrom@haugefrom.com'))
+    with check ((auth.jwt() ->> 'email') in ('louis@carterco.dk','rm@tresyv.dk','haugefrom@haugefrom.com'));
 
 drop policy if exists outreach_events_owner_all on public.outreach_events;
 create policy outreach_events_owner_all on public.outreach_events
     for all to authenticated
-    using ((auth.jwt() ->> 'email') = 'louis@carterco.dk')
-    with check ((auth.jwt() ->> 'email') = 'louis@carterco.dk');
+    using ((auth.jwt() ->> 'email') in ('louis@carterco.dk','rm@tresyv.dk','haugefrom@haugefrom.com'))
+    with check ((auth.jwt() ->> 'email') in ('louis@carterco.dk','rm@tresyv.dk','haugefrom@haugefrom.com'));
 
 drop policy if exists outreach_pipeline_owner_all on public.outreach_pipeline;
 create policy outreach_pipeline_owner_all on public.outreach_pipeline
     for all to authenticated
-    using ((auth.jwt() ->> 'email') = 'louis@carterco.dk')
-    with check ((auth.jwt() ->> 'email') = 'louis@carterco.dk');
+    using ((auth.jwt() ->> 'email') in ('louis@carterco.dk','rm@tresyv.dk','haugefrom@haugefrom.com'))
+    with check ((auth.jwt() ->> 'email') in ('louis@carterco.dk','rm@tresyv.dk','haugefrom@haugefrom.com'));
+
+-- 5. Replies (LinkedIn replies caught from message.received webhook) -----------
+do $$ begin
+    create type public.reply_intent as enum
+        ('interested', 'question', 'decline', 'ooo', 'other');
+exception when duplicate_object then null; end $$;
+
+create table if not exists public.outreach_replies (
+    id              uuid primary key default gen_random_uuid(),
+    sendpilot_lead_id text not null references public.outreach_pipeline(sendpilot_lead_id) on delete cascade,
+    linkedin_url    text not null,
+    message         text not null,
+    intent          public.reply_intent,
+    confidence      numeric(4,3),
+    reasoning       text,
+    classified_at   timestamptz,
+    received_at     timestamptz not null default now(),
+    handled         boolean not null default false,
+    handled_at      timestamptz,
+    handled_by      text,
+    notes           text
+);
+
+create index if not exists idx_outreach_replies_lead on public.outreach_replies(sendpilot_lead_id);
+create index if not exists idx_outreach_replies_received on public.outreach_replies(received_at desc);
+create index if not exists idx_outreach_replies_handled on public.outreach_replies(handled) where handled = false;
+
+alter table public.outreach_pipeline
+    add column if not exists last_reply_at        timestamptz,
+    add column if not exists last_reply_intent    public.reply_intent;
+
+alter table public.outreach_replies enable row level security;
+drop policy if exists outreach_replies_owner_all on public.outreach_replies;
+create policy outreach_replies_owner_all on public.outreach_replies
+    for all to authenticated
+    using ((auth.jwt() ->> 'email') in ('louis@carterco.dk','rm@tresyv.dk','haugefrom@haugefrom.com'))
+    with check ((auth.jwt() ->> 'email') in ('louis@carterco.dk','rm@tresyv.dk','haugefrom@haugefrom.com'));
+
+-- Extend push_subscriptions RLS to client + louis (was louis-only before).
+drop policy if exists push_subscriptions_owner_all on public.push_subscriptions;
+create policy push_subscriptions_owner_all on public.push_subscriptions
+    for all to authenticated
+    using ((auth.jwt() ->> 'email') in ('louis@carterco.dk','rm@tresyv.dk','haugefrom@haugefrom.com'))
+    with check ((auth.jwt() ->> 'email') in ('louis@carterco.dk','rm@tresyv.dk','haugefrom@haugefrom.com'));
