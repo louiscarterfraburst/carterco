@@ -56,12 +56,19 @@ create table if not exists public.outreach_engagement_actions (
     result            jsonb
 );
 
+-- Workspace tag added once multi-tenant landed; engine populates it from
+-- outreach_pipeline.workspace_id at fire time.
+alter table public.outreach_engagement_actions
+    add column if not exists workspace_id uuid references public.workspaces(id);
+
 create index if not exists idx_outreach_engagement_actions_lead
     on public.outreach_engagement_actions(sendpilot_lead_id);
 create index if not exists idx_outreach_engagement_actions_rule
     on public.outreach_engagement_actions(rule_id);
 create index if not exists idx_outreach_engagement_actions_fired
     on public.outreach_engagement_actions(fired_at desc);
+create index if not exists idx_outreach_engagement_actions_workspace
+    on public.outreach_engagement_actions(workspace_id);
 
 alter table public.outreach_engagement_actions enable row level security;
 

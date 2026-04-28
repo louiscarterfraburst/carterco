@@ -41,61 +41,73 @@ Two additional signals derived from elsewhere in the pipeline:
 
 Engagement column writes are idempotent: a second `Video Played` event won't overwrite the first `played_at` timestamp.
 
-## 3. Rule contract
+## 3. Sequence contract
 
-Defined in `supabase/functions/_shared/engagement-rules.ts`:
+A **sequence** is an ordered list of steps a lead walks through after a trigger signal lands. One sequence per lead at a time. Defined in `supabase/functions/_shared/sequences.ts`:
 
 ```ts
-type EngagementRule = {
-  id: string;            // stable identifier — written to the audit log
-  description: string;   // human-readable intent
+type Sequence = {
+  id: string;                    // stable; audit log writes "<seq>::<step>"
+  description: string;
+  trigger: { signal: Signal };   // sequence starts when this signal first appears on a lead
+  excludesGlobal?: Signal[];     // checked at every step. Default: ["replied"]
+  steps: SequenceStep[];
+};
 
-  when: {
-    requires: Signal[];     // ALL must be present on the lead
-    excludes?: Signal[];    // if ANY is present, rule does NOT match
-    delayHours: number;     // hours since the most recent required signal; 0 = instant
-  };
-
-  action:
-    | { type: "auto_send";       template: string }
-    | { type: "queue_approval";  template: string }
-    | { type: "push_only" };
-
-  maxFiresPerLead?: number;   // default 1
+type SequenceStep = {
+  id: string;                    // stable; written to audit log as "<seq>::<step>"
+  waitHours: number;             // hours after step entry before evaluating branches
+  excludes?: Signal[];           // step-local exit (added to sequence.excludesGlobal)
+  branches: Array<{
+    requires?: Signal[];         // all must be present; omit/empty = always match (fallback)
+    action:
+      | { type: "auto_send";      template: string }
+      | { type: "queue_approval"; template: string }
+      | { type: "push_only" };
+  }>;
+  maxWaitHours?: number;         // skip-and-advance after this many hours if no branch matched. Default: waitHours
 };
 ```
 
 **Field semantics:**
 
-- `id` — must be stable across deploys; the audit log uses it to enforce `maxFiresPerLead`. Renaming a rule means losing its history.
-- `when.requires` — *all* signals must be present. The rule's "trigger time" is the most recent of these timestamps; `delayHours` is measured from there.
-- `when.excludes` — typical use: `["replied"]` so the rule stops firing once a real conversation starts. Optional but almost always wanted.
-- `when.delayHours` — `0` for "fire immediately", `24` for "fire 24h after the most recent required signal", etc. Time-gated rules are evaluated by the 5-min cron scan; `0` rules also fire instantly via DB triggers on `cta_clicked_at` / `render_failed_at`.
-- `action.template` — Danish text supporting `{firstName}`, `{company}`, `{videoLink}` substitutions.
-- `maxFiresPerLead` — counted via rows in `outreach_engagement_actions` for that `(sendpilot_lead_id, rule_id)`.
+- `Sequence.trigger.signal` — when this signal first becomes true on a lead with no `sequence_id`, the engine enrols the lead at step 0. Typical: `"sent"` (post-message follow-ups). One sequence per lead total — the first matching sequence in `SEQUENCES` wins.
+- `Sequence.excludesGlobal` — defaults to `["replied"]`. Once any signal in this set is present, the sequence exits immediately (no further steps fire). The auto-flow halts the moment a real conversation starts.
+- `SequenceStep.waitHours` — measured from `sequence_step_entered_at` (set when the lead arrived at this step). For step 0 that's the enrolment time.
+- `SequenceStep.branches` — evaluated **in order**, first match wins. Use a final entry with no `requires` as a fallback. If you want the step to do nothing for cases that don't match anything, omit the fallback and rely on `maxWaitHours` to advance.
+- `SequenceStep.maxWaitHours` — when the step's signals haven't lined up by then, the engine advances silently (no audit row). Without this the step could park forever waiting for a signal that never lands.
+- `id` (sequence and step) — must be stable across deploys; the audit log uses `"<sequence_id>::<step_id>"` as `rule_id` to enforce idempotency. Renaming a step makes the engine treat it as new.
 
-**Precedence:** rules are evaluated in array order. The first match per lead per tick wins; subsequent rules are skipped for that lead until the next tick. This keeps a single engagement event from fanning out into multiple actions in one pass.
+**Precedence:** within a single tick, exactly one step is evaluated per lead. If a branch fires, the lead advances to the next step (which is parked until its own `waitHours` elapses). If no branch fires and `maxWaitHours` hasn't elapsed, the lead is re-parked. If `maxWaitHours` has elapsed, the lead advances silently.
 
-## 4. Current rules
+**Per-lead state** lives on `outreach_pipeline`:
+- `sequence_id`, `sequence_step` — current position.
+- `sequence_step_entered_at` — when the lead arrived at the current step.
+- `sequence_parked_until` — earliest tick we should re-evaluate. Indexed for cheap scans.
+- `sequence_started_at`, `sequence_completed_at` — bookkeeping.
 
-| ID | Description | Action |
-|----|-------------|--------|
-| _(none yet)_ | Infrastructure ships first; rules added one at a time | — |
+## 4. Current sequences
 
-## 5. How to add a rule
+| ID | Trigger | Description | Steps |
+|----|---------|-------------|-------|
+| `post_send_followup_v1` | `sent` | Follow up 48h after we sent the video. Branches on watch state. | `followup_48h` (queue_approval if watched_end → played → fallback push_only) |
 
-1. **Append to `RULES`** in `supabase/functions/_shared/engagement-rules.ts`. Keep `id` stable and descriptive (e.g. `viewed_no_reply_24h`).
-2. **Write the template** inline as the `template` string. Use `{firstName}` / `{company}` / `{videoLink}` placeholders. Danish, line breaks as `\n`, no trailing whitespace.
-3. **Update the "Current rules" table** in this doc (section 4). One row per live rule.
+## 5. How to add a sequence
+
+1. **Append to `SEQUENCES`** in `supabase/functions/_shared/sequences.ts`. Keep `id` stable and descriptive (e.g. `cta_clicked_v1`). Same for each step's `id`.
+2. **Write templates** inline as the `template` string on each branch. Use `{firstName}` / `{company}` / `{videoLink}` placeholders. Danish, line breaks as `\n`, no trailing whitespace.
+3. **Update the "Current sequences" table** in this doc (section 4). One row per live sequence; summarise step structure compactly.
 4. **Deploy `outreach-engagement-tick`**:
    ```
    supabase functions deploy outreach-engagement-tick --no-verify-jwt
    ```
-   No schema migration is needed for a new rule — the schema is already general.
+   No schema migration is needed for a new sequence — the schema is already general.
 5. **Verify** within one cron cycle (≤5 min). Trigger a real or synthetic engagement event against a test lead, then:
-   - check `outreach_engagement_actions` got a row with the new `rule_id`,
+   - check `outreach_pipeline.sequence_id` got set on enrolment,
+   - check `outreach_engagement_actions` got a row with `rule_id = "<sequence_id>::<step_id>"`,
    - check `outreach_pipeline.status` / `rendered_message` reflect the action,
-   - if `auto_send`: confirm the SendPilot send succeeded (`status='sent'`, `sendpilot_response` populated).
+   - if `auto_send`: confirm the SendPilot send succeeded (`status='sent'`, `sendpilot_response` populated),
+   - check `sequence_completed_at` is set after the last step (or after a global-exclude exit).
 
 ## 6. Architecture (reference)
 
@@ -113,13 +125,19 @@ sendspark-webhook  ──(insert raw)──►  outreach_events
         outreach-engagement-tick  ◄──(every 5 min)── pg_cron
                 │
                 ▼
-        iterate RULES → evaluate signals → execute action
+        per-lead state machine:
+          enrol (if no sequence_id, trigger signal present)
+            → wait gate (sequence_step_entered_at + waitHours)
+            → evaluate branches (first match fires action)
+            → advance step (or complete)
+            → exit on excludesGlobal / step.excludes
                 │
                 ▼
-        outreach_engagement_actions  (audit row per fire)
+        outreach_engagement_actions  (audit row per fire,
+                                      rule_id = "<seq>::<step>")
 ```
 
 Source-of-truth split:
 
-- **Code** — `engagement-rules.ts` is authoritative for *behavior*. The runtime reads it; what's there is what fires.
+- **Code** — `sequences.ts` is authoritative for *behavior*. The runtime reads it; what's there is what fires. `engagement-rules.ts` still owns the `Signal` / `Action` types and the pure helpers (`signalsForLead`, `renderTemplate`); its `RULES = []` is vestigial and will be removed once sequences are proven in production.
 - **This doc** — authoritative for *intent*. If the doc and code disagree, fix whichever one is wrong; don't let them drift.

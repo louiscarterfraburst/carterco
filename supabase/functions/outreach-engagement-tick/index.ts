@@ -1,27 +1,34 @@
-// Outreach engagement worker. Two execution paths into one rule evaluator:
+// Outreach engagement worker. Drives leads through code-defined sequences in
+// supabase/functions/_shared/sequences.ts. Two execution paths into one
+// state-machine evaluator:
 //
 //   { mode: "scan" }                    — cron, every 5 min. Walks all open
-//                                         leads against RULES.
+//                                         leads, enrols new ones, advances
+//                                         due ones.
 //   { mode: "lead", sendpilot_lead_id } — DB trigger fires this when an
 //                                         instant signal lands (cta_clicked /
-//                                         render_failed) so we react now
-//                                         instead of waiting up to 5 min.
+//                                         render_failed). Bypasses the
+//                                         per-step wait gate so we react now.
 //
 // Auth: deployed with verify_jwt=false. Trigger + cron call without a bearer
 // (mirrors notify-pending-approval). If ENGAGEMENT_WEBHOOK_SECRET is set,
 // require x-webhook-secret to match.
-//
-// Rules live in ../_shared/engagement-rules.ts. The array is empty by design —
-// this function is the infrastructure; rules ship one-at-a-time as code PRs.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.103.3";
 import {
-    RULES,
     signalsForLead,
-    ruleMatches,
     renderTemplate,
-    type EngagementRule,
+    type LeadSignals,
+    type Action,
+    type Signal,
 } from "../_shared/engagement-rules.ts";
+import {
+    SEQUENCES,
+    findSequence,
+    effectiveExcludes,
+    type Sequence,
+    type SequenceBranch,
+} from "../_shared/sequences.ts";
 
 const corsHeaders = {
     "Access-Control-Allow-Origin": "*",
@@ -36,8 +43,9 @@ const supabase = createClient(
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
 );
 
-// Statuses where the auto-flow stops touching a lead. Replies and explicit
-// human decisions both halt it (they're handled by humans in the cockpit).
+// Statuses where the engine stops touching a lead. Reply-driven exits go
+// through the sequence's excludesGlobal (default ["replied"]); these handle
+// hard human/system halts.
 const TERMINAL_STATUSES = new Set(["rejected", "failed"]);
 
 type PipelineRow = {
@@ -54,6 +62,13 @@ type PipelineRow = {
     last_reply_at: string | null;
     render_failed_at: string | null;
     video_link: string | null;
+    workspace_id: string | null;
+    sequence_id: string | null;
+    sequence_step: number | null;
+    sequence_parked_until: string | null;
+    sequence_started_at: string | null;
+    sequence_completed_at: string | null;
+    sequence_step_entered_at: string | null;
 };
 
 Deno.serve(async (req) => {
@@ -89,7 +104,7 @@ Deno.serve(async (req) => {
 // --- Scan path ---------------------------------------------------------------
 
 async function scan(): Promise<{ scanned: number; fires: number }> {
-    if (RULES.length === 0) return { scanned: 0, fires: 0 };
+    if (SEQUENCES.length === 0) return { scanned: 0, fires: 0 };
 
     const { data, error } = await supabase
         .from("outreach_pipeline")
@@ -103,8 +118,7 @@ async function scan(): Promise<{ scanned: number; fires: number }> {
 
     let fires = 0;
     for (const row of (data ?? []) as PipelineRow[]) {
-        const fired = await evaluateLead(row);
-        fires += fired;
+        fires += await evaluateLead(row, /* bypassWait */ false);
     }
     return { scanned: data?.length ?? 0, fires };
 }
@@ -112,7 +126,7 @@ async function scan(): Promise<{ scanned: number; fires: number }> {
 // --- Single-lead path --------------------------------------------------------
 
 async function tickLead(sendpilotLeadId: string): Promise<{ fires: number }> {
-    if (RULES.length === 0) return { fires: 0 };
+    if (SEQUENCES.length === 0) return { fires: 0 };
 
     const { data, error } = await supabase
         .from("outreach_pipeline")
@@ -126,51 +140,179 @@ async function tickLead(sendpilotLeadId: string): Promise<{ fires: number }> {
     const row = data as PipelineRow;
     if (TERMINAL_STATUSES.has(row.status)) return { fires: 0 };
 
-    return { fires: await evaluateLead(row) };
+    return { fires: await evaluateLead(row, /* bypassWait */ true) };
 }
 
-// --- Shared evaluation -------------------------------------------------------
+// --- Per-lead state machine --------------------------------------------------
 
-async function evaluateLead(row: PipelineRow): Promise<number> {
+async function evaluateLead(row: PipelineRow, bypassWait: boolean): Promise<number> {
     const signals = signalsForLead(row);
     const now = new Date();
 
-    let fires = 0;
-    for (const rule of RULES) {
-        if (!ruleMatches(rule, signals, now)) continue;
+    // Already completed — nothing to do.
+    if (row.sequence_completed_at) return 0;
 
-        const max = rule.maxFiresPerLead ?? 1;
-        const { count } = await supabase
-            .from("outreach_engagement_actions")
-            .select("id", { count: "exact", head: true })
-            .eq("sendpilot_lead_id", row.sendpilot_lead_id)
-            .eq("rule_id", rule.id);
-        if ((count ?? 0) >= max) continue;
+    // 1. Enrolment: lead not yet in any sequence.
+    if (!row.sequence_id) {
+        const seq = findEnrolmentMatch(signals);
+        if (!seq) return 0;
+        const firstStep = seq.steps[0];
+        if (!firstStep) return 0;
+        // Don't enrol someone already excluded (e.g. already replied).
+        const excludes = effectiveExcludes(seq, firstStep);
+        if (excludes.some((s) => signals[s])) return 0;
 
-        const result = await executeAction(rule, row);
-        await supabase.from("outreach_engagement_actions").insert({
-            sendpilot_lead_id: row.sendpilot_lead_id,
-            rule_id: rule.id,
-            action_type: rule.action.type,
-            template_id: "template" in rule.action ? rule.action.template.slice(0, 80) : null,
-            result,
-        });
-        fires += 1;
-
-        // Stop after first match per tick so a single signal can't fan out
-        // into multiple actions in one pass — predictable precedence.
-        break;
+        await supabase.from("outreach_pipeline").update({
+            sequence_id: seq.id,
+            sequence_step: 0,
+            sequence_started_at: now.toISOString(),
+            sequence_step_entered_at: now.toISOString(),
+            sequence_parked_until: addHours(now, firstStep.waitHours).toISOString(),
+            sequence_completed_at: null,
+        }).eq("sendpilot_lead_id", row.sendpilot_lead_id);
+        // Don't fall through; the next tick (or instant trigger) advances it.
+        return 0;
     }
-    return fires;
+
+    // 2. Active sequence — locate it and the current step.
+    const seq = findSequence(row.sequence_id);
+    if (!seq) {
+        // Sequence id no longer exists in code (renamed/removed). Mark
+        // complete so the engine stops touching this lead.
+        await markCompleted(row.sendpilot_lead_id, now);
+        return 0;
+    }
+    const stepIdx = row.sequence_step ?? 0;
+    const step = seq.steps[stepIdx];
+    if (!step) {
+        await markCompleted(row.sendpilot_lead_id, now);
+        return 0;
+    }
+
+    // 3. Global / step-local exit.
+    const excludes = effectiveExcludes(seq, step);
+    if (excludes.some((s) => signals[s])) {
+        await markCompleted(row.sendpilot_lead_id, now);
+        return 0;
+    }
+
+    // 4. Wait gate.
+    const enteredAt = parseTs(row.sequence_step_entered_at)
+        ?? parseTs(row.sequence_started_at)
+        ?? now;
+    const waitDeadline = addHours(enteredAt, step.waitHours);
+    const maxWaitDeadline = addHours(enteredAt, step.maxWaitHours ?? step.waitHours);
+
+    if (!bypassWait && now < waitDeadline) {
+        // Re-park at the wait deadline if we drifted.
+        const parkIso = waitDeadline.toISOString();
+        if (row.sequence_parked_until !== parkIso) {
+            await supabase.from("outreach_pipeline")
+                .update({ sequence_parked_until: parkIso })
+                .eq("sendpilot_lead_id", row.sendpilot_lead_id);
+        }
+        return 0;
+    }
+
+    // 5. Branch evaluation. First branch whose `requires` are all present wins.
+    const chosen = pickBranch(step.branches, signals);
+    if (!chosen) {
+        // Nothing matched yet. If we've passed maxWaitHours, advance silently.
+        if (now >= maxWaitDeadline) {
+            await advanceStep(row.sendpilot_lead_id, seq, stepIdx, now);
+        } else {
+            const target = maxWaitDeadline > now ? maxWaitDeadline : now;
+            await supabase.from("outreach_pipeline")
+                .update({ sequence_parked_until: target.toISOString() })
+                .eq("sendpilot_lead_id", row.sendpilot_lead_id);
+        }
+        return 0;
+    }
+
+    // 6. Idempotency guard: if an audit row already exists for this
+    // (lead, sequence::step), the action ran on a prior tick — just advance.
+    const ruleId = `${seq.id}::${step.id}`;
+    const { count: existingFires } = await supabase
+        .from("outreach_engagement_actions")
+        .select("id", { count: "exact", head: true })
+        .eq("sendpilot_lead_id", row.sendpilot_lead_id)
+        .eq("rule_id", ruleId);
+    if ((existingFires ?? 0) > 0) {
+        await advanceStep(row.sendpilot_lead_id, seq, stepIdx, now);
+        return 0;
+    }
+
+    // 7. Fire the action and advance.
+    const result = await executeAction(chosen.action, row);
+    await supabase.from("outreach_engagement_actions").insert({
+        sendpilot_lead_id: row.sendpilot_lead_id,
+        workspace_id: row.workspace_id,
+        rule_id: ruleId,
+        action_type: chosen.action.type,
+        template_id: "template" in chosen.action
+            ? chosen.action.template.slice(0, 80)
+            : null,
+        result,
+    });
+    await advanceStep(row.sendpilot_lead_id, seq, stepIdx, now);
+    return 1;
 }
 
+function findEnrolmentMatch(signals: LeadSignals): Sequence | undefined {
+    for (const seq of SEQUENCES) {
+        if (signals[seq.trigger.signal]) return seq;
+    }
+    return undefined;
+}
+
+function pickBranch(
+    branches: SequenceBranch[],
+    signals: LeadSignals,
+): SequenceBranch | null {
+    for (const b of branches) {
+        const reqs: Signal[] = b.requires ?? [];
+        if (reqs.every((s) => signals[s])) return b;
+    }
+    return null;
+}
+
+async function advanceStep(
+    sendpilotLeadId: string,
+    seq: Sequence,
+    currentIdx: number,
+    now: Date,
+): Promise<void> {
+    const nextIdx = currentIdx + 1;
+    const next = seq.steps[nextIdx];
+    if (!next) {
+        await supabase.from("outreach_pipeline").update({
+            sequence_step: nextIdx,
+            sequence_completed_at: now.toISOString(),
+            sequence_parked_until: null,
+        }).eq("sendpilot_lead_id", sendpilotLeadId);
+        return;
+    }
+    await supabase.from("outreach_pipeline").update({
+        sequence_step: nextIdx,
+        sequence_step_entered_at: now.toISOString(),
+        sequence_parked_until: addHours(now, next.waitHours).toISOString(),
+    }).eq("sendpilot_lead_id", sendpilotLeadId);
+}
+
+async function markCompleted(sendpilotLeadId: string, now: Date): Promise<void> {
+    await supabase.from("outreach_pipeline").update({
+        sequence_completed_at: now.toISOString(),
+        sequence_parked_until: null,
+    }).eq("sendpilot_lead_id", sendpilotLeadId);
+}
+
+// --- Action dispatch (unchanged from rule-engine version) --------------------
+
 async function executeAction(
-    rule: EngagementRule,
+    action: Action,
     row: PipelineRow,
 ): Promise<Record<string, unknown>> {
-    if (rule.action.type === "push_only") {
-        // Reuse the pending-approval push fan-out by transitioning state.
-        // Future: dedicated notify-engagement function with rule-aware copy.
+    if (action.type === "push_only") {
         return { dispatched: "push_only", note: "no auto-message; cockpit only" };
     }
 
@@ -180,13 +322,13 @@ async function executeAction(
         .eq("contact_email", row.contact_email)
         .maybeSingle();
 
-    const message = renderTemplate(rule.action.template, {
+    const message = renderTemplate(action.template, {
         first_name: lead?.first_name ?? null,
         company:    lead?.company    ?? null,
         video_link: row.video_link,
     });
 
-    if (rule.action.type === "queue_approval") {
+    if (action.type === "queue_approval") {
         await supabase.from("outreach_pipeline").update({
             rendered_message: message,
             queued_at: new Date().toISOString(),
@@ -214,6 +356,18 @@ async function executeAction(
     }).eq("sendpilot_lead_id", row.sendpilot_lead_id);
 
     return { dispatched: "auto_send", status: send.status, ok: success };
+}
+
+// --- Misc helpers ------------------------------------------------------------
+
+function addHours(d: Date, hours: number): Date {
+    return new Date(d.getTime() + hours * 3600_000);
+}
+
+function parseTs(v: string | null | undefined): Date | null {
+    if (!v) return null;
+    const d = new Date(v);
+    return isNaN(d.getTime()) ? null : d;
 }
 
 function json(obj: unknown, status = 200) {
