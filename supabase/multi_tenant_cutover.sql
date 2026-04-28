@@ -147,6 +147,10 @@ drop policy if exists outreach_leads_owner_all    on public.outreach_leads;
 drop policy if exists outreach_events_owner_all   on public.outreach_events;
 drop policy if exists outreach_pipeline_owner_all on public.outreach_pipeline;
 drop policy if exists outreach_replies_owner_all  on public.outreach_replies;
+drop policy if exists outreach_leads_workspace_all    on public.outreach_leads;
+drop policy if exists outreach_events_workspace_all   on public.outreach_events;
+drop policy if exists outreach_pipeline_workspace_all on public.outreach_pipeline;
+drop policy if exists outreach_replies_workspace_all  on public.outreach_replies;
 
 create policy outreach_leads_workspace_all on public.outreach_leads
     for all to authenticated
