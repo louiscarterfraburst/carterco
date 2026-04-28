@@ -14,6 +14,11 @@ create table if not exists public.user_settings (
     suggest_count               int not null default 3,
     suggest_lookahead_days      int not null default 7,
     suggest_min_lead_hours      int not null default 2,
+    -- Per-user identity tokens used in /leads email/SMS templates.
+    display_name                text,
+    company_name                text,
+    calendly_url                text,
+    signoff                     text,
     last_synced_at              timestamptz,
     last_sync_error             text,
     updated_at                  timestamptz not null default now()

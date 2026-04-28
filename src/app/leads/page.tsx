@@ -150,6 +150,17 @@ export default function LeadsPage() {
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [hasRungIds, setHasRungIds] = useState<Set<string>>(new Set());
   const [slotsLine, setSlotsLine] = useState<string>("");
+  const [identity, setIdentity] = useState<{
+    displayName: string;
+    companyName: string;
+    calendlyUrl: string;
+    signoff: string;
+  }>({
+    displayName: "Louis",
+    companyName: "CarterCo",
+    calendlyUrl: "https://calendly.com/louis-carter/30min",
+    signoff: "Louis",
+  });
   const notesTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(
     new Map(),
   );
@@ -234,10 +245,16 @@ export default function LeadsPage() {
       const blocks = data as Array<{ day_local: string; block_start: string; block_end: string }>;
       const { data: settings } = await supabase
         .from("user_settings")
-        .select("tz")
+        .select("tz, display_name, company_name, calendly_url, signoff")
         .eq("user_email", user.email)
         .maybeSingle();
       setSlotsLine(formatBlocksLine(blocks, settings?.tz ?? "Europe/Copenhagen"));
+      setIdentity({
+        displayName: settings?.display_name?.trim() || "Louis",
+        companyName: settings?.company_name?.trim() || "CarterCo",
+        calendlyUrl: settings?.calendly_url?.trim() || "https://calendly.com/louis-carter/30min",
+        signoff: settings?.signoff?.trim() || settings?.display_name?.trim() || "Louis",
+      });
     })();
     return () => { cancelled = true; };
   }, [user, supabase]);
@@ -963,6 +980,7 @@ export default function LeadsPage() {
                 setOutcome={setOutcome}
                 updateNotes={updateNotes}
                 slotsLine={slotsLine}
+                identity={identity}
               />
             ))}
           </ol>
@@ -993,6 +1011,7 @@ function LeadRow({
   setOutcome,
   updateNotes,
   slotsLine,
+  identity,
 }: {
   lead: Lead;
   index: number;
@@ -1008,6 +1027,7 @@ function LeadRow({
   ) => Promise<void>;
   updateNotes: (id: string, v: string) => void;
   slotsLine: string;
+  identity: Identity;
 }) {
   const urgent =
     !!lead.response_time && URGENCY[lead.response_time] === "urgent";
@@ -1181,6 +1201,7 @@ function LeadRow({
           setOutcome={setOutcome}
           updateNotes={updateNotes}
           slotsLine={slotsLine}
+          identity={identity}
         />
       ) : null}
     </li>
@@ -1196,6 +1217,7 @@ function DetailPanel({
   setOutcome,
   updateNotes,
   slotsLine,
+  identity,
 }: {
   lead: Lead;
   hasRung: boolean;
@@ -1207,6 +1229,7 @@ function DetailPanel({
   ) => Promise<void>;
   updateNotes: (id: string, v: string) => void;
   slotsLine: string;
+  identity: Identity;
 }) {
   // Resolved — terminal state, shown only in "Vis alle".
   // `callback`, `follow_up`, and `interested`-with-nudge stay editable in Aktive.
@@ -1269,7 +1292,7 @@ function DetailPanel({
   const canSms =
     !!lead.phone && lead.phone.replace(/\D/g, "").length >= 8;
   const smsHref = canSms
-    ? `sms:${lead.phone}?&body=${encodeURIComponent(buildSmsBody(lead.name, slotsLine))}`
+    ? `sms:${lead.phone}?&body=${encodeURIComponent(buildSmsBody(lead.name, identity, slotsLine))}`
     : "#";
   const hasEmail = !!lead.email && lead.email.includes("@");
   const hasDialled = hasRung || lead.call_status !== null;
@@ -1281,7 +1304,7 @@ function DetailPanel({
         {/* Mail (secondary contact action — Ring lives on the row itself) */}
         {hasEmail ? (
           <a
-            href={mailtoHref(lead.email, lead.name, slotsLine)}
+            href={mailtoHref(lead.email, lead.name, identity, slotsLine)}
             className="focus-cream flex items-center justify-between gap-4 border-b border-[var(--ink)]/[0.10] pb-3 text-[var(--ink)]/55 transition hover:text-[var(--ink)]"
           >
             <span className="flex items-center gap-3 text-[11px] uppercase tracking-[0.18em]">
@@ -2102,31 +2125,36 @@ function firstName(name: string | null) {
   return name.trim().split(/\s+/)[0] ?? name;
 }
 
-function buildSmsBody(name: string | null, slotsLine?: string) {
+type Identity = {
+  displayName: string;
+  companyName: string;
+  calendlyUrl: string;
+  signoff: string;
+};
+
+function buildSmsBody(name: string | null, identity: Identity, slotsLine?: string) {
   const slot = slotsLine ? ` Hvordan ser din kalender ud ${slotsLine}?` : "";
-  return `Hej ${firstName(name)}, det er Louis fra CarterCo - jeg prøvede lige at ringe.${slot} /Louis`;
+  return `Hej ${firstName(name)}, det er ${identity.displayName} fra ${identity.companyName} - jeg prøvede lige at ringe.${slot} /${identity.signoff}`;
 }
 
-const CALENDLY_URL = "https://calendly.com/louis-carter/30min";
-
-function buildEmailDraft(name: string | null, slotsLine?: string) {
-  const subject = "Kort follow-up fra CarterCo";
+function buildEmailDraft(name: string | null, identity: Identity, slotsLine?: string) {
+  const subject = `Kort follow-up fra ${identity.companyName}`;
   const slotPara = slotsLine
     ? `Hvordan ser din kalender ud ${slotsLine}? Ellers foreslå selv et tidspunkt.\n\n`
     : "";
   const body = `Hej ${firstName(name)},
 
-Det er Louis fra CarterCo. Jeg prøvede lige at ringe dig efter din henvendelse — har du 20 minutter til at snakke om, hvordan vi kan gøre dine leads varme hurtigere?
+Det er ${identity.displayName} fra ${identity.companyName}. Jeg prøvede lige at ringe dig efter din henvendelse — har du 20 minutter til at snakke om, hvordan vi kan gøre dine leads varme hurtigere?
 
-${slotPara}Du kan også booke direkte her: ${CALENDLY_URL}
+${slotPara}Du kan også booke direkte her: ${identity.calendlyUrl}
 
-/Louis`;
+/${identity.signoff}`;
   return { subject, body };
 }
 
-function mailtoHref(email: string | null | undefined, name: string | null, slotsLine?: string) {
+function mailtoHref(email: string | null | undefined, name: string | null, identity: Identity, slotsLine?: string) {
   if (!email) return "#";
-  const { subject, body } = buildEmailDraft(name, slotsLine);
+  const { subject, body } = buildEmailDraft(name, identity, slotsLine);
   const query = `subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   return `mailto:${email}?${query}`;
 }

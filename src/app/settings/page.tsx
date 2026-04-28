@@ -18,6 +18,10 @@ type Settings = {
   suggest_count: number;
   suggest_lookahead_days: number;
   suggest_min_lead_hours: number;
+  display_name: string | null;
+  company_name: string | null;
+  calendly_url: string | null;
+  signoff: string | null;
   last_synced_at: string | null;
   last_sync_error: string | null;
 };
@@ -170,6 +174,35 @@ export default function SettingsPage() {
         {!s ? <p className="text-sm text-[var(--ink)]/45">Indlæser indstillinger…</p> : (
           <form onSubmit={save} className="flex flex-col gap-8">
             <div>
+              <h2 className="tabular text-[11px] uppercase tracking-[0.28em] text-[var(--ink)]/55">Identitet</h2>
+              <p className="mt-1 text-sm text-[var(--ink)]/55">
+                Bruges i email- og SMS-skabeloner i /leads. F.eks. &ldquo;Hej {"{firstName}"}, det er {"{display_name}"} fra {"{company_name}"}…&rdquo; med {"/{signoff}"} til sidst.
+              </p>
+              <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <Field label="Fornavn">
+                  <input type="text" value={s.display_name ?? ""} onChange={(e) => setS({ ...s, display_name: e.target.value })}
+                    placeholder="Louis"
+                    className="focus-cream tabular w-full rounded-sm border border-[var(--ink)]/15 bg-transparent px-3 py-2 text-sm outline-none focus:border-[var(--ink)]/35" />
+                </Field>
+                <Field label="Firma">
+                  <input type="text" value={s.company_name ?? ""} onChange={(e) => setS({ ...s, company_name: e.target.value })}
+                    placeholder="CarterCo"
+                    className="focus-cream tabular w-full rounded-sm border border-[var(--ink)]/15 bg-transparent px-3 py-2 text-sm outline-none focus:border-[var(--ink)]/35" />
+                </Field>
+                <Field label="Calendly-link">
+                  <input type="url" value={s.calendly_url ?? ""} onChange={(e) => setS({ ...s, calendly_url: e.target.value })}
+                    placeholder="https://calendly.com/dit-navn/30min"
+                    className="focus-cream tabular w-full rounded-sm border border-[var(--ink)]/15 bg-transparent px-3 py-2 text-sm outline-none focus:border-[var(--ink)]/35" />
+                </Field>
+                <Field label="Signatur (vises som /Navn)">
+                  <input type="text" value={s.signoff ?? ""} onChange={(e) => setS({ ...s, signoff: e.target.value })}
+                    placeholder="Louis"
+                    className="focus-cream tabular w-full rounded-sm border border-[var(--ink)]/15 bg-transparent px-3 py-2 text-sm outline-none focus:border-[var(--ink)]/35" />
+                </Field>
+              </div>
+            </div>
+
+            <div>
               <h2 className="tabular text-[11px] uppercase tracking-[0.28em] text-[var(--ink)]/55">Kalender (Google iCal)</h2>
               <p className="mt-1 text-sm text-[var(--ink)]/55">
                 Hent din private iCal-URL i Google Calendar → Indstillinger → din kalender → <em>Hemmelig adresse i iCal-format</em>.
@@ -278,6 +311,10 @@ function defaultSettings(email: string): Settings {
     suggest_count: 3,
     suggest_lookahead_days: 7,
     suggest_min_lead_hours: 2,
+    display_name: null,
+    company_name: null,
+    calendly_url: null,
+    signoff: null,
     last_synced_at: null,
     last_sync_error: null,
   };
