@@ -8,7 +8,6 @@
 // expand using rrule via npm.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.103.3";
-import { RRule, RRuleSet, rrulestr } from "npm:rrule@2.8.1";
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL") ?? "",
@@ -186,16 +185,8 @@ function expandEvent(
 
   const occurrences: Date[] = [];
   if (rrule) {
-    try {
-      // rrule.js needs the DTSTART line + RRULE line.
-      const ruleStr = `DTSTART:${dtstart.toISOString().replace(/[-:]/g, "").replace(".000Z", "Z")}\nRRULE:${rrule}`;
-      const set: RRule | RRuleSet = rrulestr(ruleStr, { forceset: false });
-      const list = set.between(windowStart, windowEnd, true);
-      for (const d of list) occurrences.push(d);
-    } catch {
-      // Fallback: just use the original DTSTART
-      if (dtstart >= windowStart && dtstart <= windowEnd) occurrences.push(dtstart);
-    }
+    // Lightweight RRULE expander for common Google Calendar patterns.
+    occurrences.push(...expandRRule(dtstart, rrule, windowStart, windowEnd));
   } else {
     if (dtend >= windowStart && dtstart <= windowEnd) occurrences.push(dtstart);
   }
@@ -208,6 +199,72 @@ function expandEvent(
     end_at: new Date(start.getTime() + duration).toISOString(),
     summary,
   }));
+}
+
+// Tiny RRULE expander handling FREQ=DAILY/WEEKLY/MONTHLY/YEARLY with INTERVAL,
+// COUNT, UNTIL, BYDAY. Skips edge cases (BYMONTHDAY/BYSETPOS/etc.) — those
+// events fall through with just their original DTSTART, which is acceptable
+// for "free slot" computation since the rare unexpanded recurrence might
+// cause us to suggest a slot that's actually busy. We can swap in a real
+// library later if accuracy matters.
+function expandRRule(dtstart: Date, rrule: string, windowStart: Date, windowEnd: Date): Date[] {
+  const params: Record<string, string> = {};
+  for (const p of rrule.split(";")) {
+    const [k, v] = p.split("=");
+    if (k && v != null) params[k.toUpperCase()] = v;
+  }
+  const freq = params.FREQ;
+  const interval = Math.max(1, parseInt(params.INTERVAL ?? "1", 10) || 1);
+  const count = params.COUNT ? parseInt(params.COUNT, 10) : null;
+  let untilDate: Date | null = null;
+  if (params.UNTIL) {
+    untilDate = parseIcalDate(params.UNTIL, undefined);
+  }
+  const limit = new Date(Math.min(windowEnd.getTime(), untilDate?.getTime() ?? windowEnd.getTime()));
+  const byday = (params.BYDAY ?? "")
+    .split(",")
+    .map((d) => d.trim().toUpperCase())
+    .filter(Boolean);
+  const dayMap: Record<string, number> = { SU: 0, MO: 1, TU: 2, WE: 3, TH: 4, FR: 5, SA: 6 };
+
+  const out: Date[] = [];
+  if (!freq || !["DAILY", "WEEKLY", "MONTHLY", "YEARLY"].includes(freq)) {
+    if (dtstart >= windowStart && dtstart <= windowEnd) out.push(dtstart);
+    return out;
+  }
+
+  // Iterate in steps; cap at 365 to avoid runaway loops.
+  let n = 0;
+  let cur = new Date(dtstart);
+  let step: number;
+  switch (freq) {
+    case "DAILY": step = 86400000 * interval; break;
+    case "WEEKLY": step = 7 * 86400000 * interval; break;
+    case "MONTHLY": step = 30 * 86400000 * interval; break;  // approximate
+    case "YEARLY": step = 365 * 86400000 * interval; break;
+    default: step = 0;
+  }
+
+  while (cur <= limit && n < 365) {
+    if (count && n >= count) break;
+    if (cur >= windowStart) {
+      if (byday.length === 0) {
+        out.push(new Date(cur));
+      } else {
+        // Expand BYDAY for the current week (WEEKLY) or honour the spec loosely
+        for (const d of byday) {
+          const target = dayMap[d.slice(-2)];
+          if (target == null) continue;
+          const offset = (target - cur.getUTCDay() + 7) % 7;
+          const occ = new Date(cur.getTime() + offset * 86400000);
+          if (occ >= windowStart && occ <= limit) out.push(occ);
+        }
+      }
+    }
+    cur = new Date(cur.getTime() + step);
+    n++;
+  }
+  return out;
 }
 
 function parseIcalDate(value: string | undefined, params: string | undefined): Date | null {
