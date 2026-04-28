@@ -149,6 +149,7 @@ export default function LeadsPage() {
   const [view, setView] = useState<View>("active");
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [hasRungIds, setHasRungIds] = useState<Set<string>>(new Set());
+  const [slotsLine, setSlotsLine] = useState<string>("");
   const notesTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(
     new Map(),
   );
@@ -219,6 +220,25 @@ export default function LeadsPage() {
       subscription.unsubscribe();
     };
   }, [supabase]);
+
+  useEffect(() => {
+    if (!user?.email) return;
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase.rpc("suggest_slots", {
+        _user_email: user.email,
+      });
+      if (cancelled || error || !data) return;
+      const slotIsoArr = (data as Array<{ slot: string }>).map((r) => r.slot);
+      const { data: settings } = await supabase
+        .from("user_settings")
+        .select("tz")
+        .eq("user_email", user.email)
+        .maybeSingle();
+      setSlotsLine(formatSlotsLine(slotIsoArr, settings?.tz ?? "Europe/Copenhagen"));
+    })();
+    return () => { cancelled = true; };
+  }, [user, supabase]);
 
   useEffect(() => {
     if (!user) return;
@@ -940,6 +960,7 @@ export default function LeadsPage() {
                 setCallStatus={setCallStatus}
                 setOutcome={setOutcome}
                 updateNotes={updateNotes}
+                slotsLine={slotsLine}
               />
             ))}
           </ol>
@@ -969,6 +990,7 @@ function LeadRow({
   setCallStatus,
   setOutcome,
   updateNotes,
+  slotsLine,
 }: {
   lead: Lead;
   index: number;
@@ -983,6 +1005,7 @@ function LeadRow({
     callbackAt?: string,
   ) => Promise<void>;
   updateNotes: (id: string, v: string) => void;
+  slotsLine: string;
 }) {
   const urgent =
     !!lead.response_time && URGENCY[lead.response_time] === "urgent";
@@ -1155,6 +1178,7 @@ function LeadRow({
           setCallStatus={setCallStatus}
           setOutcome={setOutcome}
           updateNotes={updateNotes}
+          slotsLine={slotsLine}
         />
       ) : null}
     </li>
@@ -1169,6 +1193,7 @@ function DetailPanel({
   setCallStatus,
   setOutcome,
   updateNotes,
+  slotsLine,
 }: {
   lead: Lead;
   hasRung: boolean;
@@ -1179,6 +1204,7 @@ function DetailPanel({
     callbackAt?: string,
   ) => Promise<void>;
   updateNotes: (id: string, v: string) => void;
+  slotsLine: string;
 }) {
   // Resolved — terminal state, shown only in "Vis alle".
   // `callback`, `follow_up`, and `interested`-with-nudge stay editable in Aktive.
@@ -1241,7 +1267,7 @@ function DetailPanel({
   const canSms =
     !!lead.phone && lead.phone.replace(/\D/g, "").length >= 8;
   const smsHref = canSms
-    ? `sms:${lead.phone}?&body=${encodeURIComponent(buildSmsBody(lead.name))}`
+    ? `sms:${lead.phone}?&body=${encodeURIComponent(buildSmsBody(lead.name, slotsLine))}`
     : "#";
   const hasEmail = !!lead.email && lead.email.includes("@");
   const hasDialled = hasRung || lead.call_status !== null;
@@ -1253,7 +1279,7 @@ function DetailPanel({
         {/* Mail (secondary contact action — Ring lives on the row itself) */}
         {hasEmail ? (
           <a
-            href={mailtoHref(lead.email, lead.name)}
+            href={mailtoHref(lead.email, lead.name, slotsLine)}
             className="focus-cream flex items-center justify-between gap-4 border-b border-[var(--ink)]/[0.10] pb-3 text-[var(--ink)]/55 transition hover:text-[var(--ink)]"
           >
             <span className="flex items-center gap-3 text-[11px] uppercase tracking-[0.18em]">
@@ -2074,29 +2100,47 @@ function firstName(name: string | null) {
   return name.trim().split(/\s+/)[0] ?? name;
 }
 
-function buildSmsBody(name: string | null) {
-  return `Hej ${firstName(name)}, det er Louis fra CarterCo - jeg prøvede lige at ringe. Skriv når det passer, så finder vi et tidspunkt. /Louis`;
+function buildSmsBody(name: string | null, slotsLine?: string) {
+  const slot = slotsLine ? ` Eksempelvis ${slotsLine}.` : "";
+  return `Hej ${firstName(name)}, det er Louis fra CarterCo - jeg prøvede lige at ringe.${slot} Skriv når det passer, så finder vi et tidspunkt. /Louis`;
 }
 
 const CALENDLY_URL = "https://calendly.com/louis-carter/30min";
 
-function buildEmailDraft(name: string | null) {
+function buildEmailDraft(name: string | null, slotsLine?: string) {
   const subject = "Kort follow-up fra CarterCo";
+  const slotPara = slotsLine
+    ? `Passer en af disse: ${slotsLine}? Eller foreslå selv et tidspunkt.\n\n`
+    : "";
   const body = `Hej ${firstName(name)},
 
 Det er Louis fra CarterCo. Jeg prøvede lige at ringe dig efter din henvendelse — har du 20 minutter senere i denne uge til at snakke om, hvordan vi kan gøre dine leads varme hurtigere?
 
-Du kan også booke direkte her: ${CALENDLY_URL}
+${slotPara}Du kan også booke direkte her: ${CALENDLY_URL}
 
 /Louis`;
   return { subject, body };
 }
 
-function mailtoHref(email: string | null | undefined, name: string | null) {
+function mailtoHref(email: string | null | undefined, name: string | null, slotsLine?: string) {
   if (!email) return "#";
-  const { subject, body } = buildEmailDraft(name);
+  const { subject, body } = buildEmailDraft(name, slotsLine);
   const query = `subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   return `mailto:${email}?${query}`;
+}
+
+// Format ISO timestamps as Danish prose: "tirsdag 14:00, onsdag 10:00 eller torsdag 13:00"
+function formatSlotsLine(slots: string[], tz: string): string {
+  if (!slots.length) return "";
+  const parts = slots.map((s) => {
+    const d = new Date(s);
+    const day = d.toLocaleDateString("da-DK", { weekday: "long", timeZone: tz });
+    const time = d.toLocaleTimeString("da-DK", { hour: "2-digit", minute: "2-digit", timeZone: tz });
+    return `${day} kl. ${time}`;
+  });
+  if (parts.length === 1) return parts[0];
+  if (parts.length === 2) return `${parts[0]} eller ${parts[1]}`;
+  return `${parts.slice(0, -1).join(", ")} eller ${parts[parts.length - 1]}`;
 }
 
 function notificationTitle(status: NotificationStatus) {
