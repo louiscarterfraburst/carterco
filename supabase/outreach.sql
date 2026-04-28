@@ -105,28 +105,31 @@ create trigger outreach_pipeline_touch_trg
 before update on public.outreach_pipeline
 for each row execute function public.outreach_pipeline_touch();
 
--- 4. RLS — UI traffic only sees rows when JWT is the workspace owner ------------
+-- 4. RLS — UI traffic only sees rows inside the user's workspace --------------
 alter table public.outreach_leads enable row level security;
 alter table public.outreach_events enable row level security;
 alter table public.outreach_pipeline enable row level security;
 
 drop policy if exists outreach_leads_owner_all on public.outreach_leads;
-create policy outreach_leads_owner_all on public.outreach_leads
+drop policy if exists outreach_leads_workspace_all on public.outreach_leads;
+create policy outreach_leads_workspace_all on public.outreach_leads
     for all to authenticated
-    using ((auth.jwt() ->> 'email') in ('louis@carterco.dk','rm@tresyv.dk','haugefrom@haugefrom.com'))
-    with check ((auth.jwt() ->> 'email') in ('louis@carterco.dk','rm@tresyv.dk','haugefrom@haugefrom.com'));
+    using (workspace_id in (select public.auth_workspace_ids()))
+    with check (workspace_id in (select public.auth_workspace_ids()));
 
 drop policy if exists outreach_events_owner_all on public.outreach_events;
-create policy outreach_events_owner_all on public.outreach_events
+drop policy if exists outreach_events_workspace_all on public.outreach_events;
+create policy outreach_events_workspace_all on public.outreach_events
     for all to authenticated
-    using ((auth.jwt() ->> 'email') in ('louis@carterco.dk','rm@tresyv.dk','haugefrom@haugefrom.com'))
-    with check ((auth.jwt() ->> 'email') in ('louis@carterco.dk','rm@tresyv.dk','haugefrom@haugefrom.com'));
+    using (workspace_id in (select public.auth_workspace_ids()))
+    with check (workspace_id in (select public.auth_workspace_ids()));
 
 drop policy if exists outreach_pipeline_owner_all on public.outreach_pipeline;
-create policy outreach_pipeline_owner_all on public.outreach_pipeline
+drop policy if exists outreach_pipeline_workspace_all on public.outreach_pipeline;
+create policy outreach_pipeline_workspace_all on public.outreach_pipeline
     for all to authenticated
-    using ((auth.jwt() ->> 'email') in ('louis@carterco.dk','rm@tresyv.dk','haugefrom@haugefrom.com'))
-    with check ((auth.jwt() ->> 'email') in ('louis@carterco.dk','rm@tresyv.dk','haugefrom@haugefrom.com'));
+    using (workspace_id in (select public.auth_workspace_ids()))
+    with check (workspace_id in (select public.auth_workspace_ids()));
 
 -- 5. Replies (LinkedIn replies caught from message.received webhook) -----------
 do $$ begin
@@ -160,17 +163,21 @@ alter table public.outreach_pipeline
 
 alter table public.outreach_replies enable row level security;
 drop policy if exists outreach_replies_owner_all on public.outreach_replies;
-create policy outreach_replies_owner_all on public.outreach_replies
+drop policy if exists outreach_replies_workspace_all on public.outreach_replies;
+create policy outreach_replies_workspace_all on public.outreach_replies
     for all to authenticated
-    using ((auth.jwt() ->> 'email') in ('louis@carterco.dk','rm@tresyv.dk','haugefrom@haugefrom.com'))
-    with check ((auth.jwt() ->> 'email') in ('louis@carterco.dk','rm@tresyv.dk','haugefrom@haugefrom.com'));
+    using (workspace_id in (select public.auth_workspace_ids()))
+    with check (workspace_id in (select public.auth_workspace_ids()));
 
--- Extend push_subscriptions RLS to client + louis (was louis-only before).
+-- Workspace-scoped push subscriptions. The multi-tenant cutover also creates
+-- this policy; keeping it here prevents rerunning outreach.sql from reopening
+-- push fan-out to every seeded email.
 drop policy if exists push_subscriptions_owner_all on public.push_subscriptions;
-create policy push_subscriptions_owner_all on public.push_subscriptions
+drop policy if exists push_subscriptions_workspace_all on public.push_subscriptions;
+create policy push_subscriptions_workspace_all on public.push_subscriptions
     for all to authenticated
-    using ((auth.jwt() ->> 'email') in ('louis@carterco.dk','rm@tresyv.dk','haugefrom@haugefrom.com'))
-    with check ((auth.jwt() ->> 'email') in ('louis@carterco.dk','rm@tresyv.dk','haugefrom@haugefrom.com'));
+    using (workspace_id in (select public.auth_workspace_ids()))
+    with check (workspace_id in (select public.auth_workspace_ids()));
 
 -- 6. Pending-approval notification trigger ----------------------------------
 -- Fires notify-pending-approval edge function on transitions into

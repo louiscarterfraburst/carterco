@@ -111,10 +111,24 @@ Deno.serve(async (request) => {
     // succeeds and we get the audit row).
     const eventId = `sendspark:${kind}:${email}:${videoLink}` || `sendspark:${crypto.randomUUID()}`;
 
+    // Resolve workspace via the related outreach lead (1:1 on contact_email).
+    // null is acceptable if the email doesn't match any lead — we still want
+    // the event recorded for audit.
+    let eventWorkspaceId: string | null = null;
+    if (email) {
+        const { data: lookupLead } = await supabase
+            .from("outreach_leads")
+            .select("workspace_id")
+            .eq("contact_email", email)
+            .maybeSingle();
+        eventWorkspaceId = lookupLead?.workspace_id ?? null;
+    }
+
     const { error: evtErr } = await supabase.from("outreach_events").insert({
         event_id: eventId,
         source: "sendspark",
         event_type: evt.eventType ?? "unknown",
+        workspace_id: eventWorkspaceId,
         payload: evt,
     });
     if (evtErr && !`${evtErr.message}`.includes("duplicate key")) {

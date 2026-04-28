@@ -56,6 +56,7 @@ alter table public.leads add column if not exists next_action_type text
   check (next_action_type in ('retry', 'callback'));
 alter table public.leads add column if not exists retry_count int not null default 0;
 alter table public.leads add column if not exists last_action_fired_at timestamptz;
+alter table public.leads add column if not exists workspace_id uuid references public.workspaces(id);
 
 do $$
 begin
@@ -96,6 +97,14 @@ drop policy if exists "Anyone can update draft leads" on public.leads;
 drop policy if exists "Anyone can delete draft leads" on public.leads;
 drop policy if exists "CarterCo can read leads" on public.leads;
 drop policy if exists "CarterCo can update leads" on public.leads;
+drop policy if exists leads_workspace_all on public.leads;
+
+create policy leads_workspace_all
+  on public.leads
+  for all
+  to authenticated
+  using (workspace_id in (select public.auth_workspace_ids()))
+  with check (workspace_id in (select public.auth_workspace_ids()));
 
 create policy "Anyone can submit CarterCo leads"
   on public.leads
@@ -104,12 +113,19 @@ create policy "Anyone can submit CarterCo leads"
   with check (
     is_draft = false
     and source = 'carterco.dk'
+    and workspace_id = public.carterco_workspace_id()
     and length(trim(name)) >= 2
     and length(trim(company)) >= 2
     and email ~* '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]{2,}$'
     and length(regexp_replace(phone, '[^0-9]', '', 'g')) between 8 and 15
-    and monthly_leads in ('Under 50', '50–250', '250–1.000', '1.000+')
-    and response_time in ('Under 5 min', '5–30 min', '30 min – 2 timer', 'Mere end 2 timer', 'Ved ikke')
+    and (
+      monthly_leads is null
+      or monthly_leads in ('Under 50', '50–250', '250–1.000', '1.000+')
+    )
+    and (
+      response_time is null
+      or response_time in ('Under 5 min', '5–30 min', '30 min – 2 timer', 'Mere end 2 timer', 'Ved ikke')
+    )
   );
 
 create policy "Anyone can save draft leads"
@@ -119,6 +135,7 @@ create policy "Anyone can save draft leads"
   with check (
     is_draft = true
     and source = 'carterco.dk'
+    and workspace_id = public.carterco_workspace_id()
     and draft_session_id is not null
     and (
       coalesce(email, '') <> ''
@@ -130,24 +147,15 @@ create policy "Anyone can update draft leads"
   on public.leads
   for update
   to public
-  using (is_draft = true)
-  with check (is_draft = true and source = 'carterco.dk');
+  using (is_draft = true and workspace_id = public.carterco_workspace_id())
+  with check (
+    is_draft = true
+    and source = 'carterco.dk'
+    and workspace_id = public.carterco_workspace_id()
+  );
 
 create policy "Anyone can delete draft leads"
   on public.leads
   for delete
   to public
-  using (is_draft = true);
-
-create policy "CarterCo can read leads"
-  on public.leads
-  for select
-  to authenticated
-  using ((auth.jwt() ->> 'email') = 'louis@carterco.dk');
-
-create policy "CarterCo can update leads"
-  on public.leads
-  for update
-  to authenticated
-  using ((auth.jwt() ->> 'email') = 'louis@carterco.dk')
-  with check ((auth.jwt() ->> 'email') = 'louis@carterco.dk');
+  using (is_draft = true and workspace_id = public.carterco_workspace_id());

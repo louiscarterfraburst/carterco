@@ -110,31 +110,20 @@ update public.user_settings us
    where us.workspace_id is null
      and us.user_email = w.owner_email;
 
--- Auto-create workspace + ownership when a new user signs up via Supabase Auth.
+-- Auth is invite-only from the app (signInWithOtp shouldCreateUser=false).
+-- Keep the helper function around for compatibility, but do not attach an
+-- auth.users trigger that auto-creates workspaces for arbitrary signups.
 create or replace function public.handle_new_user_workspace()
 returns trigger
 language plpgsql
 security definer
 set search_path = public
 as $$
-declare
-    ws_id uuid;
 begin
-    if new.email is null then return new; end if;
-    if exists (select 1 from public.workspace_members where user_email = new.email) then
-        return new;
-    end if;
-    insert into public.workspaces(name, owner_email) values (new.email, new.email)
-    returning id into ws_id;
-    insert into public.workspace_members(workspace_id, user_email, role)
-    values (ws_id, new.email, 'owner');
     return new;
 end $$;
 
 drop trigger if exists on_auth_user_created on auth.users;
-create trigger on_auth_user_created
-after insert on auth.users
-for each row execute function public.handle_new_user_workspace();
 
 -- Update outreach_record_invite to chase workspace_id from outreach_leads.
 create or replace function public.outreach_record_invite(

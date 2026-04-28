@@ -13,8 +13,8 @@ import {
 import Link from "next/link";
 import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/utils/supabase/client";
+import { useWorkspace } from "@/utils/workspace";
 
-const ALLOWED_EMAILS = ["louis@carterco.dk", "rm@tresyv.dk", "haugefrom@haugefrom.com"];
 const VAPID_PUBLIC_KEY =
   process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ??
   "BFxkts1k-dL9mbX23uPtalmaBnt-bHfXL4Xn7E6xImhFd1XlKR_mFHVXLfELe2PIVoM-c4a3_M9YXIOAlhooFUM";
@@ -65,6 +65,10 @@ type PipelineRow = {
   liked_at: string | null;
   render_failed_at: string | null;
   last_engagement_at: string | null;
+  sequence_id: string | null;
+  sequence_step: number | null;
+  sequence_parked_until: string | null;
+  sequence_completed_at: string | null;
   error: string | null;
   updated_at: string;
   lead?: LeadEnrich;
@@ -92,8 +96,9 @@ type ColdFilter = "all" | "cold" | "warm";
 export default function OutreachPage() {
   const supabase = useMemo(() => createClient(), []);
   const [user, setUser] = useState<User | null>(null);
-  const [email, setEmail] = useState(ALLOWED_EMAILS[0]);
+  const [email, setEmail] = useState("");
   const [token, setToken] = useState("");
+  const { workspace, loading: workspaceLoading } = useWorkspace(supabase, user);
   const [rows, setRows] = useState<PipelineRow[]>([]);
   const [replies, setReplies] = useState<Reply[]>([]);
   const [loading, setLoading] = useState(true);
@@ -164,23 +169,26 @@ export default function OutreachPage() {
     })));
   }, [supabase]);
 
-  useEffect(() => { if (user) void load(); }, [user, load]);
+  const scheduleReload = useCallback(() => {
+    if (reloadTimer.current) window.clearTimeout(reloadTimer.current);
+    reloadTimer.current = window.setTimeout(() => void load(), 600);
+  }, [load]);
+
+  useEffect(() => {
+    if (user) void Promise.resolve().then(load);
+  }, [user, load]);
 
   // ---------- realtime ----------
   useEffect(() => {
-    if (!user) return;
+    if (!user || !workspace?.id) return;
+    const filter = `workspace_id=eq.${workspace.id}`;
     const ch = supabase
-      .channel("outreach-live")
-      .on("postgres_changes", { event: "*", schema: "public", table: "outreach_pipeline" }, () => scheduleReload())
-      .on("postgres_changes", { event: "*", schema: "public", table: "outreach_replies" }, () => scheduleReload())
+      .channel(`outreach-live-${workspace.id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "outreach_pipeline", filter }, () => scheduleReload())
+      .on("postgres_changes", { event: "*", schema: "public", table: "outreach_replies",  filter }, () => scheduleReload())
       .subscribe();
     return () => { void supabase.removeChannel(ch); };
-  }, [user, supabase]); // eslint-disable-line
-
-  function scheduleReload() {
-    if (reloadTimer.current) window.clearTimeout(reloadTimer.current);
-    reloadTimer.current = window.setTimeout(() => void load(), 600);
-  }
+  }, [user, workspace?.id, supabase, scheduleReload]);
 
   // ---------- push ----------
   useEffect(() => { if (user) void refreshPushStatus(); }, [user]); // eslint-disable-line
@@ -227,6 +235,7 @@ export default function OutreachPage() {
         p256dh: json.keys?.p256dh,
         auth: json.keys?.auth,
         user_agent: navigator.userAgent,
+        workspace_id: workspace?.id,
       }, { onConflict: "endpoint" });
       if (error) throw error;
       setPushStatus("Aktiv");
@@ -287,7 +296,7 @@ export default function OutreachPage() {
   async function sendOtp(e: FormEvent<HTMLFormElement>) {
     e.preventDefault(); setErr(null); setInfo(null);
     const t = email.trim().toLowerCase();
-    if (!ALLOWED_EMAILS.includes(t)) { setErr("Ukendt e-mail."); return; }
+    if (!t) { setErr("Indtast din e-mail."); return; }
     const { error } = await supabase.auth.signInWithOtp({ email: t, options: { shouldCreateUser: false } });
     if (error) setErr(error.message); else setInfo("Tjek din mail for kode.");
   }
@@ -360,6 +369,26 @@ export default function OutreachPage() {
       sendOtp={sendOtp} verifyOtp={verifyOtp}
       info={info} err={err}
     />;
+  }
+
+  if (!workspaceLoading && !workspace) {
+    return (
+      <main className="safe-screen safe-pad-top safe-pad-bottom safe-px relative min-h-screen overflow-hidden bg-[var(--sand)] text-[var(--ink)]">
+        <div className="grain-overlay" />
+        <div className="relative mx-auto flex min-h-screen w-full max-w-md flex-col justify-between px-6 py-8 sm:py-10">
+          <Link href="/" className="tabular text-[10px] uppercase tracking-[0.35em] text-[var(--ink)]/45">CarterCo · Outreach</Link>
+          <section>
+            <p className="tabular text-[10px] uppercase tracking-[0.32em] text-[var(--ink)]/40">Ingen workspace</p>
+            <h1 className="font-display mt-4 text-5xl italic leading-[0.9] tracking-[-0.02em] text-[var(--ink)]">Adgang afventer</h1>
+            <p className="mt-6 max-w-xs text-sm leading-relaxed text-[var(--ink)]/55">
+              Din e-mail er ikke tilknyttet noget workspace endnu. Kontakt support, så får du adgang.
+            </p>
+            <button onClick={() => void signOut()} className="focus-cream mt-8 tabular text-[11px] uppercase tracking-[0.22em] text-[var(--ink)]/70 hover:underline">Log ud →</button>
+          </section>
+          <p className="tabular text-[10px] uppercase tracking-[0.28em] text-[var(--ink)]/25">{user.email}</p>
+        </div>
+      </main>
+    );
   }
 
   return (
@@ -455,7 +484,19 @@ function Header({ pushStatus, onEnablePush, onReload, onSignOut }: {
   );
 }
 
-function Funnel({ stats }: { stats: ReturnType<typeof initStats> }) {
+type FunnelStats = {
+  invited: number;
+  accepted: number;
+  rendering: number;
+  pending: number;
+  sent: number;
+  rejected: number;
+  failed: number;
+  replied: number;
+  total: number;
+};
+
+function Funnel({ stats }: { stats: FunnelStats }) {
   const stages = [
     { label: "Inviteret", value: stats.invited + stats.accepted + stats.rendering + stats.pending + stats.sent + stats.rejected + stats.failed },
     { label: "Accept", value: stats.accepted + stats.rendering + stats.pending + stats.sent + stats.rejected + stats.failed },
@@ -484,7 +525,6 @@ function Funnel({ stats }: { stats: ReturnType<typeof initStats> }) {
     </dl>
   );
 }
-function initStats() { return { invited: 0, accepted: 0, rendering: 0, pending: 0, sent: 0, rejected: 0, failed: 0, replied: 0, total: 0 }; }
 
 function Sparkline({ data }: { data: { day: string; count: number }[] }) {
   if (!data.length) return null;
@@ -650,6 +690,7 @@ function PendingTab(props: {
                           <button type="button" onClick={() => togglePlay(r.sendpilot_lead_id)}
                             className="group relative block aspect-video w-full overflow-hidden rounded-sm border border-[var(--ink)]/15 bg-[var(--ink)]/5">
                             {r.thumbnail_url ? (
+                              // eslint-disable-next-line @next/next/no-img-element
                               <img src={r.thumbnail_url} alt="Video preview"
                                 className="h-full w-full object-cover" />
                             ) : (
@@ -783,8 +824,9 @@ function SentTab({ rows }: { rows: PipelineRow[] }) {
           <span className="col-span-9 sm:col-span-3 truncate text-[var(--ink)]/80">{r.lead?.first_name} {r.lead?.last_name}</span>
           <span className="hidden sm:block sm:col-span-3 truncate text-[var(--ink)]/60">{r.lead?.company}</span>
           <span className="col-span-12 sm:col-span-2 truncate text-[12px] text-[var(--ink)]/45">{r.decided_by ?? ""}</span>
-          <span className="col-span-12 sm:col-span-2 truncate">
+          <span className="col-span-12 sm:col-span-2 flex flex-wrap items-center gap-1">
             {r.last_reply_intent ? <IntentPill intent={r.last_reply_intent} confidence={null} /> : null}
+            <SequencePill row={r} />
           </span>
         </li>
       ))}
@@ -799,7 +841,7 @@ function AllTab({ rows }: { rows: PipelineRow[] }) {
       {rows.map((r) => (
         <li key={r.sendpilot_lead_id} className="grid grid-cols-12 gap-3 py-3 text-sm">
           <span className="col-span-3 sm:col-span-2 tabular text-[12px] text-[var(--ink)]/55">{fmtShort(r.updated_at)}</span>
-          <span className="col-span-3 sm:col-span-2"><StatusPill status={r.status} /></span>
+          <span className="col-span-3 sm:col-span-2 flex flex-wrap items-center gap-1"><StatusPill status={r.status} /><SequencePill row={r} /></span>
           <span className="col-span-6 sm:col-span-3 truncate text-[var(--ink)]/80">{r.lead?.first_name} {r.lead?.last_name}</span>
           <span className="hidden sm:block sm:col-span-3 truncate text-[var(--ink)]/60">{r.lead?.company}</span>
           <span className="col-span-12 sm:col-span-2 truncate text-[12px] text-[var(--ink)]/45">{r.error ?? r.decided_by ?? ""}</span>
@@ -891,6 +933,33 @@ function StatusPill({ status }: { status: Status }) {
   );
 }
 
+function SequencePill({ row }: { row: PipelineRow }) {
+  if (!row.sequence_id || row.sequence_id === "pre_feature_backfill") return null;
+  const label = row.sequence_id.replace(/_v\d+$/, "").replaceAll("_", " ");
+  if (row.sequence_completed_at) {
+    return (
+      <span
+        className="tabular inline-block rounded-sm px-2 py-0.5 text-[10px] uppercase tracking-[0.18em]"
+        style={{ background: "rgb(0 0 0 / .04)", color: "rgb(0 0 0 / .45)" }}
+        title={`Sekvens ${row.sequence_id} kompleteret`}
+      >
+        {label} · ✓
+      </span>
+    );
+  }
+  const stepNo = (row.sequence_step ?? 0) + 1;
+  const wakes = fmtRelativeFuture(row.sequence_parked_until);
+  return (
+    <span
+      className="tabular inline-block rounded-sm px-2 py-0.5 text-[10px] uppercase tracking-[0.18em]"
+      style={{ background: "rgba(35,90,67,0.10)", color: "var(--forest)" }}
+      title={`Sekvens ${row.sequence_id} · trin ${stepNo}${wakes ? ` · vågner ${wakes}` : ""}`}
+    >
+      {label} · {stepNo}{wakes ? ` · ${wakes}` : ""}
+    </span>
+  );
+}
+
 function IntentPill({ intent, confidence }: { intent: Intent | null; confidence: number | null }) {
   if (!intent) return <span className="tabular text-[10px] text-[var(--ink)]/35">…</span>;
   const map: Record<Intent, { label: string; bg: string; fg: string }> = {
@@ -924,6 +993,18 @@ function fmtRelative(ts: string | null | undefined): string {
   const d = Math.round(h / 24);
   if (d < 7) return `${d}d siden`;
   return new Date(ts).toLocaleDateString("da-DK", { day: "2-digit", month: "short" });
+}
+
+function fmtRelativeFuture(ts: string | null | undefined): string {
+  if (!ts) return "";
+  const ms = new Date(ts).getTime() - Date.now();
+  if (ms <= 0) return "snart";
+  const m = Math.round(ms / 60_000);
+  if (m < 60) return `om ${m}m`;
+  const h = Math.round(m / 60);
+  if (h < 24) return `om ${h}t`;
+  const d = Math.round(h / 24);
+  return `om ${d}d`;
 }
 
 function fmtShort(ts: string | null | undefined): string {

@@ -16,6 +16,7 @@ const supabase = createClient(
 
 type BusyRow = {
   user_email: string;
+  workspace_id: string | null;
   source: string;
   external_id: string | null;
   start_at: string;
@@ -39,20 +40,20 @@ Deno.serve(async (req) => {
 
   const { data: users, error } = await supabase
     .from("user_settings")
-    .select("user_email, ical_url")
+    .select("user_email, ical_url, workspace_id")
     .not("ical_url", "is", null);
   if (error) return json({ error: error.message }, 500);
 
   const summary: Record<string, unknown>[] = [];
   for (const u of users ?? []) {
     if (!u.ical_url) continue;
-    const r = await pollOne(u.user_email, u.ical_url);
+    const r = await pollOne(u.user_email, u.ical_url, u.workspace_id);
     summary.push({ user: u.user_email, ...r });
   }
   return json({ ok: true, polled: summary });
 });
 
-async function pollOne(userEmail: string, url: string): Promise<{ ok: boolean; events: number; error?: string }> {
+async function pollOne(userEmail: string, url: string, workspaceId: string | null): Promise<{ ok: boolean; events: number; error?: string }> {
   let body: string;
   try {
     const res = await fetch(url, { redirect: "follow" });
@@ -72,7 +73,7 @@ async function pollOne(userEmail: string, url: string): Promise<{ ok: boolean; e
 
   let intervals: BusyRow[] = [];
   try {
-    intervals = parseIcal(body, userEmail, now, horizonEnd);
+    intervals = parseIcal(body, userEmail, workspaceId, now, horizonEnd);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     await markError(userEmail, `parse error: ${msg}`);
@@ -124,7 +125,7 @@ async function markError(userEmail: string, msg: string) {
 
 // ---------- iCal parsing ----------
 
-function parseIcal(body: string, userEmail: string, windowStart: Date, windowEnd: Date): BusyRow[] {
+function parseIcal(body: string, userEmail: string, workspaceId: string | null, windowStart: Date, windowEnd: Date): BusyRow[] {
   const out: BusyRow[] = [];
   // Unfold lines: continuation lines start with whitespace.
   const lines = body.replace(/\r\n[ \t]/g, "").split(/\r?\n/);
@@ -136,7 +137,7 @@ function parseIcal(body: string, userEmail: string, windowStart: Date, windowEnd
     if (line === "BEGIN:VEVENT") { inEvent = true; cur = {}; continue; }
     if (line === "END:VEVENT") {
       inEvent = false;
-      const ev = expandEvent(cur, userEmail, windowStart, windowEnd);
+      const ev = expandEvent(cur, userEmail, workspaceId, windowStart, windowEnd);
       out.push(...ev);
       continue;
     }
@@ -157,6 +158,7 @@ function parseIcal(body: string, userEmail: string, windowStart: Date, windowEnd
 function expandEvent(
   ev: Record<string, string>,
   userEmail: string,
+  workspaceId: string | null,
   windowStart: Date,
   windowEnd: Date,
 ): BusyRow[] {
@@ -193,6 +195,7 @@ function expandEvent(
 
   return occurrences.map((start) => ({
     user_email: userEmail,
+    workspace_id: workspaceId,
     source: "gcal",
     external_id: uid ? `${uid}@${start.toISOString()}` : null,
     start_at: start.toISOString(),

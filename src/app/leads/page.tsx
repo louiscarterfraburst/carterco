@@ -12,6 +12,7 @@ import Link from "next/link";
 import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/utils/supabase/client";
 import { clampToBusinessHours, wasClamped } from "@/utils/businessHours";
+import { useWorkspace } from "@/utils/workspace";
 
 /* ─── types ─────────────────────────────────────────────────────────── */
 
@@ -127,7 +128,6 @@ const URGENCY: Record<string, "urgent" | "warm" | "cool" | "muted"> = {
   "Ved ikke": "muted",
 };
 
-const allowedEmail = "louis@carterco.dk";
 const vapidPublicKey =
   process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ??
   "BFxkts1k-dL9mbX23uPtalmaBnt-bHfXL4Xn7E6xImhFd1XlKR_mFHVXLfELe2PIVoM-c4a3_M9YXIOAlhooFUM";
@@ -137,8 +137,9 @@ const vapidPublicKey =
 export default function LeadsPage() {
   const supabase = useMemo(() => createClient(), []);
   const [user, setUser] = useState<User | null>(null);
-  const [email, setEmail] = useState(allowedEmail);
+  const [email, setEmail] = useState("");
   const [token, setToken] = useState("");
+  const { workspace, loading: workspaceLoading } = useWorkspace(supabase, user);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [notifications, setNotifications] =
@@ -294,13 +295,14 @@ export default function LeadsPage() {
     setError(null);
     setMessage(null);
 
-    if (email.trim().toLowerCase() !== allowedEmail) {
-      setError("Denne side er kun for CarterCo.");
+    const trimmed = email.trim().toLowerCase();
+    if (!trimmed) {
+      setError("Indtast din e-mail.");
       return;
     }
 
     const { error } = await supabase.auth.signInWithOtp({
-      email: email.trim().toLowerCase(),
+      email: trimmed,
       options: { shouldCreateUser: false },
     });
 
@@ -587,6 +589,7 @@ export default function LeadsPage() {
         p256dh: subscriptionJson.keys?.p256dh,
         auth: subscriptionJson.keys?.auth,
         user_agent: navigator.userAgent,
+        workspace_id: workspace?.id,
       },
       { onConflict: "endpoint" },
     );
@@ -644,10 +647,11 @@ export default function LeadsPage() {
         body: {
           name: "Test Notifikation",
           company: "CarterCo",
-          email: allowedEmail,
+          email: user?.email ?? "",
           phone: "+4512345678",
           monthly_leads: "50-250",
           response_time: "Under 5 min",
+          workspace_id: workspace?.id,
         },
       });
 
@@ -779,8 +783,29 @@ export default function LeadsPage() {
           </section>
 
           <p className="tabular text-[10px] uppercase tracking-[0.28em] text-[var(--ink)]/25">
-            {new Date().getFullYear()} · Kun for {allowedEmail}
+            {new Date().getFullYear()} · CarterCo
           </p>
+        </div>
+      </main>
+    );
+  }
+
+  /* ─── no workspace state ─── */
+  if (!workspaceLoading && !workspace) {
+    return (
+      <main className="safe-screen safe-pad-top safe-pad-bottom safe-px relative min-h-screen overflow-hidden bg-[var(--sand)] text-[var(--ink)]">
+        <div className="grain-overlay" />
+        <div className="relative mx-auto flex min-h-screen w-full max-w-md flex-col justify-between px-6 py-8 sm:py-10">
+          <Link href="/" className="tabular text-[10px] uppercase tracking-[0.35em] text-[var(--ink)]/45">CarterCo · Leads</Link>
+          <section>
+            <p className="tabular text-[10px] uppercase tracking-[0.32em] text-[var(--ink)]/40">Ingen workspace</p>
+            <h1 className="font-display mt-4 text-5xl italic leading-[0.9] tracking-[-0.02em] text-[var(--ink)] sm:text-6xl">Adgang afventer</h1>
+            <p className="mt-6 max-w-xs text-sm leading-relaxed text-[var(--ink)]/55">
+              Din e-mail er ikke tilknyttet noget workspace endnu. Kontakt support, så får du adgang.
+            </p>
+            <button onClick={() => void signOut()} className="focus-cream mt-8 tabular text-[11px] uppercase tracking-[0.22em] text-[var(--ink)]/70 hover:underline">Log ud →</button>
+          </section>
+          <p className="tabular text-[10px] uppercase tracking-[0.28em] text-[var(--ink)]/25">{user.email}</p>
         </div>
       </main>
     );
@@ -1301,31 +1326,23 @@ function DetailPanel({
   return (
     <div className="ledger-detail border-t border-[var(--ink)]/[0.10] bg-[var(--ink)]/[0.03] px-4 py-5 sm:px-6 sm:py-6">
       <div className="mx-auto flex w-full max-w-xl flex-col gap-5">
-        {/* Mail (secondary contact action — Ring lives on the row itself) */}
-        {hasEmail ? (
-          <a
-            href={mailtoHref(lead.email, lead.name, identity, slotsLine)}
-            className="focus-cream flex items-center justify-between gap-4 border-b border-[var(--ink)]/[0.10] pb-3 text-[var(--ink)]/55 transition hover:text-[var(--ink)]"
-          >
-            <span className="flex items-center gap-3 text-[11px] uppercase tracking-[0.18em]">
-              <MailIcon />
-              Skriv mail
-            </span>
-            <span className="truncate text-[12px] text-[var(--ink)]/35">
-              {lead.email}
-            </span>
-          </a>
-        ) : (
-          <div className="flex items-center justify-between gap-4 border-b border-[var(--ink)]/[0.10] pb-3 text-[var(--ink)]/30">
-            <span className="flex items-center gap-3 text-[11px] uppercase tracking-[0.18em]">
-              <MailIcon />
-              Skriv mail
-            </span>
-            <span className="truncate text-[12px] italic">
-              Mail mangler
-            </span>
-          </div>
-        )}
+        <div className="grid gap-3 border-b border-[var(--ink)]/[0.10] pb-4 sm:grid-cols-2">
+          <ContactAction
+            href={contactHref(lead)}
+            download={contactFilename(lead)}
+            enabled={canSaveContact(lead)}
+            icon={<ContactIcon />}
+            label="Gem kontakt"
+            value={contactSummary(lead)}
+          />
+          <ContactAction
+            href={hasEmail ? mailtoHref(lead.email, lead.name, identity, slotsLine) : "#"}
+            enabled={hasEmail}
+            icon={<MailIcon />}
+            label="Skriv mail"
+            value={lead.email ?? "Mail mangler"}
+          />
+        </div>
 
         {/* Step 1 — Svarede / Intet svar. Gated behind having dialled. */}
         <div className="ledger-detail flex flex-col gap-3">
@@ -1813,13 +1830,6 @@ function CallbackOutcomeButton({
   const [picking, setPicking] = useState(false);
   const [draftValue, setDraftValue] = useState("");
 
-  useEffect(() => {
-    if (selected && callbackAt) {
-      // Keep the input showing the current scheduled time if edited.
-      setDraftValue(toDatetimeLocal(callbackAt));
-    }
-  }, [selected, callbackAt]);
-
   if (picking && !selected) {
     return (
       <div className="col-span-2 flex flex-col gap-2 rounded-sm border border-[var(--clay)]/40 bg-[var(--clay)]/[0.06] p-3">
@@ -1983,6 +1993,50 @@ function IconButton({
   );
 }
 
+function ContactAction({
+  href,
+  download,
+  enabled,
+  icon,
+  label,
+  value,
+}: {
+  href: string;
+  download?: string;
+  enabled: boolean;
+  icon: ReactNode;
+  label: string;
+  value: string;
+}) {
+  if (!enabled) {
+    return (
+      <div className="flex min-w-0 items-center justify-between gap-4 text-[var(--ink)]/30">
+        <span className="flex items-center gap-3 text-[11px] uppercase tracking-[0.18em]">
+          {icon}
+          {label}
+        </span>
+        <span className="truncate text-[12px] italic">{value}</span>
+      </div>
+    );
+  }
+
+  return (
+    <a
+      href={href}
+      download={download}
+      className="focus-cream flex min-w-0 items-center justify-between gap-4 text-[var(--ink)]/55 transition hover:text-[var(--ink)]"
+    >
+      <span className="flex items-center gap-3 text-[11px] uppercase tracking-[0.18em]">
+        {icon}
+        {label}
+      </span>
+      <span className="truncate text-[12px] text-[var(--ink)]/35">
+        {value}
+      </span>
+    </a>
+  );
+}
+
 function Stat({
   label,
   value,
@@ -2100,6 +2154,20 @@ function PhoneIcon() {
   );
 }
 
+function ContactIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+      <path
+        d="M4 3.25h6a1 1 0 011 1v6.5a1 1 0 01-1 1H4a1 1 0 01-1-1v-6.5a1 1 0 011-1zM5.5 2.25h3M5.25 9.75a2.25 2.25 0 013.5 0M7 7.5a1.25 1.25 0 100-2.5 1.25 1.25 0 000 2.5z"
+        stroke="currentColor"
+        strokeWidth="1.1"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 function MailIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
@@ -2157,6 +2225,78 @@ function mailtoHref(email: string | null | undefined, name: string | null, ident
   const { subject, body } = buildEmailDraft(name, identity, slotsLine);
   const query = `subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   return `mailto:${email}?${query}`;
+}
+
+function canSaveContact(lead: Lead) {
+  return Boolean(lead.name || lead.company || lead.phone || lead.email);
+}
+
+function contactSummary(lead: Lead) {
+  const parts = [lead.phone ? formatPhone(lead.phone) : null, lead.email]
+    .filter(Boolean);
+  return parts.length > 0 ? parts.join(" · ") : "Kontaktinfo mangler";
+}
+
+function contactFilename(lead: Lead) {
+  const base = slugify(`${lead.name ?? lead.company ?? "lead"}-${lead.id.slice(0, 8)}`);
+  return `${base || "lead"}.vcf`;
+}
+
+function contactHref(lead: Lead) {
+  return `data:text/vcard;charset=utf-8,${encodeURIComponent(buildVCard(lead))}`;
+}
+
+function buildVCard(lead: Lead) {
+  const displayName = normalizeTextForVCard(
+    lead.name ?? lead.company ?? lead.email ?? lead.phone ?? "Lead",
+  );
+  const company = normalizeTextForVCard(lead.company ?? "");
+  const email = normalizeTextForVCard(lead.email ?? "");
+  const phone = normalizeTextForVCard(lead.phone ?? "");
+  const note = normalizeTextForVCard(
+    [
+      "Lead fra CarterCo",
+      lead.monthly_leads ? `Volumen: ${lead.monthly_leads}` : null,
+      lead.response_time ? `Respons: ${lead.response_time}` : null,
+      lead.notes ? `Noter: ${lead.notes}` : null,
+    ]
+      .filter(Boolean)
+      .join("\n"),
+  );
+
+  return [
+    "BEGIN:VCARD",
+    "VERSION:3.0",
+    `FN:${escapeVCard(displayName)}`,
+    company ? `ORG:${escapeVCard(company)}` : null,
+    phone ? `TEL;TYPE=CELL:${escapeVCard(phone)}` : null,
+    email ? `EMAIL;TYPE=INTERNET:${escapeVCard(email)}` : null,
+    note ? `NOTE:${escapeVCard(note)}` : null,
+    `REV:${new Date().toISOString()}`,
+    "END:VCARD",
+  ]
+    .filter(Boolean)
+    .join("\r\n");
+}
+
+function normalizeTextForVCard(value: string) {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function escapeVCard(value: string) {
+  return value
+    .replace(/\\/g, "\\\\")
+    .replace(/\n/g, "\\n")
+    .replace(/;/g, "\\;")
+    .replace(/,/g, "\\,");
+}
+
+function slugify(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9æøå]+/gi, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
 }
 
 // Pick the biggest free block per day, then format Danish prose:

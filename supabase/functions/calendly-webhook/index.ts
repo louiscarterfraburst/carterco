@@ -17,6 +17,7 @@ type InviteePayload = {
     start_time?: string;
     end_time?: string;
     name?: string;
+    event_memberships?: { user_email?: string; user_name?: string }[];
   };
   questions_and_answers?: { question: string; answer: string }[];
 };
@@ -69,6 +70,31 @@ Deno.serve(async (request) => {
   const eventUri = invitee.scheduled_event?.uri ?? null;
   const startAt = invitee.scheduled_event?.start_time ?? null;
   const inviteeUri = invitee.uri ?? null;
+  const hostEmail = (invitee.scheduled_event?.event_memberships?.[0]?.user_email ?? "")
+    .trim()
+    .toLowerCase();
+
+  // Resolve which workspace this booking belongs to.
+  // Priority: matched-lead's workspace → host's user_settings.workspace_id →
+  // CARTERCO_DEFAULT_WORKSPACE_ID env → CarterCo (owner_email lookup).
+  async function resolveDefaultWorkspaceId(): Promise<string | null> {
+    if (hostEmail) {
+      const { data: hostSettings } = await supabase
+        .from("user_settings")
+        .select("workspace_id")
+        .eq("user_email", hostEmail)
+        .maybeSingle();
+      if (hostSettings?.workspace_id) return hostSettings.workspace_id;
+    }
+    const envFallback = Deno.env.get("CARTERCO_DEFAULT_WORKSPACE_ID");
+    if (envFallback) return envFallback;
+    const { data: ws } = await supabase
+      .from("workspaces")
+      .select("id")
+      .eq("owner_email", "louis@carterco.dk")
+      .maybeSingle();
+    return ws?.id ?? null;
+  }
 
   if (body.event === "invitee.created") {
     if (!email) return json({ error: "Invitee missing email" }, 400);
@@ -76,7 +102,7 @@ Deno.serve(async (request) => {
     // Find a matching real lead (not a draft) by email
     const { data: existing, error: selectErr } = await supabase
       .from("leads")
-      .select("id")
+      .select("id, workspace_id")
       .eq("is_draft", false)
       .ilike("email", email)
       .limit(1);
@@ -85,25 +111,32 @@ Deno.serve(async (request) => {
     const nowIso = new Date().toISOString();
 
     if (existing && existing.length > 0) {
+      // Preserve the lead's existing workspace (already set by /outreach,
+      // /leads, or an earlier insert). Only set if NULL (legacy rows).
+      const updatePayload: Record<string, unknown> = {
+        outcome: "booked",
+        outcome_at: nowIso,
+        meeting_at: startAt,
+        calendly_event_uri: eventUri,
+        calendly_invitee_uri: inviteeUri,
+        // Booking supersedes any pending retry / interested nudge.
+        next_action_at: null,
+        next_action_type: null,
+        callback_at: null,
+        retry_count: 0,
+        last_action_fired_at: null,
+      };
+      if (!existing[0].workspace_id) {
+        updatePayload.workspace_id = await resolveDefaultWorkspaceId();
+      }
       const { error: updateErr } = await supabase
         .from("leads")
-        .update({
-          outcome: "booked",
-          outcome_at: nowIso,
-          meeting_at: startAt,
-          calendly_event_uri: eventUri,
-          calendly_invitee_uri: inviteeUri,
-          // Booking supersedes any pending retry / interested nudge.
-          next_action_at: null,
-          next_action_type: null,
-          callback_at: null,
-          retry_count: 0,
-          last_action_fired_at: null,
-        })
+        .update(updatePayload)
         .eq("id", existing[0].id);
       if (updateErr) return json({ error: updateErr.message }, 500);
     } else {
       // No matching real lead — create one so the booking appears in /leads
+      const workspaceId = await resolveDefaultWorkspaceId();
       const { error: insertErr } = await supabase.from("leads").insert({
         name,
         email,
@@ -114,6 +147,7 @@ Deno.serve(async (request) => {
         meeting_at: startAt,
         calendly_event_uri: eventUri,
         calendly_invitee_uri: inviteeUri,
+        workspace_id: workspaceId,
       });
       if (insertErr) return json({ error: insertErr.message }, 500);
     }

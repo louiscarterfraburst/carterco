@@ -3,6 +3,7 @@ import webpush from "npm:web-push@3.6.7";
 
 type Lead = {
   id?: string;
+  workspace_id?: string | null;
   name?: string | null;
   company?: string | null;
   email?: string | null;
@@ -86,9 +87,15 @@ Deno.serve(async (request) => {
     },
   });
 
+  const workspaceId = await resolveLeadWorkspaceId(supabase, lead);
+  if (!workspaceId) {
+    return json({ error: "Missing lead workspace_id" }, 400);
+  }
+
   const { data: subscriptions, error } = await supabase
     .from("push_subscriptions")
-    .select("endpoint, p256dh, auth");
+    .select("endpoint, p256dh, auth")
+    .eq("workspace_id", workspaceId);
 
   if (error) {
     return json({ error: error.message }, 500);
@@ -155,6 +162,21 @@ Deno.serve(async (request) => {
     removed: expiredEndpoints.length,
   });
 });
+
+async function resolveLeadWorkspaceId(
+  supabase: ReturnType<typeof createClient>,
+  lead: Lead,
+): Promise<string | null> {
+  if (lead.workspace_id) return lead.workspace_id;
+  if (!lead.id) return null;
+
+  const { data } = await supabase
+    .from("leads")
+    .select("workspace_id")
+    .eq("id", lead.id)
+    .maybeSingle();
+  return data?.workspace_id ?? null;
+}
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {

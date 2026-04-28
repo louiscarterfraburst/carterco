@@ -10,6 +10,7 @@ type PipelineRow = {
   linkedin_url: string;
   status: string;
   contact_email: string | null;
+  workspace_id: string | null;
 };
 
 type WebhookPayload = {
@@ -79,6 +80,10 @@ Deno.serve(async (request) => {
     .select("first_name, last_name, company")
     .eq("contact_email", body.record.contact_email ?? "")
     .maybeSingle();
+  const workspaceId = body.record.workspace_id;
+  if (!workspaceId) {
+    return json({ error: "Missing outreach workspace_id" }, 400);
+  }
 
   const firstName = (lead?.first_name ?? "").trim() || "(?)";
   const company = (lead?.company ?? "").trim();
@@ -89,7 +94,8 @@ Deno.serve(async (request) => {
 
   const { data: subscriptions, error } = await supabase
     .from("push_subscriptions")
-    .select("endpoint, p256dh, auth");
+    .select("endpoint, p256dh, auth")
+    .eq("workspace_id", workspaceId);
   if (error) return json({ error: error.message }, 500);
 
   const payload = JSON.stringify({

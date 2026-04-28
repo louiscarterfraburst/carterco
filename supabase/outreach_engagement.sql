@@ -73,10 +73,11 @@ create index if not exists idx_outreach_engagement_actions_workspace
 alter table public.outreach_engagement_actions enable row level security;
 
 drop policy if exists outreach_engagement_actions_owner_all on public.outreach_engagement_actions;
-create policy outreach_engagement_actions_owner_all on public.outreach_engagement_actions
+drop policy if exists outreach_engagement_actions_workspace_all on public.outreach_engagement_actions;
+create policy outreach_engagement_actions_workspace_all on public.outreach_engagement_actions
     for all to authenticated
-    using ((auth.jwt() ->> 'email') in ('louis@carterco.dk','rm@tresyv.dk','haugefrom@haugefrom.com'))
-    with check ((auth.jwt() ->> 'email') in ('louis@carterco.dk','rm@tresyv.dk','haugefrom@haugefrom.com'));
+    using (workspace_id in (select public.auth_workspace_ids()))
+    with check (workspace_id in (select public.auth_workspace_ids()));
 
 -- 3. Instant trigger: fire worker on cta_clicked / render_failed transitions --
 create or replace function public.outreach_engagement_instant_tick()

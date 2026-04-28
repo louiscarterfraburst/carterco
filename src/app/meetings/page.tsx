@@ -4,6 +4,7 @@ import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/utils/supabase/client";
+import { useWorkspace } from "@/utils/workspace";
 
 type Meeting = {
   id: string;
@@ -18,13 +19,12 @@ type Meeting = {
   created_at: string;
 };
 
-const allowedEmail = "louis@carterco.dk";
-
 export default function MeetingsPage() {
   const supabase = useMemo(() => createClient(), []);
   const [user, setUser] = useState<User | null>(null);
-  const [email, setEmail] = useState(allowedEmail);
+  const [email, setEmail] = useState("");
   const [token, setToken] = useState("");
+  const { workspace, loading: workspaceLoading } = useWorkspace(supabase, user);
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
@@ -75,13 +75,14 @@ export default function MeetingsPage() {
     setError(null);
     setMessage(null);
 
-    if (email.trim().toLowerCase() !== allowedEmail) {
-      setError("Denne side er kun for CarterCo.");
+    const trimmed = email.trim().toLowerCase();
+    if (!trimmed) {
+      setError("Indtast din e-mail.");
       return;
     }
 
     const { error } = await supabase.auth.signInWithOtp({
-      email: email.trim().toLowerCase(),
+      email: trimmed,
       options: { shouldCreateUser: false },
     });
     if (error) {
@@ -226,8 +227,28 @@ export default function MeetingsPage() {
           </section>
 
           <p className="tabular text-[10px] uppercase tracking-[0.28em] text-[var(--ink)]/25">
-            {new Date().getFullYear()} · Kun for {allowedEmail}
+            {new Date().getFullYear()} · CarterCo
           </p>
+        </div>
+      </main>
+    );
+  }
+
+  if (!workspaceLoading && !workspace) {
+    return (
+      <main className="safe-screen safe-pad-top safe-pad-bottom safe-px relative min-h-screen overflow-hidden bg-[var(--sand)] text-[var(--ink)]">
+        <div className="grain-overlay" />
+        <div className="relative mx-auto flex min-h-screen w-full max-w-md flex-col justify-between px-6 py-8 sm:py-10">
+          <Link href="/" className="tabular text-[10px] uppercase tracking-[0.35em] text-[var(--ink)]/45">CarterCo · Møder</Link>
+          <section>
+            <p className="tabular text-[10px] uppercase tracking-[0.32em] text-[var(--ink)]/40">Ingen workspace</p>
+            <h1 className="font-display mt-4 text-5xl italic leading-[0.9] tracking-[-0.02em] text-[var(--ink)]">Adgang afventer</h1>
+            <p className="mt-6 max-w-xs text-sm leading-relaxed text-[var(--ink)]/55">
+              Din e-mail er ikke tilknyttet noget workspace endnu. Kontakt support, så får du adgang.
+            </p>
+            <button onClick={() => void signOut()} className="focus-cream mt-8 tabular text-[11px] uppercase tracking-[0.22em] text-[var(--ink)]/70 hover:underline">Log ud →</button>
+          </section>
+          <p className="tabular text-[10px] uppercase tracking-[0.28em] text-[var(--ink)]/25">{user.email}</p>
         </div>
       </main>
     );

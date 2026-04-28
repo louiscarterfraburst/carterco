@@ -46,10 +46,8 @@ alter table public.user_busy_intervals enable row level security;
 drop policy if exists user_settings_self on public.user_settings;
 create policy user_settings_self on public.user_settings
     for all to authenticated
-    using ((auth.jwt() ->> 'email') = user_email
-        and (auth.jwt() ->> 'email') in ('louis@carterco.dk','rm@tresyv.dk','haugefrom@haugefrom.com'))
-    with check ((auth.jwt() ->> 'email') = user_email
-        and (auth.jwt() ->> 'email') in ('louis@carterco.dk','rm@tresyv.dk','haugefrom@haugefrom.com'));
+    using ((auth.jwt() ->> 'email') = user_email)
+    with check ((auth.jwt() ->> 'email') = user_email);
 
 drop policy if exists user_busy_self on public.user_busy_intervals;
 create policy user_busy_self on public.user_busy_intervals

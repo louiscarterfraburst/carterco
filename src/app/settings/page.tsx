@@ -4,11 +4,11 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/utils/supabase/client";
-
-const ALLOWED_EMAILS = ["louis@carterco.dk", "rm@tresyv.dk", "haugefrom@haugefrom.com"];
+import { useWorkspace } from "@/utils/workspace";
 
 type Settings = {
   user_email: string;
+  workspace_id: string | null;
   ical_url: string | null;
   business_hours_start: string;
   business_hours_end: string;
@@ -31,13 +31,17 @@ const DAY_LABELS = ["Man", "Tir", "Ons", "Tor", "Fre", "Lør", "Søn"];
 export default function SettingsPage() {
   const supabase = useMemo(() => createClient(), []);
   const [user, setUser] = useState<User | null>(null);
-  const [email, setEmail] = useState(ALLOWED_EMAILS[0]);
+  const [email, setEmail] = useState("");
   const [token, setToken] = useState("");
   const [loading, setLoading] = useState(true);
   const [s, setS] = useState<Settings | null>(null);
   const [busy, setBusy] = useState(false);
   const [info, setInfo] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const { workspace, loading: workspaceLoading } = useWorkspace(supabase, user);
+  const settings = s && !s.workspace_id && workspace?.id
+    ? { ...s, workspace_id: workspace.id }
+    : s;
 
   useEffect(() => {
     let mounted = true;
@@ -57,24 +61,26 @@ export default function SettingsPage() {
     if (!user?.email) return;
     const { data, error } = await supabase.from("user_settings").select("*").eq("user_email", user.email).maybeSingle();
     if (error) { setErr(error.message); return; }
-    setS(data ?? defaultSettings(user.email));
+    setS(data ?? defaultSettings(user.email, workspace?.id ?? null));
   }
 
   async function save(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!s) return;
+    if (!settings) return;
     setBusy(true); setErr(null); setInfo(null);
-    const { error } = await supabase.from("user_settings").upsert(s, { onConflict: "user_email" });
+    const payload = { ...settings, workspace_id: settings.workspace_id ?? workspace?.id ?? null };
+    const { error } = await supabase.from("user_settings").upsert(payload, { onConflict: "user_email" });
     setBusy(false);
     if (error) setErr(error.message);
     else { setInfo("Gemt."); await load(); }
   }
 
   async function syncNow() {
-    if (!s) return;
+    if (!settings) return;
     setBusy(true); setErr(null); setInfo(null);
     // Save first so cal-poll has the URL to fetch.
-    const { error: saveErr } = await supabase.from("user_settings").upsert(s, { onConflict: "user_email" });
+    const payload = { ...settings, workspace_id: settings.workspace_id ?? workspace?.id ?? null };
+    const { error: saveErr } = await supabase.from("user_settings").upsert(payload, { onConflict: "user_email" });
     if (saveErr) { setBusy(false); setErr(saveErr.message); return; }
 
     const { data, error } = await supabase.functions.invoke("cal-poll", { body: {} });
@@ -91,7 +97,7 @@ export default function SettingsPage() {
   async function sendOtp(e: FormEvent<HTMLFormElement>) {
     e.preventDefault(); setErr(null); setInfo(null);
     const t = email.trim().toLowerCase();
-    if (!ALLOWED_EMAILS.includes(t)) { setErr("Ukendt e-mail."); return; }
+    if (!t) { setErr("Indtast din e-mail."); return; }
     const { error } = await supabase.auth.signInWithOtp({ email: t, options: { shouldCreateUser: false } });
     if (error) setErr(error.message); else setInfo("Tjek din mail for kode.");
   }
@@ -148,6 +154,34 @@ export default function SettingsPage() {
     );
   }
 
+  if (workspaceLoading) {
+    return (
+      <main className="safe-screen flex min-h-screen items-center justify-center bg-[var(--sand)] px-6 text-[var(--ink)]">
+        <p className="tabular text-[11px] uppercase tracking-[0.4em] text-[var(--ink)]/40">Finder workspace</p>
+      </main>
+    );
+  }
+
+  if (!workspace) {
+    return (
+      <main className="safe-screen safe-pad-top safe-pad-bottom safe-px relative min-h-screen overflow-hidden bg-[var(--sand)] text-[var(--ink)]">
+        <div className="grain-overlay" />
+        <div className="relative mx-auto flex min-h-screen w-full max-w-md flex-col justify-between px-6 py-8 sm:py-10">
+          <Link href="/" className="tabular text-[10px] uppercase tracking-[0.35em] text-[var(--ink)]/45">CarterCo · Settings</Link>
+          <section>
+            <p className="tabular text-[10px] uppercase tracking-[0.32em] text-[var(--ink)]/40">Ingen workspace</p>
+            <h1 className="font-display mt-4 text-5xl italic leading-[0.9] tracking-[-0.02em] text-[var(--ink)]">Adgang afventer</h1>
+            <p className="mt-6 max-w-xs text-sm leading-relaxed text-[var(--ink)]/55">
+              Din e-mail er ikke tilknyttet noget workspace endnu. Kontakt support, så får du adgang.
+            </p>
+            <button onClick={() => void signOut()} className="focus-cream mt-8 tabular text-[11px] uppercase tracking-[0.22em] text-[var(--ink)]/70 hover:underline">Log ud →</button>
+          </section>
+          <p className="tabular text-[10px] uppercase tracking-[0.28em] text-[var(--ink)]/25">{user.email}</p>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="safe-screen safe-pad-bottom relative min-h-screen overflow-x-hidden bg-[var(--sand)] text-[var(--ink)]">
       <div className="grain-overlay" />
@@ -171,7 +205,7 @@ export default function SettingsPage() {
       {err ? <Banner kind="error">{err}</Banner> : null}
 
       <section className="mx-auto w-full max-w-[800px] px-4 pb-12 sm:px-8">
-        {!s ? <p className="text-sm text-[var(--ink)]/45">Indlæser indstillinger…</p> : (
+        {!settings ? <p className="text-sm text-[var(--ink)]/45">Indlæser indstillinger…</p> : (
           <form onSubmit={save} className="flex flex-col gap-8">
             <div>
               <h2 className="tabular text-[11px] uppercase tracking-[0.28em] text-[var(--ink)]/55">Identitet</h2>
@@ -180,22 +214,22 @@ export default function SettingsPage() {
               </p>
               <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <Field label="Fornavn">
-                  <input type="text" value={s.display_name ?? ""} onChange={(e) => setS({ ...s, display_name: e.target.value })}
+                  <input type="text" value={settings.display_name ?? ""} onChange={(e) => setS({ ...settings, display_name: e.target.value })}
                     placeholder="Louis"
                     className="focus-cream tabular w-full rounded-sm border border-[var(--ink)]/15 bg-transparent px-3 py-2 text-sm outline-none focus:border-[var(--ink)]/35" />
                 </Field>
                 <Field label="Firma">
-                  <input type="text" value={s.company_name ?? ""} onChange={(e) => setS({ ...s, company_name: e.target.value })}
+                  <input type="text" value={settings.company_name ?? ""} onChange={(e) => setS({ ...settings, company_name: e.target.value })}
                     placeholder="CarterCo"
                     className="focus-cream tabular w-full rounded-sm border border-[var(--ink)]/15 bg-transparent px-3 py-2 text-sm outline-none focus:border-[var(--ink)]/35" />
                 </Field>
                 <Field label="Calendly-link">
-                  <input type="url" value={s.calendly_url ?? ""} onChange={(e) => setS({ ...s, calendly_url: e.target.value })}
+                  <input type="url" value={settings.calendly_url ?? ""} onChange={(e) => setS({ ...settings, calendly_url: e.target.value })}
                     placeholder="https://calendly.com/dit-navn/30min"
                     className="focus-cream tabular w-full rounded-sm border border-[var(--ink)]/15 bg-transparent px-3 py-2 text-sm outline-none focus:border-[var(--ink)]/35" />
                 </Field>
                 <Field label="Signatur (vises som /Navn)">
-                  <input type="text" value={s.signoff ?? ""} onChange={(e) => setS({ ...s, signoff: e.target.value })}
+                  <input type="text" value={settings.signoff ?? ""} onChange={(e) => setS({ ...settings, signoff: e.target.value })}
                     placeholder="Louis"
                     className="focus-cream tabular w-full rounded-sm border border-[var(--ink)]/15 bg-transparent px-3 py-2 text-sm outline-none focus:border-[var(--ink)]/35" />
                 </Field>
@@ -208,42 +242,42 @@ export default function SettingsPage() {
                 Hent din private iCal-URL i Google Calendar → Indstillinger → din kalender → <em>Hemmelig adresse i iCal-format</em>.
                 Brug formatet <code>https://calendar.google.com/.../basic.ics</code>.
               </p>
-              <input type="url" value={s.ical_url ?? ""} onChange={(e) => setS({ ...s, ical_url: e.target.value })}
+              <input type="url" value={settings.ical_url ?? ""} onChange={(e) => setS({ ...settings, ical_url: e.target.value })}
                 placeholder="https://calendar.google.com/calendar/ical/.../private-…/basic.ics"
                 className="focus-cream tabular mt-3 w-full rounded-sm border border-[var(--ink)]/15 bg-transparent px-3 py-2 text-sm text-[var(--ink)] outline-none focus:border-[var(--ink)]/35" />
               <div className="mt-2 flex flex-wrap items-center gap-3 text-[12px] text-[var(--ink)]/55">
-                <button type="button" disabled={busy || !s.ical_url} onClick={() => void syncNow()}
+                <button type="button" disabled={busy || !settings.ical_url} onClick={() => void syncNow()}
                   className="focus-cream tabular rounded-sm border border-[var(--ink)]/15 px-3 py-1.5 text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/65 hover:border-[var(--ink)]/35 hover:text-[var(--ink)] disabled:opacity-40">
                   {busy ? "Synkroniserer…" : "Synkronisér nu"}
                 </button>
-                {s.last_synced_at ? <span>Senest: {new Date(s.last_synced_at).toLocaleString("da-DK")}</span> : null}
-                {s.last_sync_error ? <span className="text-[var(--clay)]">Fejl: {s.last_sync_error}</span> : null}
+                {settings.last_synced_at ? <span>Senest: {new Date(settings.last_synced_at).toLocaleString("da-DK")}</span> : null}
+                {settings.last_sync_error ? <span className="text-[var(--clay)]">Fejl: {settings.last_sync_error}</span> : null}
               </div>
             </div>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label="Arbejdstid start">
-                <input type="time" value={s.business_hours_start.slice(0,5)} onChange={(e) => setS({ ...s, business_hours_start: e.target.value + ":00" })}
+                <input type="time" value={settings.business_hours_start.slice(0,5)} onChange={(e) => setS({ ...settings, business_hours_start: e.target.value + ":00" })}
                   className="focus-cream tabular w-full rounded-sm border border-[var(--ink)]/15 bg-transparent px-3 py-2 text-sm outline-none focus:border-[var(--ink)]/35" />
               </Field>
               <Field label="Arbejdstid slut">
-                <input type="time" value={s.business_hours_end.slice(0,5)} onChange={(e) => setS({ ...s, business_hours_end: e.target.value + ":00" })}
+                <input type="time" value={settings.business_hours_end.slice(0,5)} onChange={(e) => setS({ ...settings, business_hours_end: e.target.value + ":00" })}
                   className="focus-cream tabular w-full rounded-sm border border-[var(--ink)]/15 bg-transparent px-3 py-2 text-sm outline-none focus:border-[var(--ink)]/35" />
               </Field>
               <Field label="Mødelængde (min)">
-                <input type="number" min={15} max={240} step={15} value={s.slot_duration_minutes} onChange={(e) => setS({ ...s, slot_duration_minutes: Number(e.target.value) })}
+                <input type="number" min={15} max={240} step={15} value={settings.slot_duration_minutes} onChange={(e) => setS({ ...settings, slot_duration_minutes: Number(e.target.value) })}
                   className="focus-cream tabular w-full rounded-sm border border-[var(--ink)]/15 bg-transparent px-3 py-2 text-sm outline-none focus:border-[var(--ink)]/35" />
               </Field>
               <Field label="Antal forslag">
-                <input type="number" min={1} max={5} value={s.suggest_count} onChange={(e) => setS({ ...s, suggest_count: Number(e.target.value) })}
+                <input type="number" min={1} max={5} value={settings.suggest_count} onChange={(e) => setS({ ...settings, suggest_count: Number(e.target.value) })}
                   className="focus-cream tabular w-full rounded-sm border border-[var(--ink)]/15 bg-transparent px-3 py-2 text-sm outline-none focus:border-[var(--ink)]/35" />
               </Field>
               <Field label="Look-ahead (dage)">
-                <input type="number" min={1} max={30} value={s.suggest_lookahead_days} onChange={(e) => setS({ ...s, suggest_lookahead_days: Number(e.target.value) })}
+                <input type="number" min={1} max={30} value={settings.suggest_lookahead_days} onChange={(e) => setS({ ...settings, suggest_lookahead_days: Number(e.target.value) })}
                   className="focus-cream tabular w-full rounded-sm border border-[var(--ink)]/15 bg-transparent px-3 py-2 text-sm outline-none focus:border-[var(--ink)]/35" />
               </Field>
               <Field label="Min. forberedelse (timer)">
-                <input type="number" min={0} max={48} value={s.suggest_min_lead_hours} onChange={(e) => setS({ ...s, suggest_min_lead_hours: Number(e.target.value) })}
+                <input type="number" min={0} max={48} value={settings.suggest_min_lead_hours} onChange={(e) => setS({ ...settings, suggest_min_lead_hours: Number(e.target.value) })}
                   className="focus-cream tabular w-full rounded-sm border border-[var(--ink)]/15 bg-transparent px-3 py-2 text-sm outline-none focus:border-[var(--ink)]/35" />
               </Field>
             </div>
@@ -252,12 +286,12 @@ export default function SettingsPage() {
               <div className="flex flex-wrap gap-1.5">
                 {DAY_LABELS.map((d, i) => {
                   const dayNum = i + 1;
-                  const active = s.business_days.includes(dayNum);
+                  const active = settings.business_days.includes(dayNum);
                   return (
                     <button key={d} type="button"
                       onClick={() => {
-                        const next = active ? s.business_days.filter((x) => x !== dayNum) : [...s.business_days, dayNum].sort();
-                        setS({ ...s, business_days: next });
+                        const next = active ? settings.business_days.filter((x) => x !== dayNum) : [...settings.business_days, dayNum].sort();
+                        setS({ ...settings, business_days: next });
                       }}
                       className={`tabular rounded-sm border px-3 py-1.5 text-[11px] uppercase tracking-[0.22em] transition ${
                         active ? "border-[var(--forest)]/60 bg-[var(--forest)]/10 text-[var(--forest)]"
@@ -299,9 +333,10 @@ function Banner({ kind, children }: { kind: "info" | "error"; children: React.Re
   );
 }
 
-function defaultSettings(email: string): Settings {
+function defaultSettings(email: string, workspaceId: string | null): Settings {
   return {
     user_email: email,
+    workspace_id: workspaceId,
     ical_url: null,
     business_hours_start: "09:00:00",
     business_hours_end: "17:00:00",
