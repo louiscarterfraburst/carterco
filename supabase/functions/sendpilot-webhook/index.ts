@@ -154,22 +154,24 @@ Deno.serve(async (request) => {
     }
 
     // Fire intent classification (best effort).
-    classifyReplyAsync(replyRow.id, replyText, leadId, lead);
+    // Keep the runtime alive while we classify after responding.
+    // deno-lint-ignore no-explicit-any
+    const er: any = (globalThis as any).EdgeRuntime;
+    const task = classifyReplyAsync(replyRow.id, replyText, leadId, lead);
+    if (er && typeof er.waitUntil === "function") er.waitUntil(task);
     return json({ ok: true, recorded: "reply", replyId: replyRow.id });
   }
 
   return json({ ok: true, ignored: evt.eventType });
 });
 
-function classifyReplyAsync(
+async function classifyReplyAsync(
   replyId: string,
   text: string,
   leadId: string,
   lead: { first_name?: string; company?: string } | null,
-) {
-  // Don't await — let the response return immediately.
-  (async () => {
-    try {
+): Promise<void> {
+  try {
       const url = `${Deno.env.get("SUPABASE_URL")}/functions/v1/outreach-ai?op=classify_reply`;
       const res = await fetch(url, {
         method: "POST",
@@ -202,10 +204,9 @@ function classifyReplyAsync(
         last_reply_at: now,
         last_reply_intent: j.intent,
       }).eq("sendpilot_lead_id", leadId);
-    } catch (e) {
-      console.error("classifyReplyAsync error", e);
-    }
-  })();
+  } catch (e) {
+    console.error("classifyReplyAsync error", e);
+  }
 }
 
 async function lookupLead(sendpilotLeadId: string, linkedinUrl: string) {

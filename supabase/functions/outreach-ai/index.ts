@@ -23,9 +23,14 @@ const ALLOWED_USERS = new Set([
 ]);
 
 const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY") ?? "";
+const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
 type ReplyIntent = "interested" | "question" | "decline" | "ooo" | "other";
 
+// Deployed with verify_jwt=false because we have two valid caller types:
+// - the service-role bearer (sendpilot-webhook calling internally), which
+//   is not a user JWT and so fails the gateway's user-JWT check.
+// - the UI's user JWT, which we validate ourselves below.
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
@@ -34,18 +39,18 @@ Deno.serve(async (req) => {
     return json({ error: "ANTHROPIC_API_KEY not configured on this function" }, 500);
   }
 
-  // Authorisation: edge runtime already verified the JWT signature.
-  // We additionally check that human callers are workspace-allowed; service
-  // role bypasses the email check (no `email` claim).
   const authHeader = req.headers.get("Authorization") ?? "";
   const token = authHeader.replace(/^Bearer\s+/i, "");
-  const userClient = createClient(
-    Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_ANON_KEY") ?? "",
-    { global: { headers: { Authorization: `Bearer ${token}` } } },
-  );
-  const { data: { user } } = await userClient.auth.getUser();
-  if (user) {
+  if (!token) return json({ error: "missing bearer" }, 401);
+  const isServiceRole = token === SERVICE_ROLE;
+  if (!isServiceRole) {
+    const userClient = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+      { global: { headers: { Authorization: `Bearer ${token}` } } },
+    );
+    const { data: { user }, error: userErr } = await userClient.auth.getUser();
+    if (userErr || !user) return json({ error: "invalid auth" }, 401);
     const email = (user.email ?? "").toLowerCase();
     if (!ALLOWED_USERS.has(email)) return json({ error: "forbidden" }, 403);
   }
