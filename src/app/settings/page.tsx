@@ -67,7 +67,12 @@ export default function SettingsPage() {
   }
 
   async function syncNow() {
+    if (!s) return;
     setBusy(true); setErr(null); setInfo(null);
+    // Save first so cal-poll has the URL to fetch.
+    const { error: saveErr } = await supabase.from("user_settings").upsert(s, { onConflict: "user_email" });
+    if (saveErr) { setBusy(false); setErr(saveErr.message); return; }
+
     const { data, error } = await supabase.functions.invoke("cal-poll", { body: {} });
     setBusy(false);
     if (error) setErr(error.message ?? String(error));
