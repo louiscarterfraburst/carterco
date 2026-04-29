@@ -27,7 +27,8 @@ type Status =
   | "pending_approval"
   | "sent"
   | "rejected"
-  | "failed";
+  | "failed"
+  | "pre_connected";
 
 type Intent = "interested" | "question" | "decline" | "ooo" | "other";
 
@@ -925,6 +926,7 @@ function StatusPill({ status }: { status: Status }) {
     sent: { label: "Sendt", bg: "rgba(35,90,67,0.14)", fg: "var(--forest)" },
     rejected: { label: "Afvist", bg: "rgb(0 0 0 / .06)", fg: "rgb(0 0 0 / .45)" },
     failed: { label: "Fejl", bg: "rgba(185,112,65,0.14)", fg: "var(--clay)" },
+    pre_connected: { label: "Eksisterende", bg: "rgba(35,90,67,0.10)", fg: "var(--forest)" },
   };
   const s = map[status];
   return (
