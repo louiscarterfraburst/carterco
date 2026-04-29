@@ -90,7 +90,8 @@ type SequenceStep = {
 
 | ID | Trigger | Description | Steps |
 |----|---------|-------------|-------|
-| `watched_followup_v1` | `watched_end` | Lead watched the video to the end. Wait ~2 min, then queue a single concrete sparring follow-up. Single step, single branch, no fallback. | `watched_2min` (queue_approval) |
+| `watched_followup_v1` | `played` | Lead played the video. Two-step warm path. | `nysgerrig` (+20 min, queue_approval) → `kalender` (+72h, queue_approval) |
+| `unwatched_followup_v1` | `sent` | Lead got the video but hasn't played. Quick qualifier + final graceful exit. Excludes `replied` and `played` (played leads re-enrol in watched). | `qualifier` (+24h, queue_approval) → `graceful_exit` (+72h, queue_approval) |
 
 ## 5. How to add a sequence
 

@@ -149,7 +149,28 @@ async function evaluateLead(row: PipelineRow, bypassWait: boolean): Promise<numb
     const signals = signalsForLead(row);
     const now = new Date();
 
-    // Already completed — nothing to do.
+    // Re-enrolment: lead has finished a sequence and a *different* one's
+    // trigger now matches. Common case: enrolled in unwatched_followup,
+    // played the video later, was excluded out → eligible for watched_followup.
+    if (row.sequence_id && row.sequence_completed_at) {
+        const next = findEnrolmentMatch(signals);
+        if (!next || next.id === row.sequence_id) return 0;
+        const firstStep = next.steps[0];
+        if (!firstStep) return 0;
+        const excludes = effectiveExcludes(next, firstStep);
+        if (excludes.some((s) => signals[s])) return 0;
+        await supabase.from("outreach_pipeline").update({
+            sequence_id: next.id,
+            sequence_step: 0,
+            sequence_started_at: now.toISOString(),
+            sequence_step_entered_at: now.toISOString(),
+            sequence_parked_until: addHours(now, firstStep.waitHours).toISOString(),
+            sequence_completed_at: null,
+        }).eq("sendpilot_lead_id", row.sendpilot_lead_id);
+        return 0;
+    }
+
+    // Already completed and no other sequence matches — nothing to do.
     if (row.sequence_completed_at) return 0;
 
     // 1. Enrolment: lead not yet in any sequence.
@@ -203,8 +224,13 @@ async function evaluateLead(row: PipelineRow, bypassWait: boolean): Promise<numb
     const waitDeadline = addHours(enteredAt, step.waitHours);
     const maxWaitDeadline = addHours(enteredAt, step.maxWaitHours ?? step.waitHours);
 
-    if (!bypassWait && now < waitDeadline) {
-        // Re-park at the wait deadline if we drifted.
+    // Lead-mode bypass only applies to step 0 (the step the lead just
+    // entered via enrolment). Subsequent steps must respect their wait
+    // gate even when called from an instant DB trigger — otherwise an
+    // unrelated signal (e.g. cta_clicked) would prematurely fire later
+    // steps that have unconditional branches.
+    const allowBypass = bypassWait && stepIdx === 0;
+    if (!allowBypass && now < waitDeadline) {
         const parkIso = waitDeadline.toISOString();
         if (row.sequence_parked_until !== parkIso) {
             await supabase.from("outreach_pipeline")

@@ -36,16 +36,18 @@ export type Sequence = {
 export const DEFAULT_GLOBAL_EXCLUDES: Signal[] = ["replied"];
 
 // Active sequences. Order matters: enrolment picks the first matching one.
+// Order matters: enrolment picks the first matching sequence. Watched MUST
+// come first so a lead with both `sent` and `played` lands in the watched
+// flow rather than the unwatched flow.
 export const SEQUENCES: Sequence[] = [
     {
         id: "watched_followup_v1",
         description:
-            "Lead watched the video to the end — react ~20 min later with a " +
-            "casual nysgerrig follow-up. Single step, single branch, no fallback.",
-        trigger: { signal: "watched_end" },
+            "Lead played the video — react fast (20 min), then bump 3 days later if no reply.",
+        trigger: { signal: "played" },
         steps: [
             {
-                id: "watched_2min", // id stable from v1; timing is now 20 min
+                id: "nysgerrig",
                 waitHours: 20 / 60, // 20 minutes
                 branches: [
                     {
@@ -53,6 +55,56 @@ export const SEQUENCES: Sequence[] = [
                             type: "queue_approval",
                             template:
                                 "Hej {firstName}\n\nEr nysgerrig på din vurdering – er det noget, I kan genkende?\n\nJeg kan sende et par forslag til tider, hvis det giver mening at tage den videre",
+                        },
+                    },
+                ],
+            },
+            {
+                id: "kalender",
+                waitHours: 72, // 3 days after step 0 fired
+                branches: [
+                    {
+                        action: {
+                            type: "queue_approval",
+                            template:
+                                "Hej {firstName}, vender tilbage på denne — er det noget vi skal sætte i kalenderen?",
+                        },
+                    },
+                ],
+            },
+        ],
+    },
+    {
+        id: "unwatched_followup_v1",
+        description:
+            "Lead got the video but hasn't played it. Qualify quickly (24h) then a final graceful exit at +3d.",
+        trigger: { signal: "sent" },
+        // Exit if they reply OR play. Played leads get re-enrolled in the
+        // watched flow by the engine's re-enrolment path.
+        excludesGlobal: ["replied", "played"],
+        steps: [
+            {
+                id: "qualifier",
+                waitHours: 24,
+                branches: [
+                    {
+                        action: {
+                            type: "queue_approval",
+                            template:
+                                "Hej {firstName} — hurtigt spørgsmål: er du den rigtige hos {company} at tale med om dette, eller skal jeg fange en anden? Sig også til hvis det ikke er relevant.",
+                        },
+                    },
+                ],
+            },
+            {
+                id: "graceful_exit",
+                waitHours: 72, // 3 days after qualifier fired
+                branches: [
+                    {
+                        action: {
+                            type: "queue_approval",
+                            template:
+                                "Vender tilbage en sidste gang — siger ikke mere herefter. Sig endelig til hvis det giver mening senere.",
                         },
                     },
                 ],
