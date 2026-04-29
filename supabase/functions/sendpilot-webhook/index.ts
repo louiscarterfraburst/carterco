@@ -38,6 +38,7 @@ const SS_DYNAMIC = Deno.env.get("SENDSPARK_DYNAMIC") ?? "";
 
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  if (request.method === "GET") return json({ ok: true, name: "sendpilot-webhook" });
   if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
   const rawBody = await request.text();
