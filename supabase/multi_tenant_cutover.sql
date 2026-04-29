@@ -17,14 +17,19 @@
 -- migration is portable across environments where CarterCo's UUID differs.
 -- Resolves by owner_email which is set by workspaces.sql seed/trigger.
 -- ---------------------------------------------------------------------------
+-- security definer so anonymous callers (the public lead form RLS check) can
+-- resolve the UUID even though workspaces RLS only allows authenticated members.
 create or replace function public.carterco_workspace_id()
 returns uuid
 language sql
 stable
+security definer
 set search_path = public
 as $$
     select id from public.workspaces where owner_email = 'louis@carterco.dk' limit 1;
 $$;
+
+grant execute on function public.carterco_workspace_id() to public, anon, authenticated;
 
 -- ===========================================================================
 -- A. Schema gaps
