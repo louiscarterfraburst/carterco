@@ -38,6 +38,7 @@ jobs:
           NEXT_PUBLIC_SUPABASE_URL: https://znpaevzwlcfuzqxsbyie.supabase.co
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_rKCrGrKGUr48lEhjqWj3dw_V0kAEKQl
           NEXT_PUBLIC_VAPID_PUBLIC_KEY: BFxkts1k-dL9mbX23uPtalmaBnt-bHfXL4Xn7E6xImhFd1XlKR_mFHVXLfELe2PIVoM-c4a3_M9YXIOAlhooFUM
+          NEXT_PUBLIC_CARTERCO_WORKSPACE_ID: 1e067f9a-d453-41a7-8bc4-9fdb5644a5fa
         run: npm run build
 
       - name: Upload artifact

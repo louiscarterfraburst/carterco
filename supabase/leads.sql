@@ -73,9 +73,11 @@ create index if not exists leads_next_action_due_idx
   on public.leads (next_action_at)
   where next_action_at is not null and is_draft = false;
 
+-- Non-partial: PostgREST's on_conflict=draft_session_id upsert can't match a
+-- partial unique index (PG error 42P10). NULLs are distinct by default, so
+-- non-draft rows (where draft_session_id is null) still coexist.
 create unique index if not exists leads_draft_session_id_key
-  on public.leads (draft_session_id)
-  where draft_session_id is not null;
+  on public.leads (draft_session_id);
 
 create unique index if not exists leads_calendly_event_uri_key
   on public.leads (calendly_event_uri)
