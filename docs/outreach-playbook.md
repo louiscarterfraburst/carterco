@@ -90,7 +90,7 @@ type SequenceStep = {
 
 | ID | Trigger | Description | Steps |
 |----|---------|-------------|-------|
-| `post_send_followup_v1` | `sent` | Reacts to engagement after we sent the video. `cta_clicked` fires instantly via the lead-mode bypassWait path; the rest waits 48h and branches on watch state. | `followup_48h` (queue_approval if cta_clicked → watched_end → played → fallback push_only) |
+| `watched_followup_v1` | `watched_end` | Lead watched the video to the end. Wait ~2 min, then queue a single concrete sparring follow-up. Single step, single branch, no fallback. | `watched_2min` (queue_approval) |
 
 ## 5. How to add a sequence
 

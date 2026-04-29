@@ -38,45 +38,23 @@ export const DEFAULT_GLOBAL_EXCLUDES: Signal[] = ["replied"];
 // Active sequences. Order matters: enrolment picks the first matching one.
 export const SEQUENCES: Sequence[] = [
     {
-        id: "post_send_followup_v1",
+        id: "watched_followup_v1",
         description:
-            "After we send the video, react to engagement. cta_clicked fires " +
-            "instantly via the lead-mode bypassWait path; the rest waits 48h " +
-            "and branches on watch state.",
-        trigger: { signal: "sent" },
+            "Lead watched the video to the end — react ~2 min later with a " +
+            "concrete sparring offer. Single step, single branch, no fallback.",
+        trigger: { signal: "watched_end" },
         steps: [
             {
-                id: "followup_48h",
-                waitHours: 48,
+                id: "watched_2min",
+                waitHours: 2 / 60, // 2 minutes
                 branches: [
-                    // cta_clicked is the strongest intent we get; instant DB
-                    // trigger + bypassWait makes this fire the moment the
-                    // SendSpark webhook lands, even before 48h elapses.
                     {
-                        requires: ["cta_clicked"],
                         action: {
                             type: "queue_approval",
                             template:
-                                "Hej {firstName}, jeg kunne se du klikkede dig videre fra videoen — vil du sætte 15 min af så vi kan tale konkret om {company}?",
+                                "Hej {firstName} — tak fordi du tog dig tid til hele videoen. Var der noget af det jeg nævnte der gav genklang for {company}? Jeg afsætter gerne en time til at gå mere konkret i dybden.",
                         },
                     },
-                    {
-                        requires: ["watched_end"],
-                        action: {
-                            type: "queue_approval",
-                            template:
-                                "Hej {firstName}, jeg så at du tog dig tid til at se hele videoen — har du nogen spørgsmål?",
-                        },
-                    },
-                    {
-                        requires: ["played"],
-                        action: {
-                            type: "queue_approval",
-                            template:
-                                "Hej {firstName}, jeg ville lige følge op på videoen — gav den mening?",
-                        },
-                    },
-                    { action: { type: "push_only" } },
                 ],
             },
         ],

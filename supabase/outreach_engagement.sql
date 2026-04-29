@@ -79,7 +79,7 @@ create policy outreach_engagement_actions_workspace_all on public.outreach_engag
     using (workspace_id in (select public.auth_workspace_ids()))
     with check (workspace_id in (select public.auth_workspace_ids()));
 
--- 3. Instant trigger: fire worker on cta_clicked / render_failed transitions --
+-- 3. Instant trigger: fire worker on cta_clicked / render_failed / watched_end --
 create or replace function public.outreach_engagement_instant_tick()
 returns trigger
 language plpgsql
@@ -87,14 +87,17 @@ security definer
 set search_path = public
 as $$
 declare
-    cta_changed  boolean;
-    fail_changed boolean;
+    cta_changed     boolean;
+    fail_changed    boolean;
+    watched_changed boolean;
 begin
     cta_changed := new.cta_clicked_at is not null
         and (tg_op = 'INSERT' or old.cta_clicked_at is null);
     fail_changed := new.render_failed_at is not null
         and (tg_op = 'INSERT' or old.render_failed_at is null);
-    if not cta_changed and not fail_changed then
+    watched_changed := new.watched_end_at is not null
+        and (tg_op = 'INSERT' or old.watched_end_at is null);
+    if not cta_changed and not fail_changed and not watched_changed then
         return new;
     end if;
     perform net.http_post(
