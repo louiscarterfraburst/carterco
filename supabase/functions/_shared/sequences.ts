@@ -40,19 +40,19 @@ export const SEQUENCES: Sequence[] = [
     {
         id: "watched_followup_v1",
         description:
-            "Lead watched the video to the end — react ~2 min later with a " +
-            "concrete sparring offer. Single step, single branch, no fallback.",
+            "Lead watched the video to the end — react ~20 min later with a " +
+            "casual nysgerrig follow-up. Single step, single branch, no fallback.",
         trigger: { signal: "watched_end" },
         steps: [
             {
-                id: "watched_2min",
-                waitHours: 2 / 60, // 2 minutes
+                id: "watched_2min", // id stable from v1; timing is now 20 min
+                waitHours: 20 / 60, // 20 minutes
                 branches: [
                     {
                         action: {
                             type: "queue_approval",
                             template:
-                                "Hej {firstName} — tak fordi du tog dig tid til hele videoen. Var der noget af det jeg nævnte der gav genklang for {company}? Jeg afsætter gerne en time til at gå mere konkret i dybden.",
+                                "Hej {firstName}\n\nEr nysgerrig på din vurdering – er det noget, I kan genkende?\n\nJeg kan sende et par forslag til tider, hvis det giver mening at tage den videre",
                         },
                     },
                 ],
