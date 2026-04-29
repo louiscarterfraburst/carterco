@@ -46,15 +46,10 @@ const supabase = createClient(
 const SP_API_KEY = Deno.env.get("SENDPILOT_API_KEY") ?? "";
 
 const DEFAULT_TEMPLATE = [
-    "Hej {firstName},",
+    "Hej {firstName}",
     "",
-    "Tak for accept! Jeg lavede en kort video til dig:",
-    "",
+    "Jeg var lige inde på {website} og optog en kort video om én ting, jeg tror I mister lidt værdi på:",
     "{videoLink}",
-    "",
-    "Sig endelig til hvis det giver mening for jer hos {company}.",
-    "",
-    "/Louis",
 ].join("\n");
 
 const MESSAGE_TEMPLATE = Deno.env.get("OUTREACH_MESSAGE_TEMPLATE") || DEFAULT_TEMPLATE;
@@ -180,11 +175,13 @@ async function handleRenderReady(evt: SendSparkEvent, email: string, videoLink: 
         .eq("contact_email", email)
         .maybeSingle();
 
-    const firstName = (lead?.first_name ?? "").trim() || "there";
+    const firstName = (lead?.first_name ?? "").trim() || "der";
     const company = (lead?.company ?? "").trim();
+    const website = (lead?.website ?? "").trim().replace(/^https?:\/\//i, "").replace(/\/+$/, "");
     const message = MESSAGE_TEMPLATE
         .replaceAll("{firstName}", firstName)
         .replaceAll("{company}", company)
+        .replaceAll("{website}", website)
         .replaceAll("{videoLink}", videoLink);
 
     const now = new Date().toISOString();
