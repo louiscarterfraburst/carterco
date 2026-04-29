@@ -52,7 +52,7 @@ export const SEQUENCES: Sequence[] = [
                 branches: [
                     {
                         action: {
-                            type: "queue_approval",
+                            type: "auto_send",
                             template:
                                 "Hej {firstName}\n\nEr nysgerrig på din vurdering – er det noget, I kan genkende?\n\nJeg kan sende et par forslag til tider, hvis det giver mening at tage den videre",
                         },
@@ -65,7 +65,7 @@ export const SEQUENCES: Sequence[] = [
                 branches: [
                     {
                         action: {
-                            type: "queue_approval",
+                            type: "auto_send",
                             template:
                                 "Hej {firstName}, vender tilbage på denne — er det noget vi skal sætte i kalenderen?",
                         },
@@ -89,7 +89,7 @@ export const SEQUENCES: Sequence[] = [
                 branches: [
                     {
                         action: {
-                            type: "queue_approval",
+                            type: "auto_send",
                             template:
                                 "Hej {firstName} — hurtigt spørgsmål: er du den rigtige hos {company} at tale med om dette, eller skal jeg fange en anden? Sig også til hvis det ikke er relevant.",
                         },
@@ -102,7 +102,7 @@ export const SEQUENCES: Sequence[] = [
                 branches: [
                     {
                         action: {
-                            type: "queue_approval",
+                            type: "auto_send",
                             template:
                                 "Vender tilbage en sidste gang — siger ikke mere herefter. Sig endelig til hvis det giver mening senere.",
                         },
