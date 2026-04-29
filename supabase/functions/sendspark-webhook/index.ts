@@ -43,8 +43,6 @@ const supabase = createClient(
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
 );
 
-const SP_API_KEY = Deno.env.get("SENDPILOT_API_KEY") ?? "";
-
 const DEFAULT_TEMPLATE = [
     "Hej {firstName}",
     "",
@@ -156,7 +154,7 @@ async function handleRenderReady(evt: SendSparkEvent, email: string, videoLink: 
 
     const { data: pipe } = await supabase
         .from("outreach_pipeline")
-        .select("sendpilot_lead_id, contact_email, is_cold, status")
+        .select("sendpilot_lead_id, contact_email, status")
         .eq("contact_email", email)
         .maybeSingle();
 
@@ -186,25 +184,8 @@ async function handleRenderReady(evt: SendSparkEvent, email: string, videoLink: 
 
     const now = new Date().toISOString();
 
-    if (pipe.is_cold === true) {
-        const result = await sendpilotInboxSend(pipe.sendpilot_lead_id, message);
-        const success = result.status === 200 || result.status === 201;
-
-        await supabase.from("outreach_pipeline").update({
-            video_link: videoLink,
-            embed_link: evt.embedLink ?? null,
-            thumbnail_url: evt.thumbnailUrl ?? null,
-            rendered_message: message,
-            sendpilot_response: result.body,
-            rendered_at: now,
-            sent_at: success ? now : null,
-            status: success ? "sent" : "failed",
-            error: success ? null : `inbox/send HTTP ${result.status}`,
-        }).eq("sendpilot_lead_id", pipe.sendpilot_lead_id);
-
-        return json({ ok: success, branch: "cold_autosend", status: result.status });
-    }
-
+    // All initial video messages queue for human approval before they go out.
+    // No auto-send branch for cold vs warm — every video gets a manual eyeball.
     await supabase.from("outreach_pipeline").update({
         video_link: videoLink,
         embed_link: evt.embedLink ?? null,
@@ -215,7 +196,7 @@ async function handleRenderReady(evt: SendSparkEvent, email: string, videoLink: 
         status: "pending_approval",
     }).eq("sendpilot_lead_id", pipe.sendpilot_lead_id);
 
-    return json({ ok: true, branch: "already_connected_queued" });
+    return json({ ok: true, branch: "queued_for_approval" });
 }
 
 // --- Engagement: stamp the corresponding column if not already set ----------
@@ -261,19 +242,6 @@ async function handleEngagement(kind: EventKind, email: string) {
         .eq("sendpilot_lead_id", pipe.sendpilot_lead_id);
 
     return json({ ok: true, recorded: kind, leadId: pipe.sendpilot_lead_id });
-}
-
-// --- SendPilot send (used by render-ready cold-autosend) --------------------
-
-async function sendpilotInboxSend(leadId: string, message: string) {
-    const res = await fetch("https://api.sendpilot.ai/v1/inbox/send", {
-        method: "POST",
-        headers: { "X-API-Key": SP_API_KEY, "Content-Type": "application/json" },
-        body: JSON.stringify({ leadId, message }),
-    });
-    let body: unknown = null;
-    try { body = await res.json(); } catch { /* ignore */ }
-    return { status: res.status, body };
 }
 
 function json(obj: unknown, status = 200) {

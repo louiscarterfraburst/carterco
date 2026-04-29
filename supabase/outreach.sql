@@ -60,12 +60,16 @@ do $$ begin
         'accepted',         -- connection.accepted observed
         'rendering',        -- POSTed to SendSpark, awaiting callback
         'rendered',         -- video ready, ready to send
-        'pending_approval', -- already-connected → awaiting human
+        'pending_approval', -- queued in cockpit, awaiting human approve
         'sent',             -- /inbox/send returned 200
         'rejected',         -- approver said no
-        'failed'            -- terminal error
+        'failed',           -- terminal error
+        'pre_connected'     -- accepted but already connected before this campaign — no auto-render
     );
 exception when duplicate_object then null; end $$;
+
+-- Idempotent enum extension for already-deployed databases.
+alter type public.outreach_status add value if not exists 'pre_connected';
 
 create table if not exists public.outreach_pipeline (
     sendpilot_lead_id   text primary key,

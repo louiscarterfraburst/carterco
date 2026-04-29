@@ -116,11 +116,27 @@ Deno.serve(async (request) => {
       return json({ ok: true, recorded: "accepted_no_lead" });
     }
 
+    // Pre-connected leads (already in Rasmus's network before this campaign)
+    // never get a SendSpark render. Mark them pre_connected and stop. The
+    // cockpit can surface them so we can decide manually who's worth a video.
+    if (!cold) {
+      await supabase.from("outreach_pipeline").upsert({
+        sendpilot_lead_id: leadId,
+        linkedin_url: linkedinUrl,
+        contact_email: lead.contact_email,
+        is_cold: false,
+        status: "pre_connected",
+        accepted_at: now,
+        workspace_id: workspaceId,
+      }, { onConflict: "sendpilot_lead_id" });
+      return json({ ok: true, recorded: "pre_connected_skipped" });
+    }
+
     await supabase.from("outreach_pipeline").upsert({
       sendpilot_lead_id: leadId,
       linkedin_url: linkedinUrl,
       contact_email: lead.contact_email,
-      is_cold: cold,
+      is_cold: true,
       status: "rendering",
       accepted_at: now,
       workspace_id: workspaceId,
@@ -134,7 +150,7 @@ Deno.serve(async (request) => {
       }).eq("sendpilot_lead_id", leadId);
       return json({ ok: false, error: "sendspark render failed", status: renderRes.status });
     }
-    return json({ ok: true, recorded: "accepted_rendering", cold });
+    return json({ ok: true, recorded: "accepted_rendering", cold: true });
   }
 
   if (evt.eventType === "message.received") {
