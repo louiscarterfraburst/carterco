@@ -160,7 +160,7 @@ body {
 }
 
 .bubble-in {
-  animation: bubble-in 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation: bubble-in 0.75s cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 
 /* Typing indicator dots */
@@ -189,6 +189,89 @@ body {
   }
 }
 
+/* ─── Pleje stage: a silent avatar chip travels through the flow nodes.
+   When it reaches "Opfølgende opkald" the call books a meeting → 3 outcome
+   events grow the card in sequence (Møde · Kontrakt · Onboarding). The
+   lead-status pill morphs in lockstep with the chip's position.
+   Total cycle: 14s. Stride between rows ≈ 46px. ─── */
+@keyframes lead-glide-y {
+  0%   { transform: translateY(-8px); opacity: 0; }
+  3%   { transform: translateY(0);    opacity: 1; }
+  12%  { transform: translateY(0);    opacity: 1; }
+  15%  { transform: translateY(46px); opacity: 1; }
+  27%  { transform: translateY(46px); opacity: 1; }
+  30%  { transform: translateY(92px); opacity: 1; }
+  42%  { transform: translateY(92px); opacity: 1; }
+  45%  { transform: translateY(138px); opacity: 1; }
+  57%  { transform: translateY(138px); opacity: 1; }
+  60%  { transform: translateY(184px); opacity: 1; }
+  70%  { transform: translateY(184px); opacity: 1; }
+  73%  { transform: translateY(230px); opacity: 1; }
+  80%  { transform: translateY(230px); opacity: 1; }
+  83%  { transform: translateY(276px); opacity: 1; }
+  88%  { transform: translateY(276px); opacity: 1; }
+  91%  { transform: translateY(322px); opacity: 1; }
+  96%  { transform: translateY(322px); opacity: 1; }
+  98%  { transform: translateY(322px) scale(0.55); opacity: 0; }
+  100% { transform: translateY(322px) scale(0.55); opacity: 0; }
+}
+
+/* Event wrappers — each grows the card height when its outcome lands.
+   Event 1 (Møde) opens at 70% wall-clock, lasts through the rest of cycle.
+   Event 2 (Kontrakt sendt) opens at 80%.
+   Event 3 (Onboarding) opens at 88%.
+   All collapse at 99% so the next loop starts compact. */
+@keyframes event-wrapper-1 { 0%, 70% { max-height: 0; } 73%, 99% { max-height: 60px; } 100% { max-height: 0; } }
+@keyframes event-wrapper-2 { 0%, 80% { max-height: 0; } 83%, 99% { max-height: 60px; } 100% { max-height: 0; } }
+@keyframes event-wrapper-3 { 0%, 88% { max-height: 0; } 91%, 99% { max-height: 60px; } 100% { max-height: 0; } }
+
+@keyframes event-node-1 { 0%, 70% { opacity: 0; transform: translateY(-6px) scale(0.94); } 75%, 99% { opacity: 1; transform: translateY(0) scale(1); } 100% { opacity: 0; } }
+@keyframes event-node-2 { 0%, 80% { opacity: 0; transform: translateY(-6px) scale(0.94); } 85%, 99% { opacity: 1; transform: translateY(0) scale(1); } 100% { opacity: 0; } }
+@keyframes event-node-3 { 0%, 88% { opacity: 0; transform: translateY(-6px) scale(0.94); } 93%, 99% { opacity: 1; transform: translateY(0) scale(1); } 100% { opacity: 0; } }
+
+@keyframes event-connector-1 { 0%, 70% { opacity: 0; } 73%, 99% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes event-connector-2 { 0%, 80% { opacity: 0; } 83%, 99% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes event-connector-3 { 0%, 88% { opacity: 0; } 91%, 99% { opacity: 1; } 100% { opacity: 0; } }
+
+/* Lead-status pill: tightly synced to the chip's position.
+   Nurture nodes (0–60%)              → Tilmeldt.
+   Opfølgende opkald + Møde event     → Møde booket (60–80%).
+   Kontrakt + Onboarding events       → Aftale lukket (80–100%). */
+@keyframes status-pill-tilmeldt { 0%, 60% { opacity: 1; } 63%, 100% { opacity: 0; } }
+@keyframes status-pill-booket   { 0%, 60% { opacity: 0; } 63%, 80% { opacity: 1; } 83%, 100% { opacity: 0; } }
+@keyframes status-pill-vundet   { 0%, 80% { opacity: 0; } 83%, 100% { opacity: 1; } }
+
+/* Reduced-motion fallback: collapse all event wrappers, hide later pills
+   and event content so the card reads as the steady "Tilmeldt" state. */
+.status-pill-booket,
+.status-pill-vundet,
+.event-node-1,
+.event-node-2,
+.event-node-3,
+.event-connector-1,
+.event-connector-2,
+.event-connector-3 { opacity: 0; }
+
+.event-wrapper-1,
+.event-wrapper-2,
+.event-wrapper-3 { max-height: 0; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .lead-glide           { animation: lead-glide-y     14s linear infinite; }
+  .status-pill-tilmeldt { animation: status-pill-tilmeldt 14s linear infinite; }
+  .status-pill-booket   { animation: status-pill-booket   14s linear infinite; }
+  .status-pill-vundet   { animation: status-pill-vundet   14s linear infinite; }
+  .event-wrapper-1      { animation: event-wrapper-1   14s cubic-bezier(0.2, 0.8, 0.2, 1) infinite; }
+  .event-wrapper-2      { animation: event-wrapper-2   14s cubic-bezier(0.2, 0.8, 0.2, 1) infinite; }
+  .event-wrapper-3      { animation: event-wrapper-3   14s cubic-bezier(0.2, 0.8, 0.2, 1) infinite; }
+  .event-node-1         { animation: event-node-1      14s cubic-bezier(0.2, 0.8, 0.2, 1) infinite; }
+  .event-node-2         { animation: event-node-2      14s cubic-bezier(0.2, 0.8, 0.2, 1) infinite; }
+  .event-node-3         { animation: event-node-3      14s cubic-bezier(0.2, 0.8, 0.2, 1) infinite; }
+  .event-connector-1    { animation: event-connector-1 14s linear infinite; }
+  .event-connector-2    { animation: event-connector-2 14s linear infinite; }
+  .event-connector-3    { animation: event-connector-3 14s linear infinite; }
+}
+
 /* Gentle drift for stacked cards */
 @keyframes subtle-float {
   0%, 100% { transform: var(--float-base, none) translateY(0); }
@@ -198,6 +281,93 @@ body {
 @media (prefers-reduced-motion: no-preference) {
   .subtle-float      { animation: subtle-float 7s ease-in-out infinite; }
   .subtle-float-slow { animation: subtle-float 11s ease-in-out infinite; }
+}
+
+/* Phone screen state transitions for the Føre stage:
+   Phase 1 = lock screen with incoming notification, fades out at 1.6s.
+   Phase 2 = /leads view, fades in at 1.6s. */
+/* Lockscreen notification life: drops in, holds while the tap-ripple fires
+   (~1.15s relative to delay), then fades + scales out as if dismissed by
+   the tap — just before Phase 1 itself fades out at 1.6s. */
+@keyframes notification-drop {
+  0%   { transform: translateY(-120%);          opacity: 0; }
+  20%  { transform: translateY(8%);             opacity: 1; }
+  28%  { transform: translateY(-2%);            opacity: 1; }
+  35%  { transform: translateY(0) scale(1);     opacity: 1; }
+  85%  { transform: translateY(0) scale(1);     opacity: 1; }
+  100% { transform: translateY(0) scale(0.86);  opacity: 0; }
+}
+.notification-drop {
+  animation: notification-drop 1.3s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes phone-screen-out {
+  from { opacity: 1; }
+  to   { opacity: 0; visibility: hidden; }
+}
+.phone-screen-out {
+  animation: phone-screen-out 0.35s ease-out 1.6s both;
+}
+
+@keyframes phone-screen-call {
+  0%   { opacity: 0; transform: scale(1.015); visibility: visible; }
+  17%  { opacity: 1; transform: scale(1); }
+  83%  { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(0.985); visibility: hidden; }
+}
+.phone-screen-call {
+  animation: phone-screen-call 1.8s ease-out 1.6s both;
+}
+
+@keyframes phone-screen-in {
+  from { opacity: 0; transform: scale(1.015); }
+  to   { opacity: 1; transform: scale(1); }
+}
+.phone-screen-in {
+  animation: phone-screen-in 0.4s ease-out var(--phone-screen-in-delay, 3.4s) both;
+}
+
+/* In-app "new lead" toast — drops in over the /leads view on subsequent
+   cycles, then slides back up out of frame before the timeline repaints. */
+@keyframes inapp-toast {
+  0%   { transform: translateY(-130%); opacity: 0; }
+  10%  { transform: translateY(8%);    opacity: 1; }
+  18%  { transform: translateY(-2%);   opacity: 1; }
+  24%  { transform: translateY(0);     opacity: 1; }
+  78%  { transform: translateY(0);     opacity: 1; }
+  100% { transform: translateY(-130%); opacity: 0; }
+}
+.inapp-toast {
+  animation: inapp-toast 1.6s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+/* Calendar-check scanline — a translucent clay sweep that travels across
+   the slot ribbon once on entry. Reads as the agent actively scanning the
+   calendar before settling on the booked slot. */
+@keyframes cal-scan {
+  0%   { transform: translateX(-110%); opacity: 0; }
+  18%  { opacity: 1; }
+  82%  { opacity: 1; }
+  100% { transform: translateX(220%);  opacity: 0; }
+}
+.cal-scan {
+  animation: cal-scan 1.6s cubic-bezier(0.55, 0, 0.45, 1) both;
+}
+
+@keyframes call-ring-pulse {
+  0%   { transform: scale(0.85); opacity: 0.55; }
+  100% { transform: scale(1.7);  opacity: 0;    }
+}
+.call-ring-pulse {
+  animation: call-ring-pulse 1.6s ease-out infinite;
+}
+
+@keyframes tap-ripple {
+  0%   { transform: scale(0.55); opacity: 0.55; }
+  100% { transform: scale(2.6);  opacity: 0;    }
+}
+.tap-ripple {
+  animation: tap-ripple 0.65s ease-out 1.15s both;
 }
 
 /* Soft glow halo behind active dots */

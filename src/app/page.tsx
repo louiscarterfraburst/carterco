@@ -83,20 +83,21 @@ const logoFiles: {
   preserveColor?: boolean;
 }[] = [
   { file: "logo-mavico.png" },
-  { file: "logo-tresyv.svg", sizeClass: "h-10 w-auto sm:h-12" },
+  { file: "logo-tresyv.svg", sizeClass: "h-8 w-auto sm:h-10" },
   { file: "logo-murph.png" },
-  { file: "logo-burst.png", sizeClass: "h-7 w-auto sm:h-9", offsetClass: "mb-3 sm:mb-4" },
+  { file: "logo-burst.png", sizeClass: "h-6 w-auto sm:h-7", offsetClass: "mb-2.5 sm:mb-3" },
   { file: "logo-wono.png" },
-  { file: "logo-studio404.png", sizeClass: "h-6 w-auto sm:h-7" },
-  { file: "logo-swob.png", sizeClass: "h-9 w-auto sm:h-11" },
+  { file: "logo-studio404.png", sizeClass: "h-5 w-auto sm:h-6" },
+  { file: "logo-swob.png", sizeClass: "h-7 w-auto sm:h-9" },
+  { file: "logo-gazella.png", sizeClass: "h-9 w-auto sm:h-11" },
   {
     file: "logo-vinduespudserskolen.png",
-    sizeClass: "h-10 w-auto sm:h-12",
+    sizeClass: "h-8 w-auto sm:h-10",
     preserveColor: true,
   },
 ];
 
-const DEFAULT_LOGO_CLASS = "h-5 w-auto sm:h-7";
+const DEFAULT_LOGO_CLASS = "h-4 w-auto sm:h-6";
 
 const cases: {
   metric: string;
@@ -114,7 +115,7 @@ const cases: {
   {
     metric: "31×",
     metricLabel: "outreach-volumen",
-    copy: "Vi byggede et AI-system der genererer personlig video-outreach til hver enkelt prospect — hver besked føles optaget kun til dem, men kører i en skala et team aldrig kunne ramme manuelt.",
+    copy: "Tresyv ville sende personligt outreach i en skala et team aldrig kunne ramme manuelt — 31× mere, uden at miste det optaget-kun-til-dem-præg. AI-systemet genererer en unik video til hver enkelt prospect.",
     client: "Tresyv",
     kind: "heat",
     logo: "/logos/logo-tresyv.svg",
@@ -123,7 +124,7 @@ const cases: {
   {
     metric: "<3 min",
     metricLabel: "gennemsnitlig responstid",
-    copy: "Hvert nyt lead pinger sælgeren direkte på telefonen — med navn, firma og kontekst. Ring op eller følg op med ét tryk, uden at åbne CRM'et.",
+    copy: "Murph svarer hvert nyt lead på under 3 minutter i gennemsnit. Sælgeren får leadet direkte på telefonen med navn, firma og kontekst — ring op eller følg op med ét tryk, uden at åbne CRM'et.",
     client: "Murph",
     url: "https://www.trymurph.com/",
     logo: "/logos/logo-murph.png",
@@ -133,7 +134,7 @@ const cases: {
   {
     metric: "4×",
     metricLabel: "lead-konvertering",
-    copy: "Vi byggede et intro-tilbud der var uimodståeligt for målgruppen, finpudsede annoncerne så de ramte de rigtige mennesker, og lagde et email- og SMS-flow oven på der svarer hvert lead personligt inden for få minutter.",
+    copy: "Burst 4-doblede lead-konverteringen — samme målgruppe, samme kanaler. Et intro-tilbud målgruppen ikke kunne sige nej til, annoncer der ramte præcis de rigtige, og et email- og SMS-flow der svarer hvert lead personligt inden for minutter.",
     client: "Burst",
     kind: "won",
     url: "https://burstcreators.com",
@@ -147,34 +148,49 @@ type JourneyStage = {
   title: string;
   titleAccent: string;
   body: string;
-  proof?: { metric: string; unit: string; note: string };
-  visual: "outbound" | "pipeline" | "sms";
+  proof?: { metric: string; unit: string; note: string; noteHref?: string };
+  visual: "outbound" | "pipeline" | "sms" | "flows";
 };
 
 const journey: JourneyStage[] = [
   {
     n: "01",
     verb: "Fange",
-    title: "Vi henter dem ind",
+    title: "Hente dem ind",
     titleAccent: "der hvor de allerede er.",
-    body: "Målrettede beskeder på LinkedIn og email til dem der bestemmer, og Meta-annoncer der rammer lige præcis dem du gerne vil have fat i. Ingen spam — kun leads der matcher din ideelle kunde.",
+    body: "Målrettet outreach på LinkedIn og email til dem der bestemmer, plus Meta-annoncer skarpt på den profil du sælger til. Ingen spam, ingen breddeskud — kun leads der matcher hvem du faktisk vil tale med.",
     visual: "outbound",
   },
   {
     n: "02",
-    verb: "Føre",
-    title: "Saml dem op",
-    titleAccent: "i ét fælles overblik.",
-    body: "Vi bygger CRM'et op fra bunden — eller rydder op i det du allerede har. Hver lead lander det rigtige sted, hos den rigtige sælger, med fuld kontekst. Helt af sig selv.",
-    visual: "pipeline",
+    verb: "Smede",
+    title: "Pinge sælgeren",
+    titleAccent: "mens jernet stadig glør.",
+    body: "Hvert nyt lead lander direkte hos den rigtige sælger — navn, firma og kontekst på telefonen. SMS- og email-flows tager over hvis ingen når at svare. Ingen lead falder fra mens du sover.",
+    proof: {
+      metric: "21×",
+      unit: "mere kvalificeret",
+      note: "Når sælgeren svarer inden for 5 minutter — iflg. MIT-studiet.",
+      noteHref:
+        "https://25649.fs1.hubspotusercontent-na2.net/hub/25649/file-13535879-pdf/docs/mit_study.pdf",
+    },
+    visual: "sms",
   },
   {
     n: "03",
+    verb: "Pleje",
+    title: "Holde dem varme",
+    titleAccent: "indtil de er klar.",
+    body: "For dem der ikke er klar endnu — email- og SMS-flows der nurturer i baggrunden. Drip-sekvenser, re-engagement af kolde, no-show follow-ups, win-back. Bygget i ActiveCampaign eller jeres nuværende værktøj. Når et lead bliver varmt nok, ryger de tilbage til sælgeren med fuld kontekst.",
+    visual: "flows",
+  },
+  {
+    n: "04",
     verb: "Lukke",
-    title: "Hold dem varme —",
-    titleAccent: "også når du sover.",
-    body: "Automatiske SMS-flows der svarer inden for 60 sekunder, følger op på udeblivelser og henter de leads tilbage der ellers var faldet fra. Med en menneskelig tone.",
-    visual: "sms",
+    title: "Pipelinen opdaterer",
+    titleAccent: "sig selv.",
+    body: "CRM'et matcher virkeligheden mens dagen kører. Vundne aftaler lander i 'lukket', langsomme leads får automatisk en ny aktion, og intet forsvinder bare i baggrunden.",
+    visual: "pipeline",
   },
 ];
 
@@ -185,14 +201,14 @@ const outboundCards = [
     title: "Adm. direktør · Tagværk ApS",
     initials: "SE",
     preview:
-      "Hej Sara — så at I lige har vundet udbuddet på Frederiksberg. Hvis I vil have flere lignende leads, har vi…",
-    chip: "2. grads",
+      "Hej Sara — så at I lige har vundet udbuddet på Frederiksberg. Hvis I vil have flere lignende leads, har jeg…",
+    chip: "1. grads",
   },
   {
     type: "meta" as const,
     sponsor: "Sponsoreret · Carter & Co",
-    headline: "Få varme leads inden for 60 sekunder.",
-    body: "Vi bygger systemet. Du lukker aftalerne.",
+    headline: "Få varme leads inden for få minutter.",
+    body: "Jeg bygger systemet. Du lukker aftalerne.",
     cta: "Book demo",
   },
 ];
@@ -212,17 +228,103 @@ const pipelineCards = [
   { col: 3, name: "Lise Damgaard", company: "Kompas Tag", source: "LinkedIn", initials: "LD", note: "32.500 kr" },
 ];
 
-const smsThread = [
+type PhoneLead = {
+  name: string;
+  company: string;
+  source: string;
+  initials: string;
+  callDoneAt: string;
+  automationDate: string;
+  inviteTime: string;
+  bookingLabel: string;
+  slots: { t: string; available: boolean }[];
+  thread: { from: "us" | "them"; text: string; time: string }[];
+  // "missed" → SMS bridge flow (sælger ringede → cal.check → SMS → Booket).
+  // "answered" → human-closed flow (sælger talte → outcome marked).
+  callPath: "missed" | "answered";
+  // Only used when callPath === "answered" — duration on the talked chip.
+  callDuration?: string;
+  // Terminal outcome the cockpit lands on. Maps to OUTCOME_TONE keys in
+  // src/app/leads/page.tsx:75–121.
+  outcome: "booked" | "customer";
+};
+
+// Phone-scene loop. Cycle 1 plays the full intro (lockscreen → call → /leads).
+// Cycles 2+ skip the intro and replay the /leads timeline with a new lead;
+// an in-app "new lead" toast stands in for the lockscreen notification.
+const leadsRotation: PhoneLead[] = [
   {
-    from: "us" as const,
-    text: "Hej Mette — tak for din interesse i Nordlys-pakken. Har du tid til en kort snak i morgen kl. 10?",
-    time: "14:32",
+    name: "Mette Sørensen",
+    company: "Nordlys A/S",
+    source: "ad. Meta",
+    initials: "MS",
+    callDoneAt: "14:31",
+    automationDate: "i_morgen",
+    inviteTime: "10:00",
+    bookingLabel: "I morgen · 10:00 · 30 min",
+    slots: [
+      { t: "09:00", available: false },
+      { t: "09:30", available: false },
+      { t: "10:00", available: true },
+      { t: "10:30", available: false },
+      { t: "11:00", available: false },
+    ],
+    thread: [
+      { from: "us", text: "Hej Mette — tak for din interesse i Nordlys-pakken. Har du tid til en kort snak i morgen kl. 10?", time: "14:32" },
+      { from: "them", text: "Ja, det passer fint :)", time: "14:34" },
+      { from: "us", text: "Perfekt — jeg sender en kalenderinvitation nu.", time: "14:35" },
+    ],
+    callPath: "missed",
+    outcome: "booked",
   },
-  { from: "them" as const, text: "Ja, det passer fint :)", time: "14:34" },
   {
-    from: "us" as const,
-    text: "Perfekt — jeg sender en kalenderinvitation nu.",
-    time: "14:35",
+    name: "Jonas Holm",
+    company: "Bygma Vest",
+    source: "ad. Meta",
+    initials: "JH",
+    callDoneAt: "11:03",
+    automationDate: "fredag",
+    inviteTime: "13:30",
+    bookingLabel: "Fredag · 13:30 · 30 min",
+    slots: [
+      { t: "12:30", available: false },
+      { t: "13:00", available: false },
+      { t: "13:30", available: true },
+      { t: "14:00", available: false },
+      { t: "14:30", available: false },
+    ],
+    thread: [
+      { from: "us", text: "Hej Jonas — tak for snakken om Bygma-tilbuddet. Har du 20 min fredag kl. 13:30?", time: "11:04" },
+      { from: "them", text: "Det fungerer fint", time: "11:06" },
+      { from: "us", text: "Top — kalenderinvitation kommer nu.", time: "11:07" },
+    ],
+    callPath: "answered",
+    callDuration: "3:42",
+    outcome: "customer",
+  },
+  {
+    name: "Sara El-Khouri",
+    company: "Tagværk",
+    source: "LinkedIn",
+    initials: "SE",
+    callDoneAt: "09:45",
+    automationDate: "overmorgen",
+    inviteTime: "09:30",
+    bookingLabel: "Overmorgen · 09:30 · 20 min",
+    slots: [
+      { t: "08:30", available: false },
+      { t: "09:00", available: false },
+      { t: "09:30", available: true },
+      { t: "10:00", available: false },
+      { t: "10:30", available: false },
+    ],
+    thread: [
+      { from: "us", text: "Hej Sara — så I kiggede på altan-pakken. Passer det med en snak overmorgen 09:30?", time: "09:46" },
+      { from: "them", text: "Ja gerne", time: "09:48" },
+      { from: "us", text: "Sender invite med det samme.", time: "09:49" },
+    ],
+    callPath: "missed",
+    outcome: "booked",
   },
 ];
 
@@ -368,6 +470,55 @@ export default function Home() {
   const draftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const formRef = useRef(form);
   const honeypotRef = useRef("");
+  // Føre phone animation — time-based loop. Replays on scroll-into-view,
+  // then ticks every ~8s while visible. Cycles 0–1 play the full intro
+  // (lockscreen → call → /leads with Mette). Cycles 2+ skip the intro and
+  // replay the /leads timeline with a new lead from leadsRotation, with an
+  // in-app "new lead" toast standing in for the lockscreen notification.
+  const phoneRef = useRef<HTMLDivElement | null>(null);
+  const [smsCycle, setSmsCycle] = useState(0);
+  // displayedLead lags currentLead by 3.4s on cycle 2+ — that's the toast +
+  // call-screen window. So when cycle 2 starts, the previous lead's settled
+  // SMS chat stays visible while the toast slides in over it. Phase 3 only
+  // re-mounts (and fades in the new lead) once the call has visually ended.
+  const [displayedLead, setDisplayedLead] = useState<PhoneLead>(leadsRotation[0]);
+  useEffect(() => {
+    const node = phoneRef.current;
+    if (!node) return;
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0];
+        if (entry?.isIntersecting) {
+          setSmsCycle((n) => n + 1);
+          if (intervalId === null) {
+            intervalId = setInterval(() => setSmsCycle((n) => n + 1), 16000);
+          }
+        } else if (intervalId !== null) {
+          clearInterval(intervalId);
+          intervalId = null;
+        }
+      },
+      { threshold: 0.4 },
+    );
+    observer.observe(node);
+    return () => {
+      observer.disconnect();
+      if (intervalId !== null) clearInterval(intervalId);
+    };
+  }, []);
+
+  // Cycle 1 (intro): swap displayedLead immediately. Cycle 2+: hold the
+  // previous lead in place for 3.4s (toast + call window), then swap once the
+  // new lead's call has visually concluded.
+  useEffect(() => {
+    const lead = leadsRotation[Math.max(0, smsCycle - 1) % leadsRotation.length];
+    // 2000ms — swap while Phase 2 (call screen) fully covers the phone, so
+    // the previous lead's chat is never re-revealed as Phase 2 fades out.
+    const delay = smsCycle <= 1 ? 0 : 2000;
+    const t = setTimeout(() => setDisplayedLead(lead), delay);
+    return () => clearTimeout(t);
+  }, [smsCycle]);
 
   useEffect(() => {
     formRef.current = form;
@@ -404,6 +555,19 @@ export default function Home() {
     !submitting && (step.required ? currentValue.trim().length > 0 : true);
   const isLast = stepIdx === total - 1;
   const currentError = errors[step.key];
+
+  // Phone-scene loop: pick a lead per cycle. Cycle 1 plays the lockscreen
+  // intro (chips wait until 3.4s, after the call); cycles 2+ swap the lockscreen
+  // for an in-app toast and the chips begin animating in immediately at t=0
+  // so the screen has live content behind the toast (rather than an empty
+  // backdrop). Call screen still overlays at 1.6s and SMS view re-emerges
+  // at 3.4s with the chips already settled.
+  const isFirstCycle = smsCycle <= 1;
+  const currentLead = leadsRotation[Math.max(0, smsCycle - 1) % leadsRotation.length];
+  // Cycle 1: Phase 3 mounts at t=0, chips animate at 3.7s+ (after the call).
+  // Cycle 2+: Phase 3 remounts at t=2.0s (mid-call). Offset = 1.4 so chips
+  // still animate at 3.7s+ real-time, matching cycle 1's pacing.
+  const phase3Base = isFirstCycle ? 3.4 : 1.4;
 
   useEffect(() => {
     function onKey(e: globalThis.KeyboardEvent) {
@@ -575,7 +739,7 @@ export default function Home() {
 
   return (
     <main className="relative flex min-h-screen flex-col bg-[#0f0d0a] text-[var(--cream)]">
-      <section className="relative flex min-h-screen flex-col overflow-hidden">
+      <section className="relative flex min-h-screen flex-col overflow-hidden lg:min-h-[min(100vh,860px)]">
         <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_75%_60%,rgba(218,96,34,0.32),transparent_55%),radial-gradient(ellipse_at_15%_10%,rgba(25,70,58,0.28),transparent_50%)]" />
         <div
           className="pointer-events-none absolute inset-0 -z-10 opacity-[0.06] mix-blend-overlay"
@@ -611,7 +775,7 @@ export default function Home() {
       </nav>
 
       <div className="mx-auto flex w-full max-w-[1400px] flex-1 flex-col justify-center px-8 pt-16 sm:px-12 sm:pt-20">
-        <h1 className="font-display text-[14vw] leading-[0.82] tracking-[-0.05em] sm:text-[12vw] lg:text-[10vw]">
+        <h1 className="font-display text-[14vw] leading-[0.82] tracking-[-0.05em] sm:text-[12vw] lg:text-[clamp(5rem,10vw,9.5rem)]">
           <span className="relative inline-block">
             Smed
             <span
@@ -677,37 +841,16 @@ export default function Home() {
           </span>
         </h1>
 
-        <div className="mt-16 flex flex-col gap-10 pb-10 sm:mt-[120px]">
+        <div className="mt-16 flex flex-col gap-8 pb-10 sm:mt-20 lg:mt-24">
           <p
-            className="max-w-2xl -translate-y-[40px] text-lg leading-relaxed text-[var(--cream)]/70 sm:max-w-4xl sm:text-xl"
-            style={{ textWrap: "pretty" }}
+            className="max-w-xl text-lg leading-relaxed text-[var(--cream)]/70 sm:max-w-2xl sm:text-xl"
+            style={{ textWrap: "balance" }}
           >
             Når et lead skriver sig op, køler interessen ned på få minutter.
-            <br className="hidden sm:block" /> De første 5 minutter er det{" "}
-            <a
-              href="https://25649.fs1.hubspotusercontent-na2.net/hub/25649/file-13535879-pdf/docs/mit_study.pdf"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="font-semibold text-[var(--cream)] underline decoration-[#ff6b2c]/60 decoration-2 underline-offset-4 transition hover:decoration-[#ff6b2c]"
-            >
-              21× mere tilbøjelige til at blive kvalificeret
-              <sup className="ml-0.5 text-xs font-bold text-[#ff6b2c]">↗</sup>
-            </a>
-            .
             <br className="hidden sm:block" />{" "}
             <span className="sm:whitespace-nowrap">
-              Jeg bygger systemet, der fanger dem varme — og ikke slipper før de er lukket.
+              Jeg bygger systemet, der fanger dem, varmer dem og ikke giver slip før I har lukket dem.
             </span>
-          </p>
-
-          {/* Hero qualifier — who this is for */}
-          <p className="-mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] font-bold uppercase tracking-[0.3em] text-[var(--cream)]/55 sm:-mt-4 sm:text-[11px]">
-            <span className="inline-block h-px w-6 bg-[#ff6b2c]/70" aria-hidden />
-            For ejer-ledede B2B- og service-virksomheder
-            <span className="text-[var(--cream)]/30">·</span>
-            hvor langsom opfølgning koster rigtige penge
-            <span className="text-[var(--cream)]/30">·</span>
-            og ét ekstra lukket lead om måneden gør forskellen
           </p>
 
           <div className="flex flex-col-reverse items-start justify-between gap-8 sm:flex-row sm:items-end">
@@ -717,7 +860,7 @@ export default function Home() {
               alt="Louis Carter"
               draggable={false}
               onContextMenu={(e) => e.preventDefault()}
-              className="pointer-events-none h-16 w-auto -translate-y-[40px] select-none sm:h-20"
+              className="pointer-events-none h-16 w-auto select-none sm:h-20"
               style={{
                 filter: "invert(1)",
                 mixBlendMode: "screen",
@@ -728,9 +871,9 @@ export default function Home() {
             <button
               type="button"
               onClick={resetAndOpen}
-              className="group inline-flex -translate-y-[50px] items-center gap-4 rounded-full bg-[#ff6b2c] px-8 py-5 text-sm font-bold uppercase tracking-[0.25em] text-[#0f0d0a] shadow-[0_18px_60px_rgba(255,107,44,0.35)] transition hover:-translate-y-[54px] hover:bg-[#ff8244] hover:shadow-[0_24px_80px_rgba(255,107,44,0.5)]"
+              className="group inline-flex items-center gap-4 rounded-full bg-[#ff6b2c] px-8 py-5 text-sm font-bold uppercase tracking-[0.25em] text-[#0f0d0a] shadow-[0_18px_60px_rgba(255,107,44,0.35)] transition hover:-translate-y-1 hover:bg-[#ff8244] hover:shadow-[0_24px_80px_rgba(255,107,44,0.5)]"
             >
-              <span>Book et opkald</span>
+              <span>Få et 30-min lead-tjek</span>
               <span className="text-lg">→</span>
             </button>
           </div>
@@ -783,10 +926,7 @@ export default function Home() {
         <div aria-hidden className="pointer-events-none absolute bottom-0 left-1/2 h-[2px] w-[min(680px,60%)] -translate-x-1/2 bg-[linear-gradient(90deg,transparent,#ff6b2c_30%,#ff6b2c_70%,transparent)] shadow-[0_0_28px_rgba(255,107,44,0.7)]" />
 
         <div className="relative z-[1] mx-auto w-full max-w-[1400px] px-8 sm:px-12">
-          <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-[var(--clay)]">
-            Resultater · udvalgte
-          </p>
-          <h2 className="mt-4 font-display text-[10vw] leading-[0.9] tracking-[-0.04em] text-[#29261f] sm:text-6xl lg:text-7xl">
+          <h2 className="font-display text-[10vw] leading-[0.9] tracking-[-0.04em] text-[#29261f] sm:text-6xl lg:text-7xl">
             Varme leads,
             <br />
             <span className="italic text-[var(--clay)]">lukkede aftaler.</span>
@@ -884,164 +1024,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ─────── Section: Concrete offer (dark) ─────── */}
-      <section className="relative overflow-hidden bg-[#0a0907] py-28 sm:py-36">
-        <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
-          <div className="absolute right-[6%] top-[8%] h-[520px] w-[520px] rounded-full bg-[radial-gradient(ellipse_at_center,rgba(255,107,44,0.10),transparent_60%)] blur-2xl" />
-        </div>
-
-        <div className="mx-auto w-full max-w-[1280px] px-8 sm:px-12">
-          <div className="flex items-center gap-3">
-            <span aria-hidden className="h-px w-10 bg-[#ff6b2c]" />
-            <p className="text-[10px] font-bold uppercase tracking-[0.4em] text-[#ff6b2c]">
-              Hvad du får · konkret
-            </p>
-          </div>
-          <h2 className="mt-7 max-w-3xl font-display text-[10vw] leading-[0.92] tracking-[-0.04em] sm:text-6xl lg:text-7xl">
-            Det vi <span className="italic text-[var(--clay)]">faktisk</span> bygger.
-          </h2>
-          <p className="mt-5 max-w-xl text-[15px] leading-relaxed text-[var(--cream)]/65 sm:text-base">
-            Konkret. I jeres stack. Ingen sort boks, ingen pakke-leveringer, ingen ord der ender på &ldquo;-strategi&rdquo;.
-          </p>
-
-          <ul className="mt-16 grid gap-px overflow-hidden rounded-2xl border border-[var(--cream)]/8 bg-[var(--cream)]/8 sm:mt-20 sm:grid-cols-2">
-            {[
-              {
-                n: "01",
-                title: "Lead-fangst",
-                body:
-                  "Landingssider, annoncer, LinkedIn- og email-outreach, formularer der ikke smider folk af, sporing der faktisk virker, ren kildedata.",
-              },
-              {
-                n: "02",
-                title: "Lead-routing",
-                body:
-                  "Hvert nyt lead lander hos den rigtige sælger med fuld kontekst — navn, firma, kilde, tidligere kontakt — uden manuel sortering.",
-              },
-              {
-                n: "03",
-                title: "Speed-to-lead",
-                body:
-                  "SMS- og email-alarmer der pinger sælgeren direkte. Klar-til-svar-skabeloner. Automatiske flows der tager over når mennesker sover.",
-              },
-              {
-                n: "04",
-                title: "CRM og pipeline",
-                body:
-                  "Stadier der matcher hvordan I rent faktisk sælger. Ejere på hvert lead. Opfølgningsregler. Genoptagelse af leads ingen reagerede på.",
-              },
-              {
-                n: "05",
-                title: "Rapportering",
-                body:
-                  "Ét overblik der viser hvor leads lækker, hvor pengene tabes, og hvad der skal fixes næst — ikke en dashboard-graveplads.",
-                wide: true,
-              },
-            ].map((item) => (
-              <li
-                key={item.n}
-                className={`group flex flex-col gap-4 bg-[#0a0907] p-8 transition hover:bg-[#11100c] sm:p-10 ${
-                  item.wide ? "sm:col-span-2" : ""
-                }`}
-              >
-                <div className="flex items-baseline gap-4">
-                  <span className="font-mono text-[11px] font-bold tracking-[0.3em] text-[#ff6b2c]/80">
-                    {item.n}
-                  </span>
-                  <h3 className="font-display text-2xl tracking-tight text-[var(--cream)] sm:text-[1.75rem]">
-                    {item.title}
-                  </h3>
-                </div>
-                <p className="max-w-xl text-[14.5px] leading-[1.65] text-[var(--cream)]/70 sm:text-[15px]">
-                  {item.body}
-                </p>
-              </li>
-            ))}
-          </ul>
-        </div>
-      </section>
-
-      {/* ─────── Section: Before / After (cream) ─────── */}
-      <section className="relative overflow-hidden bg-[#f6efe4] py-28 text-[#29261f] sm:py-36">
-        <div aria-hidden className="paper-grain" />
-
-        {/* EmberSpark — top: bridges down from dark offer */}
-        <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-10 bg-[linear-gradient(180deg,rgba(255,107,44,0.18),transparent)]" />
-        <div aria-hidden className="pointer-events-none absolute left-1/2 top-0 h-[2px] w-[min(680px,60%)] -translate-x-1/2 bg-[linear-gradient(90deg,transparent,#ff6b2c_30%,#ff6b2c_70%,transparent)] shadow-[0_0_28px_rgba(255,107,44,0.7)]" />
-
-        {/* EmberSpark — bottom: bridges up to dark process */}
-        <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-[linear-gradient(0deg,rgba(255,107,44,0.18),transparent)]" />
-        <div aria-hidden className="pointer-events-none absolute bottom-0 left-1/2 h-[2px] w-[min(680px,60%)] -translate-x-1/2 bg-[linear-gradient(90deg,transparent,#ff6b2c_30%,#ff6b2c_70%,transparent)] shadow-[0_0_28px_rgba(255,107,44,0.7)]" />
-
-        <div className="relative z-[1] mx-auto w-full max-w-[1280px] px-8 sm:px-12">
-          <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-[var(--clay)]">
-            Før vs. efter
-          </p>
-          <h2 className="mt-4 max-w-3xl font-display text-[10vw] leading-[0.92] tracking-[-0.04em] text-[#29261f] sm:text-6xl lg:text-7xl">
-            Fra <span className="italic text-[var(--clay)]">&ldquo;vi tjekker det i morgen&rdquo;</span>
-            <br className="hidden sm:block" /> til <span className="italic">allerede ringet op.</span>
-          </h2>
-
-          <div className="mt-16 grid gap-6 sm:mt-20 sm:grid-cols-2 sm:gap-10">
-            {/* FØR — faded, monochrome */}
-            <div className="relative rounded-2xl border border-[#29261f]/15 bg-[#efe6d6]/70 p-8 sm:p-10">
-              <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-[#29261f]/55">
-                Før · som det plejer
-              </p>
-              <h3 className="mt-3 font-display text-3xl italic leading-tight tracking-tight text-[#29261f]/70 sm:text-[2.25rem]">
-                Leads i en delt indbakke.
-              </h3>
-              <ul className="mt-7 flex flex-col gap-3.5 text-[15px] leading-relaxed text-[#29261f]/65">
-                {[
-                  "Leads lander i en delt indbakke ingen ejer.",
-                  "Sælgerne ved ikke hvem der tager hvad.",
-                  "Opfølgning sker først når nogen lige husker det.",
-                  "CRM'et er en uge bagud i forhold til virkeligheden.",
-                  "Halvdelen af leadene falder helt ud af radaren.",
-                ].map((line) => (
-                  <li key={line} className="flex items-start gap-3">
-                    <span
-                      aria-hidden
-                      className="mt-2 inline-block h-px w-3 shrink-0 bg-[#29261f]/35"
-                    />
-                    <span>{line}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            {/* EFTER — vibrant */}
-            <div className="relative rounded-2xl border border-[var(--clay)]/40 bg-[#fff8ea] p-8 shadow-[0_30px_80px_-30px_rgba(218,96,34,0.35)] sm:p-10">
-              <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-[#ff6b2c]">
-                Efter · med systemet
-              </p>
-              <h3 className="mt-3 font-display text-3xl italic leading-tight tracking-tight sm:text-[2.25rem]">
-                <span className="bg-gradient-to-b from-[#ffb86b] via-[#ff6b2c] to-[#c93c0a] bg-clip-text text-transparent">
-                  Smedet før det køler.
-                </span>
-              </h3>
-              <ul className="mt-7 flex flex-col gap-3.5 text-[15px] leading-relaxed text-[#29261f]/82">
-                {[
-                  "Lead fanget — kilde, kontekst, ejer fra første sekund.",
-                  "Sælger pinget på telefonen inden for 60 sekunder.",
-                  "SMS- og email-flow tager over hvis ingen når at svare.",
-                  "Pipeline opdaterer sig selv. CRM matcher virkeligheden.",
-                  "Hvert tabt lead får en ny aktion — ingen forsvinder.",
-                ].map((line) => (
-                  <li key={line} className="flex items-start gap-3">
-                    <span
-                      aria-hidden
-                      className="mt-2 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-[#ff6b2c]"
-                    />
-                    <span>{line}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        </div>
-      </section>
-
       <section className="relative overflow-hidden bg-[#0a0907] py-32 sm:py-40">
         {/* Atmospheric backdrop */}
         <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
@@ -1052,20 +1034,10 @@ export default function Home() {
         <div className="mx-auto w-full max-w-[1400px] px-8 sm:px-12">
           {/* Header */}
           <div>
-            <div className="flex items-center gap-3">
-              <span aria-hidden className="h-px w-10 bg-[#ff6b2c]" />
-              <p className="text-[10px] font-bold uppercase tracking-[0.4em] text-[#ff6b2c]">
-                Sådan virker det · i tre takter
-              </p>
-            </div>
-            <h2 className="mt-7 font-display text-[13vw] leading-[0.86] tracking-[-0.045em] sm:text-7xl lg:text-[7.25rem]">
+            <h2 className="font-display text-[13vw] leading-[0.86] tracking-[-0.045em] sm:text-7xl lg:text-[7.25rem]">
               Fra fremmede,
               <br />
-              <span className="italic text-[var(--clay)]/85">til fans, til</span>
-              <br />
-              <span className="bg-gradient-to-b from-[#ffb86b] via-[#ff6b2c] to-[#c93c0a] bg-clip-text text-transparent">
-                faste kunder.
-              </span>
+              til <span className="bg-gradient-to-b from-[#ffb86b] via-[#ff6b2c] to-[#c93c0a] bg-clip-text text-transparent">faste kunder.</span>
             </h2>
           </div>
 
@@ -1086,11 +1058,11 @@ export default function Home() {
 
             <div className="flex flex-col gap-28 sm:gap-36">
               {journey.map((stage, i) => {
-                const isReverse = i === 1;
+                const isReverse = i % 2 === 1;
                 return (
                   <article
                     key={stage.n}
-                    className="relative grid gap-12 sm:grid-cols-12 sm:gap-12 sm:pl-14"
+                    className="relative grid gap-12 sm:grid-cols-12 sm:items-center sm:gap-12 sm:pl-14"
                   >
                     {/* Rail node */}
                     <span
@@ -1142,7 +1114,19 @@ export default function Home() {
                               {stage.proof.unit}
                             </div>
                             <div className="mt-1.5 text-[13px] leading-snug text-[var(--cream)]/55">
-                              {stage.proof.note}
+                              {stage.proof.noteHref ? (
+                                <a
+                                  href={stage.proof.noteHref}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="underline decoration-[#ff6b2c]/60 decoration-2 underline-offset-4 transition hover:text-[var(--cream)]/85 hover:decoration-[#ff6b2c]"
+                                >
+                                  {stage.proof.note}
+                                  <sup className="ml-0.5 text-[10px] font-bold text-[#ff6b2c]">↗</sup>
+                                </a>
+                              ) : (
+                                stage.proof.note
+                              )}
                             </div>
                           </div>
                         </div>
@@ -1155,49 +1139,7 @@ export default function Home() {
                     >
                       {stage.visual === "outbound" && (
                         <div className="relative h-[28rem] w-full max-w-[34rem] sm:h-[30rem]">
-                          {/* LinkedIn DM card — back, tilted left */}
-                          <div
-                            className="subtle-float-slow absolute right-0 top-0 w-[80%] origin-bottom-left"
-                            style={{ ["--float-base" as string]: "rotate(-2.5deg)" }}
-                          >
-                            <div className="rounded-2xl border border-[#29261f]/12 bg-[#fff8ea]/98 p-5 shadow-[0_40px_80px_-30px_rgba(0,0,0,0.55)] backdrop-blur-sm">
-                              <div className="flex items-center gap-3">
-                                <div className="grid h-10 w-10 place-items-center rounded-full bg-[linear-gradient(135deg,#3a4654,#525e6c)] font-display text-sm text-[#fff8ea]">
-                                  {outboundCards[0].initials}
-                                </div>
-                                <div className="min-w-0 flex-1">
-                                  <div className="truncate text-sm text-[#29261f]">
-                                    {outboundCards[0].name}
-                                  </div>
-                                  <div className="truncate text-[11px] text-[#29261f]/55">
-                                    {outboundCards[0].title}
-                                  </div>
-                                </div>
-                                <span className="rounded-full border border-[var(--clay)]/45 bg-[var(--clay)]/12 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.15em] text-[var(--clay)]">
-                                  in · {outboundCards[0].chip}
-                                </span>
-                              </div>
-                              <p className="mt-4 text-[13px] leading-relaxed text-[#29261f]/80">
-                                {outboundCards[0].preview}
-                              </p>
-                              <div className="mt-4 flex gap-2">
-                                <button
-                                  type="button"
-                                  className="rounded-full border border-[#29261f]/15 bg-[#29261f]/5 px-4 py-1.5 text-[11px] font-semibold text-[#29261f]/80"
-                                >
-                                  Forbind
-                                </button>
-                                <button
-                                  type="button"
-                                  className="rounded-full bg-[var(--clay)] px-4 py-1.5 text-[11px] font-semibold text-[#fff8ea]"
-                                >
-                                  Send besked
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Meta ad card — front, tilted right */}
+                          {/* Meta ad card — back, tilted right */}
                           <div
                             className="subtle-float absolute bottom-0 left-0 w-[72%] origin-top-right"
                             style={{
@@ -1237,6 +1179,257 @@ export default function Home() {
                                 >
                                   {outboundCards[1].cta}  →
                                 </button>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* LinkedIn DM card — front, tilted left */}
+                          <div
+                            className="subtle-float-slow absolute right-0 top-0 w-[80%] origin-bottom-left"
+                            style={{ ["--float-base" as string]: "rotate(-2.5deg)" }}
+                          >
+                            <div className="rounded-2xl border border-[#29261f]/12 bg-[#fff8ea]/98 p-5 shadow-[0_40px_80px_-30px_rgba(0,0,0,0.55)] backdrop-blur-sm">
+                              <div className="flex items-center gap-3">
+                                <div className="grid h-10 w-10 place-items-center rounded-full bg-[linear-gradient(135deg,#3a4654,#525e6c)] font-display text-sm text-[#fff8ea]">
+                                  {outboundCards[0].initials}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <div className="truncate text-sm text-[#29261f]">
+                                    {outboundCards[0].name}
+                                  </div>
+                                  <div className="truncate text-[11px] text-[#29261f]/55">
+                                    {outboundCards[0].title}
+                                  </div>
+                                </div>
+                                <span className="rounded-full border border-[var(--clay)]/45 bg-[var(--clay)]/12 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.15em] text-[var(--clay)]">
+                                  in · {outboundCards[0].chip}
+                                </span>
+                              </div>
+                              <p className="mt-4 text-[13px] leading-relaxed text-[#29261f]/80">
+                                {(outboundCards[0]?.preview ?? "")
+                                  .split(/(\([^)]+\))/g)
+                                  .map((part, i) =>
+                                    part.startsWith("(") && part.endsWith(")") ? (
+                                      <span
+                                        key={i}
+                                        className="rounded-[4px] bg-[var(--clay)]/15 px-1 py-px font-mono text-[11px] font-semibold text-[var(--clay)]"
+                                      >
+                                        {part}
+                                      </span>
+                                    ) : (
+                                      <span key={i}>{part}</span>
+                                    ),
+                                  )}
+                              </p>
+                              <div className="mt-4 flex gap-2">
+                                <button
+                                  type="button"
+                                  className="rounded-full border border-[#29261f]/15 bg-[#29261f]/5 px-4 py-1.5 text-[11px] font-semibold text-[#29261f]/80"
+                                >
+                                  Profil
+                                </button>
+                                <button
+                                  type="button"
+                                  className="rounded-full bg-[var(--clay)] px-4 py-1.5 text-[11px] font-semibold text-[#fff8ea]"
+                                >
+                                  Send besked
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {stage.visual === "flows" && (
+                        <div className="relative w-full max-w-[30rem]">
+                          {/* Flow builder card */}
+                          <div className="w-full">
+                            <div className="rounded-2xl border border-[#29261f]/12 bg-[#fff8ea] p-4 shadow-[0_40px_80px_-30px_rgba(0,0,0,0.55)] sm:p-5">
+                              {/* Header */}
+                              <div className="flex items-center justify-between border-b border-[#29261f]/10 pb-3">
+                                <div className="flex items-center gap-2.5">
+                                  <div className="grid h-7 w-7 place-items-center rounded-md bg-[#ff6b2c]/15">
+                                    <span className="h-1.5 w-1.5 rounded-full bg-[#ff6b2c] dot-pulse" />
+                                  </div>
+                                  <div>
+                                    <div className="text-[11px] font-semibold text-[#29261f]">
+                                      Flow · Nurture varme leads
+                                    </div>
+                                    <div className="text-[9px] uppercase tracking-[0.18em] text-[#29261f]/55">
+                                      412 aktive · live
+                                    </div>
+                                  </div>
+                                </div>
+                                <span className="rounded-full border border-[var(--forest)]/35 bg-[var(--forest)]/10 px-2 py-0.5 text-[8px] font-bold uppercase tracking-[0.2em] text-[var(--forest)]">
+                                  Kører
+                                </span>
+                              </div>
+
+                              {/* Nodes — relative for the silent lead chip overlay */}
+                              <div className="relative mt-3.5">
+                                {/* Trigger */}
+                                <div className="rounded-lg border border-[var(--clay)]/35 bg-[var(--clay)]/10 px-3 py-2">
+                                  <div className="flex items-center gap-2">
+                                    <span className="grid h-5 w-5 place-items-center rounded-md bg-[var(--clay)]/25 text-[9px] font-bold text-[var(--clay)]">
+                                      T
+                                    </span>
+                                    <span className="text-[11px] font-semibold text-[#29261f]">
+                                      Trigger · Lead opted in
+                                    </span>
+                                  </div>
+                                </div>
+                                <div aria-hidden className="ml-[14px] h-2.5 w-px bg-[#29261f]/20" />
+
+                                {/* Email */}
+                                <div className="rounded-lg border border-[#29261f]/12 bg-[#f6efe4] px-3 py-2">
+                                  <div className="flex items-center gap-2">
+                                    <span className="grid h-5 w-5 place-items-center rounded-md bg-[#29261f]/12 text-[9px] font-bold text-[#29261f]/70">
+                                      E
+                                    </span>
+                                    <span className="text-[11px] font-semibold text-[#29261f]">
+                                      Email · Velkomst
+                                    </span>
+                                  </div>
+                                </div>
+                                <div aria-hidden className="ml-[14px] h-2.5 w-px bg-[#29261f]/20" />
+
+                                {/* Wait */}
+                                <div className="rounded-lg border border-dashed border-[#29261f]/18 px-3 py-2">
+                                  <div className="flex items-center gap-2">
+                                    <span className="grid h-5 w-5 place-items-center rounded-md text-[10px] text-[#29261f]/45">
+                                      ◷
+                                    </span>
+                                    <span className="text-[11px] text-[#29261f]/65">Vent 2 dage</span>
+                                  </div>
+                                </div>
+                                <div aria-hidden className="ml-[14px] h-2.5 w-px bg-[#29261f]/20" />
+
+                                {/* SMS */}
+                                <div className="rounded-lg border border-[#29261f]/12 bg-[#f6efe4] px-3 py-2">
+                                  <div className="flex items-center gap-2">
+                                    <span className="grid h-5 w-5 place-items-center rounded-md bg-[#29261f]/12 text-[9px] font-bold text-[#29261f]/70">
+                                      S
+                                    </span>
+                                    <span className="text-[11px] font-semibold text-[#29261f]">
+                                      SMS · Tjek-ind
+                                    </span>
+                                  </div>
+                                </div>
+                                <div aria-hidden className="ml-[14px] h-2.5 w-px bg-[#29261f]/20" />
+
+                                {/* Last step · trigger an outbound call to the lead */}
+                                <div className="rounded-lg border border-[#ff6b2c]/45 bg-[#ff6b2c]/10 px-3 py-2">
+                                  <div className="flex items-center gap-2">
+                                    <span className="grid h-5 w-5 place-items-center rounded-md bg-[#ff6b2c]/25 text-[10px] font-bold text-[#ff6b2c]">
+                                      ☎
+                                    </span>
+                                    <span className="text-[11px] font-semibold text-[#29261f]">
+                                      Opfølgende opkald
+                                    </span>
+                                  </div>
+                                </div>
+
+                                {/* Event 1 · Møde booket — appears when the call books a meeting */}
+                                <div className="event-wrapper-1 overflow-hidden">
+                                  <div aria-hidden className="event-connector-1 ml-[14px] h-2.5 w-px bg-[var(--forest)]/40" />
+                                  <div className="event-node-1 rounded-lg border border-[var(--forest)]/35 bg-[var(--forest)]/10 px-3 py-2">
+                                    <div className="flex items-center gap-2">
+                                      <span className="grid h-5 w-5 place-items-center rounded-md bg-[var(--forest)]/25 text-[10px] font-bold text-[var(--forest)]">
+                                        ✓
+                                      </span>
+                                      <span className="text-[11px] font-semibold text-[#29261f]">
+                                        Møde · i morgen 10:00
+                                      </span>
+                                      <span className="ml-auto rounded-full border border-[var(--forest)]/35 bg-[var(--forest)]/15 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-[0.18em] text-[var(--forest)]">
+                                        + event
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Event 2 · Kontrakt sendt — appears after the meeting */}
+                                <div className="event-wrapper-2 overflow-hidden">
+                                  <div aria-hidden className="event-connector-2 ml-[14px] h-2.5 w-px bg-[var(--forest)]/40" />
+                                  <div className="event-node-2 rounded-lg border border-[var(--forest)]/35 bg-[var(--forest)]/10 px-3 py-2">
+                                    <div className="flex items-center gap-2">
+                                      <span className="grid h-5 w-5 place-items-center rounded-md bg-[var(--forest)]/25 text-[10px] font-bold text-[var(--forest)]">
+                                        ✓
+                                      </span>
+                                      <span className="text-[11px] font-semibold text-[#29261f]">
+                                        Kontrakt sendt · 32.500 kr
+                                      </span>
+                                      <span className="ml-auto rounded-full border border-[var(--forest)]/35 bg-[var(--forest)]/15 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-[0.18em] text-[var(--forest)]">
+                                        + event
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Event 3 · Onboarding — appears after the deal closes */}
+                                <div className="event-wrapper-3 overflow-hidden">
+                                  <div aria-hidden className="event-connector-3 ml-[14px] h-2.5 w-px bg-[var(--forest)]/40" />
+                                  <div className="event-node-3 rounded-lg border border-[var(--forest)]/35 bg-[var(--forest)]/10 px-3 py-2">
+                                    <div className="flex items-center gap-2">
+                                      <span className="grid h-5 w-5 place-items-center rounded-md bg-[var(--forest)]/25 text-[10px] font-bold text-[var(--forest)]">
+                                        ✓
+                                      </span>
+                                      <span className="text-[11px] font-semibold text-[#29261f]">
+                                        Onboarding · næste mandag
+                                      </span>
+                                      <span className="ml-auto rounded-full border border-[var(--forest)]/35 bg-[var(--forest)]/15 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-[0.18em] text-[var(--forest)]">
+                                        + event
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Lead chip — refined avatar that travels through the nodes */}
+                                <div
+                                  aria-hidden
+                                  className="lead-glide pointer-events-none absolute right-2 top-[6px] grid h-8 w-8 place-items-center rounded-full bg-gradient-to-br from-[#3a342a] to-[#0f0d0a] shadow-[0_10px_24px_-8px_rgba(0,0,0,0.55)] ring-2 ring-[#fff8ea]"
+                                >
+                                  <span className="font-display text-[11px] italic font-semibold text-[#ffb86b]">
+                                    MS
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* Lead-status — separate from the flow nodes */}
+                              <div className="mt-4 rounded-lg bg-[#29261f]/[0.04] px-3 py-2.5">
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex min-w-0 items-center gap-2">
+                                    <span className="grid h-6 w-6 place-items-center rounded-full bg-[#29261f]/10 text-[8px] font-bold text-[#29261f]/75">
+                                      MS
+                                    </span>
+                                    <div className="min-w-0 leading-tight">
+                                      <div className="truncate text-[10px] font-semibold text-[#29261f]">
+                                        Mette Sørensen
+                                      </div>
+                                      <div className="text-[8px] uppercase tracking-[0.18em] text-[#29261f]/50">
+                                        Lead-status
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <span className="relative h-[18px] min-w-[10rem]">
+                                    <span className="status-pill-tilmeldt absolute inset-0 flex items-center justify-end gap-1.5 whitespace-nowrap text-[9px] font-semibold uppercase tracking-[0.12em] text-[#29261f]/75">
+                                      <span className="h-1.5 w-1.5 rounded-full bg-[#ffb86b]" />
+                                      Tilmeldt
+                                    </span>
+                                    <span className="status-pill-booket absolute inset-0 flex items-center justify-end gap-1.5 whitespace-nowrap text-[9px] font-semibold uppercase tracking-[0.12em] text-[#29261f]">
+                                      <span className="h-1.5 w-1.5 rounded-full bg-[#ff6b2c] dot-pulse" />
+                                      Møde booket · 10:00
+                                    </span>
+                                    <span className="status-pill-vundet absolute inset-0 flex items-center justify-end gap-1.5 whitespace-nowrap text-[9px] font-semibold uppercase tracking-[0.12em] text-[var(--forest)]">
+                                      <span className="h-1.5 w-1.5 rounded-full bg-[var(--forest)]" />
+                                      Aftale lukket · 32.500 kr
+                                    </span>
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* Footer */}
+                              <div className="mt-4 flex items-center justify-end border-t border-[#29261f]/10 pt-3 text-[9px] text-[#29261f]/55">
+                                <span className="tabular">+38 denne uge</span>
                               </div>
                             </div>
                           </div>
@@ -1344,90 +1537,409 @@ export default function Home() {
                       )}
 
                       {stage.visual === "sms" && (
-                        <div className="relative">
-                          {/* Phone-frame chrome */}
+                        <div
+                          ref={phoneRef}
+                          className="relative"
+                          style={{ ["--phone-screen-in-delay" as string]: isFirstCycle ? "3.4s" : "0s" }}
+                        >
+                          {/* Phone-frame chrome — fixed height so phase swap doesn't reflow.
+                              The frame is NOT re-keyed; instead Phase 1, 2 and the toast each
+                              get key={smsCycle} (replay their entrance animations every cycle)
+                              while Phase 3 is keyed by displayedLead.name (only re-mounts when
+                              the displayed lead actually changes — i.e. after the call screen
+                              finishes on cycle 2+). That's how the toast can overlay the
+                              previous lead's settled SMS chat instead of an empty backdrop. */}
                           <div className="relative w-[19rem] rounded-[2.5rem] border border-[#29261f]/15 bg-gradient-to-b from-[#fff8ea] to-[#f6efe4] p-2 shadow-[0_60px_120px_-40px_rgba(0,0,0,0.55)]">
-                            <div className="rounded-[2rem] bg-[#fff8ea] px-4 pb-5 pt-9">
-                              {/* Status bar */}
-                              <div className="mb-3 flex items-center justify-between text-[10px] text-[#29261f]/65">
-                                <span className="tabular">14:35</span>
+                            <div className="relative h-[34rem] overflow-hidden rounded-[2rem] bg-[#fff8ea]">
+                              {/* Persistent status bar across phases */}
+                              <div className="absolute inset-x-0 top-0 z-20 flex items-center justify-between px-5 pt-3 text-[10px] text-[#29261f]/65">
+                                <span className="tabular">14:30</span>
                                 <span className="flex items-center gap-1">
                                   <span className="h-1.5 w-1.5 rounded-full bg-[#29261f]/65" />
                                   <span className="h-2 w-3 rounded-sm border border-[#29261f]/55" />
                                 </span>
                               </div>
-                              {/* Contact header */}
-                              <div className="mb-4 flex flex-col items-center gap-1.5 border-b border-[#29261f]/10 pb-4">
-                                <div className="grid h-10 w-10 place-items-center rounded-full bg-[#29261f]/10 font-display text-xs text-[#29261f]/75">
-                                  MS
-                                </div>
-                                <div className="text-[12px] text-[#29261f]">
-                                  Mette Sørensen
-                                </div>
-                                <div className="text-[9px] uppercase tracking-[0.2em] text-[#29261f]/50">
-                                  Nordlys A/S · sms
-                                </div>
-                              </div>
 
-                              {/* Bubbles */}
-                              <div className="flex flex-col gap-2.5">
-                                {smsThread.map((m, k) => (
+                              {/* ── Phase 1: Lock screen + incoming notification (0–1.6s, first cycle only) ── */}
+                              {isFirstCycle && (
+                                <div key={`lockscreen-${smsCycle}`} className="phone-screen-out absolute inset-0 z-10 px-4 pb-5 pt-9">
+                                  {/* Soft wallpaper ambience */}
                                   <div
-                                    key={k}
-                                    className={`bubble-in flex flex-col ${m.from === "us" ? "items-end" : "items-start"}`}
-                                    style={{ animationDelay: `${k * 0.45 + 0.2}s` }}
-                                  >
-                                    <div
-                                      className={`max-w-[80%] rounded-2xl px-3 py-2 text-[12px] leading-snug ${
-                                        m.from === "us"
-                                          ? "bg-[var(--forest)] text-[#fff8ea]"
-                                          : "bg-[#29261f]/10 text-[#29261f]"
-                                      }`}
-                                    >
-                                      {m.text}
+                                    aria-hidden
+                                    className="pointer-events-none absolute inset-0 -z-10"
+                                    style={{
+                                      background:
+                                        "radial-gradient(ellipse at 20% 25%, rgba(255,107,44,0.18), transparent 55%), radial-gradient(ellipse at 75% 80%, rgba(25,70,58,0.20), transparent 55%), linear-gradient(180deg, #fff8ea, #efe6d6)",
+                                    }}
+                                  />
+                                  {/* Big wallpaper clock */}
+                                  <div className="mt-10 text-center">
+                                    <div className="font-display text-[3.5rem] leading-none tracking-tight text-[#29261f]/85">
+                                      14:30
                                     </div>
-                                    <span className="mt-0.5 px-1 text-[9px] tabular text-[#29261f]/45">
-                                      {m.time}
-                                    </span>
+                                    <div className="mt-1 text-[10px] uppercase tracking-[0.3em] text-[#29261f]/55">
+                                      Tirsdag · 28. apr
+                                    </div>
                                   </div>
-                                ))}
 
-                                {/* Typing indicator */}
-                                <div
-                                  className="bubble-in flex items-center gap-1 self-start rounded-2xl bg-[#29261f]/10 px-3 py-2"
-                                  style={{ animationDelay: "1.7s" }}
-                                >
-                                  <span className="typing-dot h-1.5 w-1.5 rounded-full bg-[#29261f]/55" style={{ animationDelay: "0s" }} />
-                                  <span className="typing-dot h-1.5 w-1.5 rounded-full bg-[#29261f]/55" style={{ animationDelay: "0.18s" }} />
-                                  <span className="typing-dot h-1.5 w-1.5 rounded-full bg-[#29261f]/55" style={{ animationDelay: "0.36s" }} />
+                                  {/* Incoming notification — drops in at 0.2s */}
+                                  <div
+                                    className="notification-drop relative mx-1 mt-10 rounded-2xl border border-[#29261f]/12 bg-[#fff8ea]/95 p-3.5 shadow-[0_30px_60px_-25px_rgba(0,0,0,0.55)] backdrop-blur-sm"
+                                    style={{ animationDelay: "0.25s" }}
+                                  >
+                                    <div className="flex items-center gap-2 text-[9px] font-bold uppercase tracking-[0.2em] text-[#29261f]/55">
+                                      <span className="grid h-4 w-4 place-items-center rounded-[5px] bg-[#ff6b2c] text-[8px] font-bold text-[#fff8ea]">
+                                        C
+                                      </span>
+                                      Carter &amp; Co
+                                      <span className="ml-auto tabular text-[#29261f]/40">nu</span>
+                                    </div>
+                                    <div className="mt-2 text-[12px] font-semibold leading-tight text-[#29261f]">
+                                      Nyt lead · {currentLead.name}
+                                    </div>
+                                    <div className="mt-0.5 text-[11px] text-[#29261f]/65">
+                                      {currentLead.company} · {currentLead.source}
+                                    </div>
+
+                                    {/* Tap ripple — fires just before screen swap */}
+                                    <span
+                                      aria-hidden
+                                      className="tap-ripple pointer-events-none absolute right-6 top-1/2 h-9 w-9 -translate-y-1/2 rounded-full bg-[#ff6b2c]/55"
+                                    />
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* ── Phase 2: Calling screen (1.6s–3.4s, every cycle) ── */}
+                              <div
+                                key={`call-${smsCycle}`}
+                                className="phone-screen-call absolute inset-0 z-10 flex flex-col items-center justify-between px-6 pb-8 pt-9"
+                                style={{
+                                  background:
+                                    "radial-gradient(ellipse at 50% 30%, rgba(25,70,58,0.35), transparent 60%), linear-gradient(180deg, #1c3530, #0f2620)",
+                                }}
+                              >
+                                {/* Top context — outgoing call from /leads */}
+                                <div className="flex items-center gap-2 text-[9px] font-bold uppercase tracking-[0.3em] text-[#fff8ea]/65">
+                                  <span aria-hidden>↗</span>
+                                  Udgående · /leads
                                 </div>
 
-                                {/* Booket confirmation chip */}
+                                {/* Avatar with pulsing rings */}
+                                <div className="mt-2 flex flex-col items-center">
+                                  {/* Avatar + halos pinned inside their own 96×96 container so
+                                      the rings are centered behind the avatar (not behind the
+                                      whole name/company/status flex column below). */}
+                                  <div className="relative grid h-24 w-24 place-items-center">
+                                    <span aria-hidden className="absolute inset-0 rounded-full bg-[var(--cream)]/15" />
+                                    <span
+                                      aria-hidden
+                                      className="call-ring-pulse absolute inset-0 rounded-full border border-[var(--cream)]/35"
+                                    />
+                                    <span
+                                      aria-hidden
+                                      className="call-ring-pulse absolute inset-0 rounded-full border border-[var(--cream)]/35"
+                                      style={{ animationDelay: "0.55s" }}
+                                    />
+                                    <span
+                                      aria-hidden
+                                      className="call-ring-pulse absolute inset-0 rounded-full border border-[var(--cream)]/35"
+                                      style={{ animationDelay: "1.1s" }}
+                                    />
+                                    <div className="relative grid h-24 w-24 place-items-center rounded-full bg-[#1a3a32] font-display text-3xl text-[#fff8ea] ring-2 ring-[var(--cream)]/15">
+                                      {currentLead.initials}
+                                    </div>
+                                  </div>
+                                  <div className="mt-5 font-display text-[1.4rem] tracking-tight text-[#fff8ea]">
+                                    {currentLead.name}
+                                  </div>
+                                  <div className="mt-1 text-[10px] uppercase tracking-[0.3em] text-[#fff8ea]/60">
+                                    {currentLead.company}
+                                  </div>
+                                  <div className="mt-3 flex items-center gap-1 text-[11px] text-[#fff8ea]/75">
+                                    Ringer op
+                                    <span className="typing-dot inline-block h-1 w-1 rounded-full bg-[#fff8ea]/75" style={{ animationDelay: "0s" }} />
+                                    <span className="typing-dot inline-block h-1 w-1 rounded-full bg-[#fff8ea]/75" style={{ animationDelay: "0.18s" }} />
+                                    <span className="typing-dot inline-block h-1 w-1 rounded-full bg-[#fff8ea]/75" style={{ animationDelay: "0.36s" }} />
+                                  </div>
+                                </div>
+
+                                {/* Call controls — abstract, evocative */}
+                                <div className="flex items-center justify-center gap-5">
+                                  <span aria-hidden className="grid h-11 w-11 place-items-center rounded-full bg-[#fff8ea]/10 text-[#fff8ea]/80">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
+                                      <path d="M5 9.5h2.5l1.5-2h6l1.5 2H19a1.5 1.5 0 0 1 1.5 1.5v6A1.5 1.5 0 0 1 19 18.5H5A1.5 1.5 0 0 1 3.5 17v-6A1.5 1.5 0 0 1 5 9.5Z" />
+                                      <circle cx="12" cy="14" r="2.5" />
+                                    </svg>
+                                  </span>
+                                  {/* Hang-up button */}
+                                  <span aria-hidden className="grid h-12 w-12 place-items-center rounded-full bg-[#d63b2c] text-[#fff8ea] shadow-[0_8px_24px_-6px_rgba(214,59,44,0.6)]">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                                      <path d="M12 8c-3.5 0-6.7 1.1-9.3 3a1.5 1.5 0 0 0-.5 1.7l1 2.4c.3.7 1 1.1 1.7 1l3.4-.5c.6-.1 1.1-.6 1.2-1.2l.3-1.7c1.4-.5 2.8-.7 4.2-.7 1.4 0 2.8.2 4.2.7l.3 1.7c.1.6.6 1.1 1.2 1.2l3.4.5c.7.1 1.4-.3 1.7-1l1-2.4a1.5 1.5 0 0 0-.5-1.7C18.7 9.1 15.5 8 12 8Z" transform="rotate(135 12 12)" />
+                                    </svg>
+                                  </span>
+                                  <span aria-hidden className="grid h-11 w-11 place-items-center rounded-full bg-[#fff8ea]/10 text-[#fff8ea]/80">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
+                                      <path d="M9 4.5h2v15H9zM13 7.5h2v9h-2z" />
+                                    </svg>
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* In-app "new lead" toast — only on cycle 2+. Sibling of Phase 3
+                                  (not nested inside it) so it's visible during the 0–1.6s window
+                                  where Phase 3 is still opacity 0 — i.e. the slot the lockscreen
+                                  occupies on cycle 1. The keyframe slides the toast back up out
+                                  of frame ~1.5s, just before Phase 2 fades in at 1.6s. */}
+                              {!isFirstCycle && (
                                 <div
-                                  className="bubble-in mt-2 flex items-center gap-2 self-center rounded-full border border-[var(--forest)]/45 bg-[var(--forest)]/12 px-3 py-1.5 text-[10px] text-[#29261f]"
-                                  style={{ animationDelay: "2.1s" }}
+                                  key={`toast-${smsCycle}`}
+                                  className="inapp-toast pointer-events-none absolute left-3 right-3 top-7 z-30 rounded-2xl border border-[#29261f]/12 bg-[#fff8ea]/95 p-3 shadow-[0_30px_60px_-25px_rgba(0,0,0,0.55)] backdrop-blur-sm"
+                                  style={{ animationDelay: "0.2s" }}
                                 >
-                                  <span className="h-1.5 w-1.5 rounded-full bg-[var(--forest)]" />
-                                  Booket møde · I morgen 10:00
+                                  <div className="flex items-center gap-2 text-[8.5px] font-bold uppercase tracking-[0.2em] text-[#29261f]/55">
+                                    <span className="grid h-3.5 w-3.5 place-items-center rounded-[4px] bg-[#ff6b2c] text-[7px] font-bold text-[#fff8ea]">
+                                      C
+                                    </span>
+                                    Carter &amp; Co
+                                    <span className="ml-auto tabular text-[#29261f]/40">nu</span>
+                                  </div>
+                                  <div className="mt-1.5 text-[11px] font-semibold leading-tight text-[#29261f]">
+                                    Nyt lead · {currentLead.name}
+                                  </div>
+                                  <div className="mt-0.5 text-[10px] text-[#29261f]/60">
+                                    {currentLead.company} · {currentLead.source}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* ── Phase 3: /leads view (fades in at 3.4s on every cycle) ── */}
+                              <div
+                                key={`sms-${displayedLead.name}`}
+                                className="phone-screen-in absolute inset-0 flex flex-col px-4 pb-5 pt-9"
+                              >
+                                {/* App chrome — back arrow + route */}
+                                <div className="mb-2 flex items-center text-[9px] uppercase tracking-[0.25em] text-[#29261f]/55">
+                                  <span className="flex items-center gap-1.5">
+                                    <span aria-hidden>←</span>
+                                    /leads
+                                  </span>
+                                </div>
+
+                                {/* Lead header */}
+                                <div className="mb-3 flex items-center gap-3 border-b border-[#29261f]/10 pb-3">
+                                  <div className="grid h-9 w-9 place-items-center rounded-full bg-[#29261f]/10 font-display text-xs text-[#29261f]/75">
+                                    {displayedLead.initials}
+                                  </div>
+                                  <div className="min-w-0 flex-1">
+                                    <div className="text-[12px] text-[#29261f]">
+                                      {displayedLead.name}
+                                    </div>
+                                    <div className="text-[9px] uppercase tracking-[0.2em] text-[#29261f]/50">
+                                      {displayedLead.company} · {displayedLead.source}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Activity timeline. Branches on displayedLead.callPath:
+                                    - "missed": sælger ringede → cal.check → SMS bubbles → outcome chip
+                                    - "answered": sælger talte → outcome chip */}
+                                <div className="flex flex-1 flex-col gap-2 overflow-hidden">
+                                  {displayedLead.callPath === "missed" ? (
+                                    <>
+                                  {/* Sælger ringer chip — appears first */}
+                                  <div
+                                    className="bubble-in flex items-center gap-2 self-stretch rounded-xl border border-[#29261f]/12 bg-[#29261f]/[0.04] px-3 py-2"
+                                    style={{ animationDelay: `${phase3Base + 0.5}s` }}
+                                  >
+                                    <span className="relative grid h-5 w-5 shrink-0 place-items-center rounded-full bg-[var(--forest)] text-[#fff8ea]">
+                                      <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                                        <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z" />
+                                      </svg>
+                                    </span>
+                                    <div className="min-w-0 flex-1">
+                                      <div className="text-[10px] text-[#29261f]">
+                                        Sælger ringede · ingen svar
+                                      </div>
+                                      <div className="text-[9px] text-[#29261f]/55">
+                                        23 sek &middot; SMS-flow tager over
+                                      </div>
+                                    </div>
+                                    <span className="tabular text-[9px] text-[#29261f]/45">{displayedLead.callDoneAt}</span>
+                                  </div>
+
+                                  {/* Calendar-check automation — compact slot picker.
+                                      Three stacked rows: clay header tracing the agent's
+                                      function call, a horizontal slot ribbon where the booked
+                                      time sits in a forest pill (everything else greyed +
+                                      struck through), and a forest result strip confirming
+                                      the invite was sent. A subtle clay scanline sweeps once
+                                      across the ribbon as it lands — reads as the agent
+                                      checking the calendar in real time. */}
+                                  <div
+                                    className="bubble-in self-stretch overflow-hidden rounded-xl border border-[var(--clay)]/35 bg-[var(--cream)] shadow-[0_10px_24px_-14px_rgba(0,0,0,0.35)]"
+                                    style={{ animationDelay: `${phase3Base + 1.0}s` }}
+                                  >
+                                    {/* Trace header */}
+                                    <div className="flex items-center gap-1.5 border-b border-[var(--clay)]/20 bg-[var(--clay)]/[0.07] px-2.5 py-[5px]">
+                                      <span className="grid h-3.5 w-3.5 shrink-0 place-items-center rounded-[3px] bg-[var(--clay)] text-[var(--cream)]">
+                                        <svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                                          <path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z" />
+                                        </svg>
+                                      </span>
+                                      <span className="font-mono text-[8.5px] font-bold uppercase tracking-[0.25em] text-[var(--clay)]">
+                                        Agent
+                                      </span>
+                                      <span className="truncate font-mono text-[8.5px] text-[#29261f]/55">
+                                        <span className="text-[#29261f]/40">·</span>{" "}
+                                        <span className="text-[#29261f]/70">cal.check</span>
+                                        <span className="text-[#29261f]/35">{"("}</span>
+                                        <span className="text-[var(--clay)]">{`"${displayedLead.automationDate}"`}</span>
+                                        <span className="text-[#29261f]/35">{")"}</span>
+                                      </span>
+                                      <span className="dot-pulse ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--forest)]" />
+                                    </div>
+
+                                    {/* Slot ribbon */}
+                                    <div className="relative">
+                                      {/* Scanline sweep — clay-tinted gradient bar travels
+                                          left-to-right once when the chip enters. */}
+                                      <span
+                                        aria-hidden
+                                        className="cal-scan pointer-events-none absolute inset-y-0 left-0 z-0 w-1/3 bg-gradient-to-r from-transparent via-[var(--clay)]/25 to-transparent"
+                                        style={{ animationDelay: `${phase3Base + 1.6}s` }}
+                                      />
+                                      <div className="relative z-10 flex items-center justify-between gap-0.5 px-2.5 py-2">
+                                        {displayedLead.slots.map((slot) => (
+                                          <span
+                                            key={slot.t}
+                                            className={`tabular text-[10px] leading-none ${
+                                              slot.available
+                                                ? "rounded-md bg-[var(--forest)] px-1.5 py-1 font-bold text-[var(--cream)] ring-1 ring-[var(--forest)]/35"
+                                                : "px-1 text-[#29261f]/30 line-through"
+                                            }`}
+                                          >
+                                            {slot.t}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    </div>
+
+                                    {/* Result strip */}
+                                    <div className="flex items-center gap-1.5 border-t border-[var(--forest)]/15 bg-[var(--forest)]/[0.06] px-2.5 py-[5px] font-mono">
+                                      <span className="grid h-3 w-3 shrink-0 place-items-center rounded-full bg-[var(--forest)] text-[var(--cream)]">
+                                        <svg width="6" height="6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                                          <path d="M5 12.5l4 4 10-10" />
+                                        </svg>
+                                      </span>
+                                      <span className="text-[8.5px] text-[var(--forest)]/85">
+                                        <span className="font-bold">invite.send</span>
+                                        <span className="text-[var(--forest)]/55">{"("}</span>
+                                        <span className="text-[var(--clay)]">{`"${displayedLead.inviteTime}"`}</span>
+                                        <span className="text-[var(--forest)]/55">{")"}</span>
+                                      </span>
+                                      <span className="ml-auto text-[8.5px] uppercase tracking-[0.22em] text-[var(--forest)]/70">
+                                        sendt
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  {/* SMS bubbles — sent AFTER the automation finds a slot */}
+                                  {displayedLead.thread.map((m, k) => (
+                                    <div
+                                      key={k}
+                                      className={`bubble-in flex flex-col ${m.from === "us" ? "items-end" : "items-start"}`}
+                                      style={{ animationDelay: `${phase3Base + 1.8 + k * 0.6}s` }}
+                                    >
+                                      <div
+                                        className={`max-w-[82%] rounded-2xl px-3 py-2 text-[12px] leading-snug ${
+                                          m.from === "us"
+                                            ? "bg-[var(--forest)] text-[#fff8ea]"
+                                            : "bg-[#29261f]/10 text-[#29261f]"
+                                        }`}
+                                      >
+                                        {m.text}
+                                      </div>
+                                      <span className="mt-0.5 px-1 text-[9px] tabular text-[#29261f]/45">
+                                        {m.time}
+                                      </span>
+                                    </div>
+                                  ))}
+                                    </>
+                                  ) : (
+                                    <>
+                                      {/* Sælger talte chip — replaces the sælger ringede +
+                                          automation + SMS chain on the answered path. Same
+                                          chip shell as sælger ringede, different copy. */}
+                                      <div
+                                        className="bubble-in flex items-center gap-2 self-stretch rounded-xl border border-[#29261f]/12 bg-[#29261f]/[0.04] px-3 py-2"
+                                        style={{ animationDelay: `${phase3Base + 0.5}s` }}
+                                      >
+                                        <span className="relative grid h-5 w-5 shrink-0 place-items-center rounded-full bg-[var(--forest)] text-[#fff8ea]">
+                                          <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                                            <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z" />
+                                          </svg>
+                                        </span>
+                                        <div className="min-w-0 flex-1">
+                                          <div className="text-[10px] text-[#29261f]">
+                                            Sælger talte med {displayedLead.name.split(" ")[0]}
+                                          </div>
+                                          <div className="text-[9px] text-[#29261f]/55">
+                                            {displayedLead.callDuration} &middot; aftale lukket på opkald
+                                          </div>
+                                        </div>
+                                        <span className="tabular text-[9px] text-[#29261f]/45">{displayedLead.callDoneAt}</span>
+                                      </div>
+                                    </>
+                                  )}
+
+                                  {/* Outcome chip — final state. Two visual variants keyed
+                                      to displayedLead.outcome:
+                                      - "booked": forest border/35 + bg/10, calendar icon
+                                      - "customer": forest accent + ring-2, mirrors
+                                        OUTCOME_TONE.customer in src/app/leads/page.tsx */}
+                                  <div
+                                    className={
+                                      displayedLead.outcome === "customer"
+                                        ? "bubble-in mt-1 flex items-center gap-2.5 self-stretch rounded-xl border border-[var(--forest)] bg-[var(--forest)]/[0.16] px-3 py-2.5 ring-2 ring-[var(--forest)]/15"
+                                        : "bubble-in mt-1 flex items-center gap-2.5 self-stretch rounded-xl border border-[var(--forest)]/35 bg-[var(--forest)]/10 px-3 py-2.5"
+                                    }
+                                    style={{
+                                      animationDelay: `${
+                                        phase3Base +
+                                        (displayedLead.callPath === "missed" ? 4.0 : 2.2)
+                                      }s`,
+                                    }}
+                                  >
+                                    <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-[var(--forest)]/15 text-[var(--forest)]">
+                                      {displayedLead.outcome === "customer" ? (
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                                          <path d="M5 12.5l4 4 10-10" />
+                                        </svg>
+                                      ) : (
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                                          <rect x="3.5" y="5" width="17" height="15" rx="2" />
+                                          <path d="M3.5 9.5h17M8 3.5v3M16 3.5v3" />
+                                        </svg>
+                                      )}
+                                    </span>
+                                    <div className="min-w-0 flex-1">
+                                      <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-[var(--forest)]">
+                                        {displayedLead.outcome === "customer" ? "Kunde" : "Booket"}
+                                      </div>
+                                      <div className="text-[11px] text-[#29261f]">
+                                        {displayedLead.outcome === "customer"
+                                          ? `Aftale lukket · ${displayedLead.bookingLabel}`
+                                          : displayedLead.bookingLabel}
+                                      </div>
+                                    </div>
+                                    <span className="text-[14px] text-[var(--forest)]">✓</span>
+                                  </div>
                                 </div>
                               </div>
                             </div>
                           </div>
 
-                          {/* Floating timing chip */}
-                          <div
-                            className="subtle-float absolute -right-6 top-20 hidden rounded-xl border border-[#29261f]/12 bg-[#fff8ea] px-3 py-2 shadow-[0_30px_60px_-25px_rgba(0,0,0,0.55)] sm:block"
-                            style={{ animationDelay: "0.8s" }}
-                          >
-                            <div className="text-[9px] uppercase tracking-[0.2em] text-[#29261f]/55">
-                              Svartid
-                            </div>
-                            <div className="font-display text-2xl leading-none">
-                              <span className="bg-gradient-to-b from-[#5fae8b] to-[var(--forest)] bg-clip-text text-transparent">
-                                42s
-                              </span>
-                            </div>
-                          </div>
                         </div>
                       )}
                     </div>
@@ -1440,6 +1952,87 @@ export default function Home() {
             <div aria-hidden className="relative mt-10 hidden h-8 sm:block">
               <span className="absolute left-0 top-0 h-3.5 w-3.5 rounded-full bg-[var(--forest)] ring-4 ring-[#0a0907]" />
               <span className="glow-pulse absolute -left-3 -top-2.5 h-8 w-8 rounded-full bg-[var(--forest)]/45 blur-md" />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ─────── Section: Before / After (cream) ─────── */}
+      <section className="relative overflow-hidden bg-[#f6efe4] py-28 text-[#29261f] sm:py-36">
+        <div aria-hidden className="paper-grain" />
+
+        {/* EmberSpark — top: bridges down from dark offer */}
+        <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-10 bg-[linear-gradient(180deg,rgba(255,107,44,0.18),transparent)]" />
+        <div aria-hidden className="pointer-events-none absolute left-1/2 top-0 h-[2px] w-[min(680px,60%)] -translate-x-1/2 bg-[linear-gradient(90deg,transparent,#ff6b2c_30%,#ff6b2c_70%,transparent)] shadow-[0_0_28px_rgba(255,107,44,0.7)]" />
+
+        {/* EmberSpark — bottom: bridges up to dark process */}
+        <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-[linear-gradient(0deg,rgba(255,107,44,0.18),transparent)]" />
+        <div aria-hidden className="pointer-events-none absolute bottom-0 left-1/2 h-[2px] w-[min(680px,60%)] -translate-x-1/2 bg-[linear-gradient(90deg,transparent,#ff6b2c_30%,#ff6b2c_70%,transparent)] shadow-[0_0_28px_rgba(255,107,44,0.7)]" />
+
+        <div className="relative z-[1] mx-auto w-full max-w-[1280px] px-8 sm:px-12">
+          <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-[var(--clay)]">
+            Før vs. efter
+          </p>
+          <h2 className="mt-4 max-w-3xl font-display text-[10vw] leading-[0.92] tracking-[-0.04em] text-[#29261f] sm:text-6xl lg:text-7xl">
+            Fra <span className="italic text-[var(--clay)]">&ldquo;vi tjekker det i morgen&rdquo;</span>
+            <br className="hidden sm:block" /> til <span className="italic">allerede ringet op.</span>
+          </h2>
+
+          <div className="mt-16 grid gap-6 sm:mt-20 sm:grid-cols-2 sm:gap-10">
+            {/* FØR — faded, monochrome */}
+            <div className="relative rounded-2xl border border-[#29261f]/15 bg-[#efe6d6]/70 p-8 sm:p-10">
+              <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-[#29261f]/55">
+                Før · som det plejer
+              </p>
+              <h3 className="mt-3 font-display text-3xl italic leading-tight tracking-tight text-[#29261f]/70 sm:text-[2.25rem]">
+                Leads i en delt indbakke.
+              </h3>
+              <ul className="mt-7 flex flex-col gap-3.5 text-[15px] leading-relaxed text-[#29261f]/65">
+                {[
+                  "Leads lander i en delt indbakke ingen ejer.",
+                  "Sælgerne ved ikke hvem der tager hvad.",
+                  "Opfølgning sker først når nogen lige husker det.",
+                  "CRM'et er en uge bagud i forhold til virkeligheden.",
+                  "Halvdelen af leadene falder helt ud af radaren.",
+                ].map((line) => (
+                  <li key={line} className="flex items-start gap-3">
+                    <span
+                      aria-hidden
+                      className="mt-2 inline-block h-px w-3 shrink-0 bg-[#29261f]/35"
+                    />
+                    <span>{line}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* EFTER — vibrant */}
+            <div className="relative rounded-2xl border border-[var(--clay)]/40 bg-[#fff8ea] p-8 shadow-[0_30px_80px_-30px_rgba(218,96,34,0.35)] sm:p-10">
+              <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-[#ff6b2c]">
+                Efter · med systemet
+              </p>
+              <h3 className="mt-3 font-display text-3xl italic leading-tight tracking-tight sm:text-[2.25rem]">
+                <span className="bg-gradient-to-b from-[#ffb86b] via-[#ff6b2c] to-[#c93c0a] bg-clip-text text-transparent">
+                  Smedet før det køler.
+                </span>
+              </h3>
+              <ul className="mt-7 flex flex-col gap-3.5 text-[15px] leading-relaxed text-[#29261f]/82">
+                {[
+                  "Lead fanget — kilde, kontekst, ejer fra første sekund.",
+                  "Sælger pinget på telefonen inden for 60 sekunder.",
+                  "SMS- og email-flow tager over hvis ingen når at svare.",
+                  "Pipeline opdaterer sig selv. CRM matcher virkeligheden.",
+                  "Hvert tabt lead får en ny aktion — ingen forsvinder.",
+                ].map((line) => (
+                  <li key={line} className="flex items-start gap-3">
+                    <span
+                      aria-hidden
+                      className="mt-2 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-[#ff6b2c]"
+                    />
+                    <span>{line}</span>
+                  </li>
+                ))}
+              </ul>
             </div>
           </div>
         </div>
@@ -1470,7 +2063,7 @@ export default function Home() {
             <span className="font-mono text-[10px] uppercase tracking-[0.25em] text-[#ff6b2c]/80">
               Placeholder ·
             </span>{" "}
-            Konkrete kundecitater landes her når de er klar — vi opfinder ikke proof.
+            Konkrete kundecitater landes her når de er klar — jeg opfinder ikke proof.
           </p>
 
           <div className="mt-14 grid gap-6 sm:mt-16 sm:grid-cols-3">
@@ -1526,191 +2119,6 @@ export default function Home() {
           </div>
         </div>
       </section>
-
-      {/* ─────── Section: Risk reversal — Du ejer det (cream) ─────── */}
-      <section className="relative overflow-hidden bg-[#f6efe4] py-28 text-[#29261f] sm:py-36">
-        <div aria-hidden className="paper-grain" />
-
-        {/* EmberSpark — top: bridges down from dark testimonials */}
-        <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-10 bg-[linear-gradient(180deg,rgba(255,107,44,0.18),transparent)]" />
-        <div aria-hidden className="pointer-events-none absolute left-1/2 top-0 h-[2px] w-[min(680px,60%)] -translate-x-1/2 bg-[linear-gradient(90deg,transparent,#ff6b2c_30%,#ff6b2c_70%,transparent)] shadow-[0_0_28px_rgba(255,107,44,0.7)]" />
-
-        {/* EmberSpark — bottom: bridges up to dark call section */}
-        <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-[linear-gradient(0deg,rgba(255,107,44,0.18),transparent)]" />
-        <div aria-hidden className="pointer-events-none absolute bottom-0 left-1/2 h-[2px] w-[min(680px,60%)] -translate-x-1/2 bg-[linear-gradient(90deg,transparent,#ff6b2c_30%,#ff6b2c_70%,transparent)] shadow-[0_0_28px_rgba(255,107,44,0.7)]" />
-
-        <div className="relative z-[1] mx-auto w-full max-w-[1280px] px-8 sm:px-12">
-          <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-[var(--clay)]">
-            Du ejer det
-          </p>
-          <h2 className="mt-4 max-w-3xl font-display text-[10vw] leading-[0.92] tracking-[-0.04em] text-[#29261f] sm:text-6xl lg:text-7xl">
-            Vi bygger.
-            <br />
-            <span className="italic text-[var(--clay)]">I beholder.</span>
-          </h2>
-          <p className="mt-5 max-w-xl text-[15px] leading-relaxed text-[#29261f]/65 sm:text-base">
-            Ingen sort boks, ingen lock-in, ingen junior-konsulent du aldrig har mødt. Det system vi bygger bliver jeres — og I kan altid hyre nogen anden til at passe det.
-          </p>
-
-          <ul className="mt-14 grid gap-px overflow-hidden rounded-2xl border border-[#29261f]/12 bg-[#29261f]/12 sm:mt-16 sm:grid-cols-2 lg:grid-cols-3">
-            {[
-              {
-                title: "I ejer alt",
-                body: "Data, integrationer, flows, dokumentation. I kan eksportere det hele når I vil — også uden mig.",
-              },
-              {
-                title: "Bygget i jeres stack",
-                body: "HubSpot, Pipedrive, Notion, Twilio, Slack — hvad I end allerede bruger. Vi tvinger jer ikke til en ny platform.",
-              },
-              {
-                title: "Dokumenteret overdragelse",
-                body: "Hver del af systemet kommer med en kort skriftlig forklaring. Hvis vi skilles, kan en anden læse sig ind på en eftermiddag.",
-              },
-              {
-                title: "Ingen junior-konsulenter",
-                body: "Ingen ressource-pakker, ingen account managers I aldrig har mødt. Det er mig der bygger, og det er mig der svarer.",
-              },
-              {
-                title: "Direkte kontakt",
-                body: "Mit nummer, min email, min Slack — fra dag ét til den dag I ikke længere har brug for mig.",
-              },
-              {
-                title: "Ingen binding",
-                body: "Vi arbejder pr. måned. Hvis det ikke leverer, stopper vi. Det er ikke et eksklusivt forhold — det er et arbejdsforhold.",
-              },
-            ].map((item) => (
-              <li
-                key={item.title}
-                className="flex flex-col gap-3 bg-[#f6efe4] p-7 sm:p-8"
-              >
-                <div className="flex items-center gap-3">
-                  <span
-                    aria-hidden
-                    className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-[var(--forest)] text-[#fff8ea]"
-                  >
-                    <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
-                      <path
-                        d="M2.5 6.5l2.2 2.2L9.5 3.5"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                  </span>
-                  <h3 className="font-display text-xl tracking-tight text-[#29261f] sm:text-[1.4rem]">
-                    {item.title}
-                  </h3>
-                </div>
-                <p className="text-[14.5px] leading-[1.65] text-[#29261f]/72">
-                  {item.body}
-                </p>
-              </li>
-            ))}
-          </ul>
-        </div>
-      </section>
-
-      {/* ─────── Section: What happens on the call (dark) ─────── */}
-      <section className="relative overflow-hidden bg-[#0a0907] py-28 sm:py-36">
-        <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
-          <div className="absolute left-[10%] top-[10%] h-[440px] w-[440px] rounded-full bg-[radial-gradient(ellipse_at_center,rgba(255,107,44,0.10),transparent_60%)] blur-2xl" />
-          <div className="absolute right-[5%] bottom-[5%] h-[360px] w-[360px] rounded-full bg-[radial-gradient(ellipse_at_center,rgba(25,70,58,0.18),transparent_60%)] blur-2xl" />
-        </div>
-
-        <div className="mx-auto w-full max-w-[1100px] px-8 sm:px-12">
-          <div className="grid gap-14 sm:grid-cols-12 sm:gap-16">
-            <div className="sm:col-span-5">
-              <div className="flex items-center gap-3">
-                <span aria-hidden className="h-px w-10 bg-[#ff6b2c]" />
-                <p className="text-[10px] font-bold uppercase tracking-[0.4em] text-[#ff6b2c]">
-                  Det første opkald
-                </p>
-              </div>
-              <h2 className="mt-7 font-display text-4xl leading-[0.96] tracking-tight sm:text-5xl">
-                Hvad sker der
-                <br />
-                <span className="italic text-[var(--clay)]">på opkaldet?</span>
-              </h2>
-              <p className="mt-6 max-w-md text-[15px] leading-relaxed text-[var(--cream)]/70">
-                30 minutter. Ingen pitch. Ingen deck. Vi kigger på jeres reelle lead-flow og finder hvor det lækker mest. Så beslutter vi om det giver mening at arbejde sammen.
-              </p>
-            </div>
-
-            <ol className="sm:col-span-7">
-              <div className="relative">
-                <span
-                  aria-hidden
-                  className="absolute left-[7px] top-3 hidden h-[calc(100%-2.5rem)] w-px bg-[linear-gradient(180deg,rgba(255,107,44,0.5),rgba(25,70,58,0.5))] sm:block"
-                />
-                {[
-                  {
-                    t: "0–5 min",
-                    title: "Vi forstår jeres setup.",
-                    body: "Hvor kommer leads fra, hvem ejer dem, hvilken stack kører i forvejen.",
-                  },
-                  {
-                    t: "5–15 min",
-                    title: "Vi tegner lead-flowet.",
-                    body: "Live, mens vi snakker. Det er typisk her det bliver pinligt — men det er også her, vi finder pengene.",
-                  },
-                  {
-                    t: "15–25 min",
-                    title: "Vi udpeger 1–2 højimpaktszoner.",
-                    body: "Hvad der vil flytte mest med mindst arbejde. Konkret nok til at I kan handle på det selv hvis I vil.",
-                  },
-                  {
-                    t: "25–30 min",
-                    title: "Vi beslutter om vi skal arbejde sammen.",
-                    body: "Hvis det ikke matcher, så siger jeg det. Hvis det matcher, så aftaler vi næste skridt — altid pr. måned, aldrig binding.",
-                  },
-                ].map((row) => (
-                  <li
-                    key={row.t}
-                    className="relative grid gap-3 pb-7 last:pb-0 sm:grid-cols-[10rem_1fr] sm:gap-6 sm:pb-9"
-                  >
-                    <div className="flex items-center gap-3">
-                      <span
-                        aria-hidden
-                        className="hidden h-3.5 w-3.5 shrink-0 rounded-full bg-[#ff6b2c] ring-4 ring-[#0a0907] sm:inline-block"
-                      />
-                      <span className="font-mono text-[11px] font-bold uppercase tracking-[0.25em] text-[#ff6b2c]/85">
-                        {row.t}
-                      </span>
-                    </div>
-                    <div className="sm:pl-1">
-                      <h3 className="font-display text-xl leading-tight tracking-tight text-[var(--cream)] sm:text-[1.4rem]">
-                        {row.title}
-                      </h3>
-                      <p className="mt-2 max-w-xl text-[14.5px] leading-[1.65] text-[var(--cream)]/68">
-                        {row.body}
-                      </p>
-                    </div>
-                  </li>
-                ))}
-              </div>
-            </ol>
-          </div>
-
-          <div className="mt-14 flex flex-col items-start gap-4 sm:mt-16 sm:flex-row sm:items-center sm:justify-between">
-            <p
-              className="max-w-md text-[1.1rem] leading-snug text-[var(--cream)]/85 sm:text-[1.25rem]"
-              style={{ fontFamily: "var(--font-handwritten)" }}
-            >
-              Værste tilfælde: du går derfra med 1-2 ting du selv kan rette i morgen.
-            </p>
-            <button
-              type="button"
-              onClick={resetAndOpen}
-              className="group inline-flex items-center gap-3 rounded-full bg-[#ff6b2c] px-7 py-4 text-xs font-bold uppercase tracking-[0.25em] text-[#0f0d0a] shadow-[0_18px_50px_rgba(255,107,44,0.35)] transition hover:-translate-y-0.5 hover:bg-[#ff8244]"
-            >
-              Book et 30 min. lead-tjek
-              <span aria-hidden>→</span>
-            </button>
-          </div>
-        </div>
-      </section>
-
       <section className="relative overflow-hidden bg-[#f6efe4] py-32 text-[#29261f] sm:py-44">
         <div aria-hidden className="paper-grain" />
 
@@ -1725,16 +2133,13 @@ export default function Home() {
         <div className="relative z-[1] mx-auto h-[min(820px,90vh)] w-full max-w-[1280px] px-8 sm:px-12">
           {/* Centered headline + CTA — anchors the scatter */}
           <div className="absolute left-1/2 top-1/2 z-[3] w-[calc(100%-4rem)] max-w-[40rem] -translate-x-1/2 -translate-y-1/2 text-center sm:w-[calc(100%-7.5rem)]">
-            <p className="text-[10px] font-bold uppercase tracking-[0.4em] text-[var(--clay)]">
-              Plumbing · ikke platform
-            </p>
-            <h2 className="mt-6 font-display text-4xl leading-[0.96] tracking-[-0.035em] sm:text-5xl lg:text-[3.75rem]">
+            <h2 className="font-display text-4xl leading-[0.96] tracking-[-0.035em] sm:text-5xl lg:text-[3.75rem]">
               Du beholder alt du har.
               <br />
-              <span className="italic text-[var(--clay)]">Vi får det bare til at tale sammen.</span>
+              <span className="italic text-[var(--clay)]">Jeg får det bare til at tale sammen.</span>
             </h2>
             <p className="mx-auto mt-6 max-w-[28rem] text-[15px] leading-relaxed text-[#29261f]/70">
-              Annonce → CRM → kalender. Vi forbinder dine værktøjer og lægger dem oven på systemet — uden migrering, uden ny stack.
+              Annonce → CRM → kalender. Jeg forbinder dine værktøjer og lægger dem oven på systemet — uden migrering, uden ny stack.
             </p>
 
             {/* CTA stack — forest-green pill (won-color CTA on paper) + email link */}
@@ -1744,7 +2149,7 @@ export default function Home() {
                 onClick={resetAndOpen}
                 className="inline-flex items-center gap-3 rounded-full bg-[var(--forest)] px-8 py-4 text-xs font-bold uppercase tracking-[0.25em] text-[#fff8ea] shadow-[0_18px_50px_-16px_rgba(25,70,58,0.5)] transition hover:-translate-y-0.5 hover:shadow-[0_24px_60px_-16px_rgba(25,70,58,0.6)]"
               >
-                Book et 30 min. lead-tjek <span aria-hidden>→</span>
+                Få et 30-min lead-tjek <span aria-hidden>→</span>
               </button>
               <a
                 href="mailto:louis@carterco.dk"
@@ -1815,14 +2220,7 @@ export default function Home() {
         </div>
 
         <div className="mx-auto w-full max-w-[1400px] px-8 sm:px-12">
-          <div className="flex items-center gap-3">
-            <span aria-hidden className="h-px w-10 bg-[#ff6b2c]" />
-            <p className="text-[10px] font-bold uppercase tracking-[0.4em] text-[#ff6b2c]">
-              Én mand · København · ét nummer
-            </p>
-          </div>
-
-          <div className="mt-10 grid gap-10 sm:mt-16 sm:grid-cols-12 sm:items-end sm:gap-14">
+          <div className="grid gap-10 sm:grid-cols-12 sm:items-end sm:gap-14">
             {/* Massive name treatment */}
             <div className="relative sm:col-span-7">
               {/* Ghost numeral / mark behind the name — echoes the journey section */}
@@ -1849,7 +2247,7 @@ export default function Home() {
                 className="mt-6 max-w-md text-[1.2rem] leading-snug text-[var(--cream)]/85 sm:mt-8 sm:text-[1.45rem]"
                 style={{ fontFamily: "var(--font-handwritten)" }}
               >
-                Solo. Få kunder ad gangen. Ét nummer du kan ringe på.
+                Få kunder ad gangen. Ét direkte nummer.
               </p>
             </div>
 
@@ -1909,9 +2307,9 @@ export default function Home() {
             <p className="relative font-display text-[10vw] italic leading-[0.96] tracking-[-0.03em] text-[var(--cream)] sm:text-[5.5vw] lg:text-[5.25rem]">
               Det er ikke et bureau.
               <br />
-              <span className="text-[var(--cream)]/55">Det er bare</span>{" "}
+              <span className="text-[var(--cream)]/55">Det er et</span>{" "}
               <span className="bg-gradient-to-b from-[#ffb86b] via-[#ff6b2c] to-[#c93c0a] bg-clip-text text-transparent">
-                mig.
+                værksted.
               </span>
             </p>
           </blockquote>
@@ -1920,20 +2318,19 @@ export default function Home() {
           <div className="mt-20 grid gap-12 sm:mt-24 sm:grid-cols-12 sm:gap-16">
             <div className="sm:col-span-7">
               <p className="max-w-xl text-[16px] leading-[1.7] text-[var(--cream)]/75 sm:text-[17px]">
-                Carter &amp; Co er ikke et agency. Det er én mand, ét system, og få kunder ad gangen. Jeg bygger maskinen der ringer dine leads op før kaffen er kold — kører den ind hos jer — og bliver til den kører af sig selv.
+                Carter &amp; Co er ikke et bureau. Det er et værksted — bygget rundt om systemet, ikke om timerne. Få kunder ad gangen, så maskinen der fanger jeres leads mens jernet stadig er varmt bliver bygget skarpt — kørt ind hos jer — og overdraget når den kører af sig selv.
               </p>
               <p className="mt-5 max-w-xl text-[16px] leading-[1.7] text-[var(--cream)]/75 sm:text-[17px]">
-                Ingen junior-konsulenter. Ingen strategidage. Ingen rapporter du ikke læser. Bare arbejdet — og mit direkte nummer fra dag ét.
+                Ingen junior-konsulenter mellem dig og arbejdet. Ingen strategidage. Ingen rapporter du ikke læser. Du taler med den der bygger systemet — fra dag ét.
               </p>
             </div>
 
             <div className="flex flex-col items-start gap-5 sm:col-span-5 sm:items-end sm:text-right">
-              {/* TODO: replace placeholder with real mobile number */}
               <a
-                href="tel:+4500000000"
+                href="tel:+4593966390"
                 className="group inline-flex items-center gap-3 font-display text-2xl italic text-[var(--cream)] transition hover:text-[#ff6b2c] sm:text-[1.875rem]"
               >
-                +45 00 00 00 00
+                +45 93 96 63 90
                 <span
                   aria-hidden
                   className="inline-block transition group-hover:translate-x-1"
