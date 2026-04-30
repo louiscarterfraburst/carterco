@@ -271,7 +271,7 @@ async function sendsparkRender(lead: Record<string, unknown>) {
       contactName: ((lead.first_name as string) ?? "").trim() || "there",
       contactEmail: lead.contact_email as string,
       company: ((lead.company as string) ?? "").slice(0, 80),
-      jobTitle: ((lead.title as string) ?? "").slice(0, 120),
+      jobTitle: ((lead.title as string) ?? "").slice(0, 100),
       backgroundUrl: (lead.website as string) ?? "",
     },
   };
