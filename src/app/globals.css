@@ -147,6 +147,10 @@ body {
   100% { transform: translateY(var(--wire-length, 100%)); opacity: 0; }
 }
 
+/* Hidden by default so reduced-motion users don't see a stationary "stuck" dot
+   at the top of the wire. Animation reveals it via opacity keyframes. */
+.wire-travel { opacity: 0; }
+
 @media (prefers-reduced-motion: no-preference) {
   .wire-travel {
     animation: wire-travel 9s linear infinite;
@@ -216,22 +220,21 @@ body {
   100% { transform: translateY(322px) scale(0.55); opacity: 0; }
 }
 
-/* Event wrappers — each grows the card height when its outcome lands.
-   Event 1 (Møde) opens at 70% wall-clock, lasts through the rest of cycle.
-   Event 2 (Kontrakt sendt) opens at 80%.
-   Event 3 (Onboarding) opens at 88%.
-   All collapse at 99% so the next loop starts compact. */
-@keyframes event-wrapper-1 { 0%, 70% { max-height: 0; } 73%, 99% { max-height: 60px; } 100% { max-height: 0; } }
-@keyframes event-wrapper-2 { 0%, 80% { max-height: 0; } 83%, 99% { max-height: 60px; } 100% { max-height: 0; } }
-@keyframes event-wrapper-3 { 0%, 88% { max-height: 0; } 91%, 99% { max-height: 60px; } 100% { max-height: 0; } }
+/* Event wrappers — each grows the card height once on first cycle, then
+   stays expanded so subsequent cycles don't shift the page layout (only
+   the inner content fades in/out via opacity). Each wrapper runs its
+   max-height keyframe once with `forwards` fill to lock the final state. */
+@keyframes event-wrapper-1-once { 0%, 60% { max-height: 0; } 63%, 100% { max-height: 60px; } }
+@keyframes event-wrapper-2-once { 0%, 73% { max-height: 0; } 76%, 100% { max-height: 60px; } }
+@keyframes event-wrapper-3-once { 0%, 83% { max-height: 0; } 86%, 100% { max-height: 60px; } }
 
-@keyframes event-node-1 { 0%, 70% { opacity: 0; transform: translateY(-6px) scale(0.94); } 75%, 99% { opacity: 1; transform: translateY(0) scale(1); } 100% { opacity: 0; } }
-@keyframes event-node-2 { 0%, 80% { opacity: 0; transform: translateY(-6px) scale(0.94); } 85%, 99% { opacity: 1; transform: translateY(0) scale(1); } 100% { opacity: 0; } }
-@keyframes event-node-3 { 0%, 88% { opacity: 0; transform: translateY(-6px) scale(0.94); } 93%, 99% { opacity: 1; transform: translateY(0) scale(1); } 100% { opacity: 0; } }
+@keyframes event-node-1 { 0%, 60% { opacity: 0; transform: translateY(-6px) scale(0.94); } 65%, 99% { opacity: 1; transform: translateY(0) scale(1); } 100% { opacity: 0; } }
+@keyframes event-node-2 { 0%, 73% { opacity: 0; transform: translateY(-6px) scale(0.94); } 78%, 99% { opacity: 1; transform: translateY(0) scale(1); } 100% { opacity: 0; } }
+@keyframes event-node-3 { 0%, 83% { opacity: 0; transform: translateY(-6px) scale(0.94); } 88%, 99% { opacity: 1; transform: translateY(0) scale(1); } 100% { opacity: 0; } }
 
-@keyframes event-connector-1 { 0%, 70% { opacity: 0; } 73%, 99% { opacity: 1; } 100% { opacity: 0; } }
-@keyframes event-connector-2 { 0%, 80% { opacity: 0; } 83%, 99% { opacity: 1; } 100% { opacity: 0; } }
-@keyframes event-connector-3 { 0%, 88% { opacity: 0; } 91%, 99% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes event-connector-1 { 0%, 60% { opacity: 0; } 63%, 99% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes event-connector-2 { 0%, 73% { opacity: 0; } 76%, 99% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes event-connector-3 { 0%, 83% { opacity: 0; } 86%, 99% { opacity: 1; } 100% { opacity: 0; } }
 
 /* Lead-status pill: tightly synced to the chip's position.
    Nurture nodes (0–60%)              → Tilmeldt.
@@ -261,9 +264,9 @@ body {
   .status-pill-tilmeldt { animation: status-pill-tilmeldt 14s linear infinite; }
   .status-pill-booket   { animation: status-pill-booket   14s linear infinite; }
   .status-pill-vundet   { animation: status-pill-vundet   14s linear infinite; }
-  .event-wrapper-1      { animation: event-wrapper-1   14s cubic-bezier(0.2, 0.8, 0.2, 1) infinite; }
-  .event-wrapper-2      { animation: event-wrapper-2   14s cubic-bezier(0.2, 0.8, 0.2, 1) infinite; }
-  .event-wrapper-3      { animation: event-wrapper-3   14s cubic-bezier(0.2, 0.8, 0.2, 1) infinite; }
+  .event-wrapper-1      { animation: event-wrapper-1-once 14s cubic-bezier(0.2, 0.8, 0.2, 1) 1 forwards; }
+  .event-wrapper-2      { animation: event-wrapper-2-once 14s cubic-bezier(0.2, 0.8, 0.2, 1) 1 forwards; }
+  .event-wrapper-3      { animation: event-wrapper-3-once 14s cubic-bezier(0.2, 0.8, 0.2, 1) 1 forwards; }
   .event-node-1         { animation: event-node-1      14s cubic-bezier(0.2, 0.8, 0.2, 1) infinite; }
   .event-node-2         { animation: event-node-2      14s cubic-bezier(0.2, 0.8, 0.2, 1) infinite; }
   .event-node-3         { animation: event-node-3      14s cubic-bezier(0.2, 0.8, 0.2, 1) infinite; }
@@ -409,4 +412,19 @@ body {
   .animate-marquee:hover {
     animation-play-state: paused;
   }
+}
+
+/* Testimonials — vertical marquee with alternating direction per column */
+@keyframes testimonial-marquee-up {
+  from { transform: translateY(0); }
+  to   { transform: translateY(-50%); }
+}
+@keyframes testimonial-marquee-down {
+  from { transform: translateY(-50%); }
+  to   { transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .testimonial-marquee-up   { animation: testimonial-marquee-up   45s linear infinite; }
+  .testimonial-marquee-down { animation: testimonial-marquee-down 45s linear infinite; }
 }

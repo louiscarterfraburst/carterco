@@ -2,6 +2,8 @@
 
 import { FormEvent, KeyboardEvent, ReactNode, useEffect, useRef, useState } from "react";
 import { createClient } from "@/utils/supabase/client";
+import { LeadQuiz } from "@/components/lead-quiz";
+import { ExitIntent } from "@/components/exit-intent";
 
 declare global {
   interface Window {
@@ -102,6 +104,7 @@ const DEFAULT_LOGO_CLASS = "h-4 w-auto sm:h-6";
 const cases: {
   metric: string;
   metricLabel: string;
+  annotation?: string;
   copy: string;
   client: string;
   industry?: string;
@@ -115,7 +118,7 @@ const cases: {
   {
     metric: "31×",
     metricLabel: "outreach-volumen",
-    copy: "Tresyv ville sende personligt outreach i en skala et team aldrig kunne ramme manuelt — 31× mere, uden at miste det optaget-kun-til-dem-præg. AI-systemet genererer en unik video til hver enkelt prospect.",
+    copy: "31× flere outreach-beskeder. Hver med en unik video til prospecten. Tresyv ramte en skala et team aldrig kunne nå — uden at det føltes som spam.",
     client: "Tresyv",
     kind: "heat",
     logo: "/logos/logo-tresyv.svg",
@@ -124,7 +127,8 @@ const cases: {
   {
     metric: "<3 min",
     metricLabel: "gennemsnitlig responstid",
-    copy: "Murph svarer hvert nyt lead på under 3 minutter i gennemsnit. Sælgeren får leadet direkte på telefonen med navn, firma og kontekst — ring op eller følg op med ét tryk, uden at åbne CRM'et.",
+    annotation: "87× hurtigere",
+    copy: "Murph rammer hvert nyt lead på under 3 minutter — fra annonceklik til opkald. Sælgeren får leadet på telefonen med navn, firma, kontekst. Ringer op uden at åbne CRM'et.",
     client: "Murph",
     url: "https://www.trymurph.com/",
     logo: "/logos/logo-murph.png",
@@ -134,7 +138,7 @@ const cases: {
   {
     metric: "4×",
     metricLabel: "lead-konvertering",
-    copy: "Burst 4-doblede lead-konverteringen — samme målgruppe, samme kanaler. Et intro-tilbud målgruppen ikke kunne sige nej til, annoncer der ramte præcis de rigtige, og et email- og SMS-flow der svarer hvert lead personligt inden for minutter.",
+    copy: "4× flere lukkede aftaler. Samme målgruppe, samme budget. Et intro-tilbud der stikker af fra konkurrenternes, annoncer bygget på deres bedste kunder, og et SMS-flow der rammer før leadet er gået ud af brusebadet.",
     client: "Burst",
     kind: "won",
     url: "https://burstcreators.com",
@@ -155,18 +159,18 @@ type JourneyStage = {
 const journey: JourneyStage[] = [
   {
     n: "01",
-    verb: "Fange",
+    verb: "Finde",
     title: "Hente dem ind",
-    titleAccent: "der hvor de allerede er.",
-    body: "Målrettet outreach på LinkedIn og email til dem der bestemmer, plus Meta-annoncer skarpt på den profil du sælger til. Ingen spam, ingen breddeskud — kun leads der matcher hvem du faktisk vil tale med.",
+    titleAccent: "hvor de allerede er.",
+    body: "Personlige LinkedIn-DMs i skala. Email-outreach uden om gatekeepere. Meta- og Google-annoncer bygget på den profil du sælger til.",
     visual: "outbound",
   },
   {
     n: "02",
-    verb: "Smede",
-    title: "Pinge sælgeren",
-    titleAccent: "mens jernet stadig glør.",
-    body: "Hvert nyt lead lander direkte hos den rigtige sælger — navn, firma og kontekst på telefonen. SMS- og email-flows tager over hvis ingen når at svare. Ingen lead falder fra mens du sover.",
+    verb: "Ringe",
+    title: "Få dem på telefonen",
+    titleAccent: "før de glemmer dig.",
+    body: "Sælgeren får leadet på skærmen samme sekund det lander — med navn, firma, kontekst. Ét tryk og du ringer op. Ingen CRM at åbne, ingen indbakke at scrolle.",
     proof: {
       metric: "21×",
       unit: "mere kvalificeret",
@@ -181,15 +185,15 @@ const journey: JourneyStage[] = [
     verb: "Pleje",
     title: "Holde dem varme",
     titleAccent: "indtil de er klar.",
-    body: "For dem der ikke er klar endnu — email- og SMS-flows der nurturer i baggrunden. Drip-sekvenser, re-engagement af kolde, no-show follow-ups, win-back. Bygget i ActiveCampaign eller jeres nuværende værktøj. Når et lead bliver varmt nok, ryger de tilbage til sælgeren med fuld kontekst.",
+    body: "Ikke alle leads er klar til at købe i dag. Email og SMS i ugevis. Når de engagerer, ryger leadet tilbage til sælgeren med hele samtalen som kontekst.",
     visual: "flows",
   },
   {
     n: "04",
     verb: "Lukke",
-    title: "Pipelinen opdaterer",
-    titleAccent: "sig selv.",
-    body: "CRM'et matcher virkeligheden mens dagen kører. Vundne aftaler lander i 'lukket', langsomme leads får automatisk en ny aktion, og intet forsvinder bare i baggrunden.",
+    title: "Føre dem hjem",
+    titleAccent: "uden at miste én.",
+    body: "De fleste CRM'er er en uge bagud. Mit følger med dagen. Vundne aftaler hopper til 'lukket', leads der står stille får ny aktion, og det der ellers ville falde af radaren bliver fanget før du selv ser det.",
     visual: "pipeline",
   },
 ];
@@ -207,7 +211,7 @@ const outboundCards = [
   {
     type: "meta" as const,
     sponsor: "Sponsoreret · Carter & Co",
-    headline: "Få varme leads inden for få minutter.",
+    headline: "Flere leads. Ringet op med det samme.",
     body: "Jeg bygger systemet. Du lukker aftalerne.",
     cta: "Book demo",
   },
@@ -343,16 +347,10 @@ type IntegrationTile = {
 const integrationTiles: IntegrationTile[] = [
   // — Top arc —
   {
-    // Monday: stylized rainbow vertical bars (their actual mark is colored bars; we render mono)
+    // Monday: real multi-color brand mark on white tile
     id: "monday",
-    x: 14, y: 16, size: 64, rot: -6, bg: "#FF3D57",
-    glyph: (
-      <g fill="white">
-        <rect x="5" y="8" width="3.4" height="8" rx="1.7" />
-        <rect x="10.3" y="6" width="3.4" height="12" rx="1.7" />
-        <rect x="15.6" y="9" width="3.4" height="6" rx="1.7" />
-      </g>
-    ),
+    x: 14, y: 16, size: 64, rot: -6, bg: "#FFFFFF", border: "#E5E0D5",
+    iconSrc: "/icons/integrations/monday.svg",
   },
   {
     // Pipedrive: stylized P with internal pipe — mirrors the brand's "P with a tail" mark
@@ -371,28 +369,17 @@ const integrationTiles: IntegrationTile[] = [
     iconSrc: "/icons/integrations/hubspot.svg",
   },
   {
-    // Salesforce: cloud silhouette (their iconic mark)
+    // Salesforce: real SimpleIcons cloud
     id: "salesforce",
     x: 72, y: 8, size: 76, rot: 5, bg: "#00A1E0",
-    glyph: (
-      <g fill="white">
-        <path d="M 6.5 16.5 a 3 3 0 0 1 -0.4 -5.9 a 3.8 3.8 0 0 1 1.6 -2.3 a 4 4 0 0 1 6.4 0.9 a 3.5 3.5 0 0 1 4.6 2 a 2.7 2.7 0 0 1 -1 5.3 Z" />
-      </g>
-    ),
+    iconSrc: "/icons/integrations/salesforce.svg",
   },
   // — Middle band —
   {
-    // Microsoft Dynamics 365: 4-square Microsoft-style grid
+    // Microsoft Dynamics 365: real SimpleIcons mark
     id: "dynamics",
     x: 6, y: 44, size: 68, rot: 6, bg: "#0078D4",
-    glyph: (
-      <g fill="white">
-        <rect x="4" y="4" width="7.5" height="7.5" rx="0.5" />
-        <rect x="12.5" y="4" width="7.5" height="7.5" rx="0.5" />
-        <rect x="4" y="12.5" width="7.5" height="7.5" rx="0.5" />
-        <rect x="12.5" y="12.5" width="7.5" height="7.5" rx="0.5" />
-      </g>
-    ),
+    iconSrc: "/icons/integrations/dynamics.svg",
   },
   {
     // ActiveCampaign: triangle play-arrow with horizontal accent (their signature shape)
@@ -408,16 +395,10 @@ const integrationTiles: IntegrationTile[] = [
 
   // — Lower band —
   {
-    // LinkedIn: classic boxy "in" letterform
+    // LinkedIn: real SimpleIcons "in" mark
     id: "linkedin",
     x: 12, y: 76, size: 72, rot: -5, bg: "#0A66C2",
-    glyph: (
-      <g fill="white">
-        <rect x="4" y="9" width="3.5" height="11" rx="0.3" />
-        <circle cx="5.75" cy="5.5" r="1.9" />
-        <path d="M 10 9 L 13 9 L 13 10.6 Q 14.5 8.7 17 8.7 Q 20.5 8.7 20.5 13 L 20.5 20 L 17 20 L 17 13.5 Q 17 11.6 15.4 11.6 Q 13.5 11.6 13.5 14 L 13.5 20 L 10 20 Z" />
-      </g>
-    ),
+    iconSrc: "/icons/integrations/linkedin.svg",
   },
   {
     // Zapier: real SimpleIcons asterisk-cross
@@ -461,6 +442,7 @@ const initial: FormState = {
 
 export default function Home() {
   const [open, setOpen] = useState(false);
+  const [quizOpen, setQuizOpen] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -846,11 +828,7 @@ export default function Home() {
             className="max-w-xl text-lg leading-relaxed text-[var(--cream)]/70 sm:max-w-2xl sm:text-xl"
             style={{ textWrap: "balance" }}
           >
-            Når et lead skriver sig op, køler interessen ned på få minutter.
-            <br className="hidden sm:block" />{" "}
-            <span className="sm:whitespace-nowrap">
-              Jeg bygger systemet, der fanger dem, varmer dem og ikke giver slip før I har lukket dem.
-            </span>
+            Når et lead skriver sig op, køler interessen ned på få minutter. Jeg bygger systemet, der skaffer flere leads – og får dem ringet op, før de køler ned.
           </p>
 
           <div className="flex flex-col-reverse items-start justify-between gap-8 sm:flex-row sm:items-end">
@@ -868,14 +846,16 @@ export default function Home() {
               } as React.CSSProperties}
             />
 
-            <button
-              type="button"
-              onClick={resetAndOpen}
-              className="group inline-flex items-center gap-4 rounded-full bg-[#ff6b2c] px-8 py-5 text-sm font-bold uppercase tracking-[0.25em] text-[#0f0d0a] shadow-[0_18px_60px_rgba(255,107,44,0.35)] transition hover:-translate-y-1 hover:bg-[#ff8244] hover:shadow-[0_24px_80px_rgba(255,107,44,0.5)]"
-            >
-              <span>Få et 30-min lead-tjek</span>
-              <span className="text-lg">→</span>
-            </button>
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-6">
+              <button
+                type="button"
+                onClick={() => setQuizOpen(true)}
+                className="group inline-flex items-center gap-4 rounded-full bg-[#ff6b2c] px-8 py-5 text-sm font-bold uppercase tracking-[0.25em] text-[#0f0d0a] shadow-[0_18px_60px_rgba(255,107,44,0.35)] transition hover:-translate-y-1 hover:bg-[#ff8244] hover:shadow-[0_24px_80px_rgba(255,107,44,0.5)]"
+              >
+                <span>Tag lead-quizzen</span>
+                <span className="text-lg">→</span>
+              </button>
+            </div>
           </div>
         </div>
         </div>
@@ -926,10 +906,10 @@ export default function Home() {
         <div aria-hidden className="pointer-events-none absolute bottom-0 left-1/2 h-[2px] w-[min(680px,60%)] -translate-x-1/2 bg-[linear-gradient(90deg,transparent,#ff6b2c_30%,#ff6b2c_70%,transparent)] shadow-[0_0_28px_rgba(255,107,44,0.7)]" />
 
         <div className="relative z-[1] mx-auto w-full max-w-[1400px] px-8 sm:px-12">
-          <h2 className="font-display text-[10vw] leading-[0.9] tracking-[-0.04em] text-[#29261f] sm:text-6xl lg:text-7xl">
-            Varme leads,
+          <h2 className="text-center font-display text-[10vw] leading-[0.9] tracking-[-0.04em] text-[#29261f] sm:text-6xl lg:text-7xl">
+            Forskellige brancher.
             <br />
-            <span className="italic text-[var(--clay)]">lukkede aftaler.</span>
+            <span className="italic text-[var(--clay)]">Samme retning.</span>
           </h2>
 
           <div className="mt-16 grid gap-px overflow-hidden rounded-2xl border border-[#29261f]/12 bg-[#29261f]/12 sm:mt-20 sm:grid-cols-3">
@@ -939,7 +919,7 @@ export default function Home() {
                 className="group relative flex flex-col gap-6 bg-[#f6efe4] p-10 transition hover:bg-[#efe6d6] sm:p-12"
               >
                 <div className="flex flex-col gap-2">
-                  <span className="font-display text-6xl italic leading-none tracking-tight sm:text-7xl">
+                  <span className="relative inline-block whitespace-nowrap font-display text-6xl italic leading-none tracking-tight sm:text-7xl">
                     <span
                       className={`bg-clip-text text-transparent ${
                         c.kind === "won"
@@ -949,6 +929,32 @@ export default function Home() {
                     >
                       {c.metric}
                     </span>
+                    {c.annotation && (
+                      <span
+                        className="pointer-events-none absolute left-[40%] bottom-full mb-[0.1em] inline-flex items-center gap-[0.2em] whitespace-nowrap text-[0.3em] font-normal not-italic leading-none tracking-normal text-[#c93c0a]"
+                        style={{
+                          fontFamily: "var(--font-handwritten)",
+                          transform: "translateX(60px) rotate(-4deg)",
+                        }}
+                      >
+                        ({c.annotation})
+                        <span
+                          aria-hidden
+                          className="inline-block h-[1.1em] w-[1.1em] shrink-0 bg-[#c93c0a]"
+                          style={{
+                            maskImage: "url(/annotation-arrow.png)",
+                            maskSize: "contain",
+                            maskRepeat: "no-repeat",
+                            maskPosition: "center",
+                            WebkitMaskImage: "url(/annotation-arrow.png)",
+                            WebkitMaskSize: "contain",
+                            WebkitMaskRepeat: "no-repeat",
+                            WebkitMaskPosition: "center",
+                            transform: "translate(-90px, 30px) rotate(80deg)",
+                          }}
+                        />
+                      </span>
+                    )}
                   </span>
                   <span className="text-[11px] font-bold uppercase tracking-[0.25em] text-[#29261f]/60">
                     {c.metricLabel}
@@ -1034,10 +1040,10 @@ export default function Home() {
         <div className="mx-auto w-full max-w-[1400px] px-8 sm:px-12">
           {/* Header */}
           <div>
-            <h2 className="font-display text-[13vw] leading-[0.86] tracking-[-0.045em] sm:text-7xl lg:text-[7.25rem]">
-              Fra fremmede,
+            <h2 className="font-display text-[11vw] leading-[0.88] tracking-[-0.045em] sm:text-7xl lg:text-[6rem]">
+              Hele vejen fra
               <br />
-              til <span className="bg-gradient-to-b from-[#ffb86b] via-[#ff6b2c] to-[#c93c0a] bg-clip-text text-transparent">faste kunder.</span>
+              kontakt til <span className="bg-gradient-to-b from-[#ffb86b] via-[#ff6b2c] to-[#c93c0a] bg-clip-text text-transparent">kontrakt.</span>
             </h2>
           </div>
 
@@ -1064,14 +1070,14 @@ export default function Home() {
                     key={stage.n}
                     className="relative grid gap-12 sm:grid-cols-12 sm:items-center sm:gap-12 sm:pl-14"
                   >
-                    {/* Rail node */}
+                    {/* Rail node — centered on the wire (x), vertically centered on the stage (y) */}
                     <span
                       aria-hidden
-                      className="absolute -left-1 top-2 hidden h-3.5 w-3.5 rounded-full bg-[#ff6b2c] ring-4 ring-[#0a0907] sm:block"
+                      className="absolute left-2 top-1/2 hidden h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#ff6b2c] ring-4 ring-[#0a0907] sm:block"
                     />
                     <span
                       aria-hidden
-                      className="glow-pulse absolute -left-[14px] top-[-3px] hidden h-7 w-7 rounded-full bg-[#ff6b2c]/30 blur-md sm:block"
+                      className="glow-pulse absolute left-2 top-1/2 hidden h-7 w-7 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#ff6b2c]/30 blur-md sm:block"
                     />
 
                     {/* Ghost numeral */}
@@ -1084,7 +1090,7 @@ export default function Home() {
 
                     {/* Copy column */}
                     <div
-                      className={`relative ${isReverse ? "sm:col-span-5 sm:col-start-8" : "sm:col-span-5"} flex flex-col`}
+                      className={`relative ${isReverse ? "sm:col-span-5 sm:col-start-7" : "sm:col-span-5 sm:col-start-2"} flex flex-col`}
                     >
                       <span className="font-display text-6xl italic leading-none tracking-tight sm:text-7xl">
                         <span className="bg-gradient-to-b from-[#ffb86b] via-[#ff6b2c] to-[#c93c0a] bg-clip-text text-transparent">
@@ -1159,12 +1165,14 @@ export default function Home() {
                                 </div>
                                 <span className="text-[#29261f]/35">···</span>
                               </div>
-                              <div className="relative aspect-[16/9] bg-[radial-gradient(ellipse_at_30%_40%,rgba(255,107,44,0.45),transparent_60%),radial-gradient(ellipse_at_75%_70%,rgba(25,70,58,0.55),transparent_65%),linear-gradient(135deg,#14110d,#0a0907)]">
-                                <div className="absolute inset-0 grid place-items-center">
-                                  <span className="font-display text-3xl italic tracking-tight text-[var(--cream)]/85">
-                                    Smed mens jernet er <em className="not-italic text-[#ff6b2c]">varmt</em>.
-                                  </span>
-                                </div>
+                              <div className="relative aspect-[3/2] overflow-hidden bg-[#14110d]">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src="/ads/lead-varmt.png"
+                                  alt="Sælg mens leadet er varmt"
+                                  draggable={false}
+                                  className="absolute inset-0 h-full w-full object-cover"
+                                />
                               </div>
                               <div className="px-4 py-3.5">
                                 <div className="text-[13px] font-semibold text-[#29261f]">
@@ -1437,7 +1445,7 @@ export default function Home() {
                       )}
 
                       {stage.visual === "pipeline" && (
-                        <div className="w-full max-w-[42rem]">
+                        <div className="w-full max-w-[34rem]">
                           <div className="rounded-2xl border border-[#29261f]/12 bg-[#fff8ea] p-5 shadow-[0_50px_100px_-40px_rgba(0,0,0,0.55)] sm:p-6">
                             <div className="mb-5 flex items-center justify-between">
                               <div className="flex items-center gap-3">
@@ -1458,11 +1466,14 @@ export default function Home() {
                               </span>
                             </div>
 
-                            <div className="relative grid grid-cols-4 gap-3">
-                              {/* Animated ghost card moving across columns */}
+                            <div className="relative grid min-h-[180px] grid-cols-4 gap-3">
+                              {/* Animated ghost card moving across columns. Anchored to the
+                                  grid's bottom edge so it slides through a clean lane below
+                                  the static cards instead of stacking on top of them. The
+                                  grid's min-height reserves vertical room for that lane. */}
                               <div
                                 aria-hidden
-                                className="pipeline-glide pointer-events-none absolute left-0 top-9 z-10 w-[calc(25%-0.5625rem)]"
+                                className="pipeline-glide pointer-events-none absolute bottom-0 left-0 z-10 w-[calc(25%-0.5625rem)]"
                               >
                                 <div className="rounded-lg border border-[#ff6b2c]/45 bg-[#fff3df] p-2.5 shadow-[0_20px_40px_-15px_rgba(255,107,44,0.30)]">
                                   <div className="flex items-center gap-2">
@@ -1800,7 +1811,8 @@ export default function Home() {
                                       <span className="dot-pulse ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--forest)]" />
                                     </div>
 
-                                    {/* Slot ribbon */}
+                                    {/* Evaluation trace — reads as agent log output, not a clickable picker.
+                                        Each slot shows a × / ✓ status mark above its time. */}
                                     <div className="relative">
                                       {/* Scanline sweep — clay-tinted gradient bar travels
                                           left-to-right once when the chip enters. */}
@@ -1809,18 +1821,27 @@ export default function Home() {
                                         className="cal-scan pointer-events-none absolute inset-y-0 left-0 z-0 w-1/3 bg-gradient-to-r from-transparent via-[var(--clay)]/25 to-transparent"
                                         style={{ animationDelay: `${phase3Base + 1.6}s` }}
                                       />
-                                      <div className="relative z-10 flex items-center justify-between gap-0.5 px-2.5 py-2">
+                                      <div className="relative z-10 flex items-stretch justify-between gap-0.5 px-2.5 py-2 font-mono">
                                         {displayedLead.slots.map((slot) => (
-                                          <span
-                                            key={slot.t}
-                                            className={`tabular text-[10px] leading-none ${
-                                              slot.available
-                                                ? "rounded-md bg-[var(--forest)] px-1.5 py-1 font-bold text-[var(--cream)] ring-1 ring-[var(--forest)]/35"
-                                                : "px-1 text-[#29261f]/30 line-through"
-                                            }`}
-                                          >
-                                            {slot.t}
-                                          </span>
+                                          <div key={slot.t} className="flex flex-col items-center gap-1">
+                                            <span
+                                              aria-hidden
+                                              className={`text-[9px] leading-none ${
+                                                slot.available ? "text-[var(--forest)]" : "text-[#29261f]/35"
+                                              }`}
+                                            >
+                                              {slot.available ? "✓" : "×"}
+                                            </span>
+                                            <span
+                                              className={`tabular text-[9.5px] leading-none ${
+                                                slot.available
+                                                  ? "font-bold text-[var(--forest)]"
+                                                  : "text-[#29261f]/35 line-through"
+                                              }`}
+                                            >
+                                              {slot.t}
+                                            </span>
+                                          </div>
                                         ))}
                                       </div>
                                     </div>
@@ -1948,11 +1969,6 @@ export default function Home() {
               })}
             </div>
 
-            {/* Closing flourish — wire terminates in green (closed/won) */}
-            <div aria-hidden className="relative mt-10 hidden h-8 sm:block">
-              <span className="absolute left-0 top-0 h-3.5 w-3.5 rounded-full bg-[var(--forest)] ring-4 ring-[#0a0907]" />
-              <span className="glow-pulse absolute -left-3 -top-2.5 h-8 w-8 rounded-full bg-[var(--forest)]/45 blur-md" />
-            </div>
           </div>
         </div>
       </section>
@@ -1970,12 +1986,8 @@ export default function Home() {
         <div aria-hidden className="pointer-events-none absolute bottom-0 left-1/2 h-[2px] w-[min(680px,60%)] -translate-x-1/2 bg-[linear-gradient(90deg,transparent,#ff6b2c_30%,#ff6b2c_70%,transparent)] shadow-[0_0_28px_rgba(255,107,44,0.7)]" />
 
         <div className="relative z-[1] mx-auto w-full max-w-[1280px] px-8 sm:px-12">
-          <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-[var(--clay)]">
-            Før vs. efter
-          </p>
-          <h2 className="mt-4 max-w-3xl font-display text-[10vw] leading-[0.92] tracking-[-0.04em] text-[#29261f] sm:text-6xl lg:text-7xl">
-            Fra <span className="italic text-[var(--clay)]">&ldquo;vi tjekker det i morgen&rdquo;</span>
-            <br className="hidden sm:block" /> til <span className="italic">allerede ringet op.</span>
+          <h2 className="ml-auto max-w-3xl text-right font-display text-[10vw] leading-[0.92] tracking-[-0.04em] text-[#29261f] sm:text-6xl lg:text-7xl">
+            Det her er <span className="italic text-[var(--clay)]">forskellen.</span>
           </h2>
 
           <div className="mt-16 grid gap-6 sm:mt-20 sm:grid-cols-2 sm:gap-10">
@@ -1990,10 +2002,9 @@ export default function Home() {
               <ul className="mt-7 flex flex-col gap-3.5 text-[15px] leading-relaxed text-[#29261f]/65">
                 {[
                   "Leads lander i en delt indbakke ingen ejer.",
-                  "Sælgerne ved ikke hvem der tager hvad.",
-                  "Opfølgning sker først når nogen lige husker det.",
-                  "CRM'et er en uge bagud i forhold til virkeligheden.",
-                  "Halvdelen af leadene falder helt ud af radaren.",
+                  "Sælger ringer to dage senere — leadet er kølet af.",
+                  "No-shows ringer ingen til. De er bare væk.",
+                  "“Hvad blev der af leadet fra forrige måned?” Ingen kan svare.",
                 ].map((line) => (
                   <li key={line} className="flex items-start gap-3">
                     <span
@@ -2019,10 +2030,9 @@ export default function Home() {
               <ul className="mt-7 flex flex-col gap-3.5 text-[15px] leading-relaxed text-[#29261f]/82">
                 {[
                   "Lead fanget — kilde, kontekst, ejer fra første sekund.",
-                  "Sælger pinget på telefonen inden for 60 sekunder.",
+                  "Sælger har leadet på telefonen samme sekund det lander.",
                   "SMS- og email-flow tager over hvis ingen når at svare.",
-                  "Pipeline opdaterer sig selv. CRM matcher virkeligheden.",
-                  "Hvert tabt lead får en ny aktion — ingen forsvinder.",
+                  "Outcome markeret samme dag — pipelinen er altid live.",
                 ].map((line) => (
                   <li key={line} className="flex items-start gap-3">
                     <span
@@ -2044,6 +2054,7 @@ export default function Home() {
         Replace each card's `placeholder: true` block with a real `quote/name/role/company/result`
         when content is ready. See cases array for analogous structure.
       */}
+      {false && (
       <section className="relative overflow-hidden bg-[#0a0907] py-28 sm:py-36">
         <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
           <div className="absolute left-1/2 top-[20%] h-[420px] w-[720px] -translate-x-1/2 rounded-full bg-[radial-gradient(ellipse_at_center,rgba(255,107,44,0.07),transparent_60%)] blur-2xl" />
@@ -2057,7 +2068,7 @@ export default function Home() {
             </p>
           </div>
           <h2 className="mt-7 max-w-3xl font-display text-[10vw] leading-[0.92] tracking-[-0.04em] sm:text-6xl lg:text-7xl">
-            Stemmer fra <span className="italic text-[var(--clay)]">de der</span> har bygget med.
+            Folk der har bygget <span className="italic text-[var(--clay)]">maskinen</span> sammen med mig.
           </h2>
           <p className="mt-5 max-w-xl text-[15px] leading-relaxed text-[var(--cream)]/55">
             <span className="font-mono text-[10px] uppercase tracking-[0.25em] text-[#ff6b2c]/80">
@@ -2066,63 +2077,104 @@ export default function Home() {
             Konkrete kundecitater landes her når de er klar — jeg opfinder ikke proof.
           </p>
 
-          <div className="mt-14 grid gap-6 sm:mt-16 sm:grid-cols-3">
-            {[1, 2, 3].map((i) => (
-              <article
-                key={i}
-                className="relative flex flex-col gap-6 rounded-2xl border border-dashed border-[var(--cream)]/20 bg-[var(--cream)]/[0.03] p-7 sm:p-8"
+          {/* Three vertical-marquee columns — col 1 up, col 2 down, col 3 up.
+              Replace each card's bracketed stubs with real content when ready. */}
+          <div className="mt-14 grid gap-6 sm:mt-16 sm:grid-cols-3 sm:gap-8">
+            {[
+              {
+                dir: "up",
+                cards: [
+                  { metric: "[X×]", label: "[resultat-label]", quote: "Her indsættes et konkret kundecitat — én sætning om hvor mærkbart det blev efter systemet kom op at køre.", role: "[Rolle · Firma]" },
+                  { metric: "[<5 min]", label: "[tid-label]", quote: "[Kort citat med ét konkret resultat — fx 'vi gik fra X til Y på Z uger'.]", role: "[CEO · Firma]" },
+                  { metric: "[+12]", label: "[uge-label]", quote: "[To-sætningers citat — det første om før-tilstanden, det andet om hvad der ændrede sig efter.]", role: "[Stilling · Firma]" },
+                ],
+              },
+              {
+                dir: "down",
+                cards: [
+                  { metric: "[Y×]", label: "[resultat-label]", quote: "[Et citat der nævner et konkret tal og en mærkbar effekt på pipeline eller bookede møder.]", role: "[Founder · Co.]" },
+                  { metric: "[40%]", label: "[procent-label]", quote: "Her indsættes et konkret kundecitat — to sætninger om før-tilstanden og hvad der blev anderledes.", role: "[Rolle · Firma]" },
+                  { metric: "[<24t]", label: "[tid-label]", quote: "[Kort citat med ét konkret resultat og evt. en gengivelse af forretningseffekten.]", role: "[Direktør · Firma]" },
+                ],
+              },
+              {
+                dir: "up",
+                cards: [
+                  { metric: "[Z×]", label: "[resultat-label]", quote: "[Citat der peger på samarbejdet — fx 'fik adgang til den der bygger', 'ingen mellemled'.]", role: "[CMO · Firma]" },
+                  { metric: "[2×]", label: "[multiplier-label]", quote: "[Et citat med før/efter — én sætning om hvad der var, én om hvad der er nu.]", role: "[Salgschef · Firma]" },
+                  { metric: "[80%]", label: "[procent-label]", quote: "Her indsættes et konkret kundecitat — én eller to sætninger om hvad der ændrede sig.", role: "[Stilling · Firma]" },
+                ],
+              },
+            ].map((col, ci) => (
+              <div
+                key={ci}
+                className={`relative h-[640px] overflow-hidden ${ci > 0 ? "hidden sm:block" : ""}`}
+                style={{
+                  maskImage:
+                    "linear-gradient(to bottom, transparent 0%, black 8%, black 92%, transparent 100%)",
+                  WebkitMaskImage:
+                    "linear-gradient(to bottom, transparent 0%, black 8%, black 92%, transparent 100%)",
+                }}
               >
-                <span className="absolute -top-2.5 left-4 inline-flex items-center gap-1.5 rounded-full border border-dashed border-[var(--cream)]/30 bg-[#0a0907] px-2.5 py-0.5 font-mono text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--cream)]/55">
-                  Placeholder
-                </span>
+                <div
+                  className={`flex flex-col gap-6 ${
+                    col.dir === "up"
+                      ? "testimonial-marquee-up"
+                      : "testimonial-marquee-down"
+                  }`}
+                >
+                  {[...col.cards, ...col.cards].map((card, i) => (
+                    <article
+                      key={i}
+                      className="relative flex flex-col gap-5 rounded-2xl border border-dashed border-[var(--cream)]/20 bg-[var(--cream)]/[0.03] p-6 sm:p-7"
+                    >
+                      <span className="absolute -top-2.5 left-4 inline-flex items-center gap-1.5 rounded-full border border-dashed border-[var(--cream)]/30 bg-[#0a0907] px-2.5 py-0.5 font-mono text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--cream)]/55">
+                        Placeholder
+                      </span>
 
-                {/* Metric placeholder */}
-                <div className="flex items-baseline gap-3">
-                  <span className="font-display text-4xl italic leading-none text-[var(--cream)]/25 sm:text-5xl">
-                    [tal]
-                  </span>
-                  <span className="text-[10px] font-bold uppercase tracking-[0.25em] text-[var(--cream)]/35">
-                    [resultat-label]
-                  </span>
+                      {/* Metric */}
+                      <div className="flex items-baseline gap-3">
+                        <span className="font-display text-3xl italic leading-none text-[var(--cream)]/25 sm:text-4xl">
+                          {card.metric}
+                        </span>
+                        <span className="text-[10px] font-bold uppercase tracking-[0.25em] text-[var(--cream)]/35">
+                          {card.label}
+                        </span>
+                      </div>
+
+                      {/* Quote */}
+                      <blockquote className="text-[14.5px] leading-[1.65] text-[var(--cream)]/55">
+                        &ldquo;{card.quote}&rdquo;
+                      </blockquote>
+
+                      {/* Attribution */}
+                      <div className="mt-auto flex items-center gap-3 border-t border-dashed border-[var(--cream)]/12 pt-4">
+                        <span
+                          aria-hidden
+                          className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-dashed border-[var(--cream)]/25 text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--cream)]/35"
+                        >
+                          [N]
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate font-display text-[15px] italic text-[var(--cream)]/70">
+                            [Navn Navnesen]
+                          </div>
+                          <div className="truncate text-[10px] uppercase tracking-[0.2em] text-[var(--cream)]/40">
+                            {card.role}
+                          </div>
+                        </div>
+                      </div>
+                    </article>
+                  ))}
                 </div>
-
-                {/* Quote */}
-                <blockquote className="text-[15px] leading-[1.7] text-[var(--cream)]/55 sm:text-base">
-                  &ldquo;Her indsættes et konkret kundecitat — én eller to sætninger om hvad der ændrede sig, helst med tal eller en mærkbar before/after.&rdquo;
-                </blockquote>
-
-                {/* Attribution */}
-                <div className="mt-auto flex items-center gap-3 border-t border-dashed border-[var(--cream)]/12 pt-5">
-                  <span
-                    aria-hidden
-                    className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-dashed border-[var(--cream)]/25 text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--cream)]/35"
-                  >
-                    [N]
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate font-display text-base italic text-[var(--cream)]/70">
-                      [Navn Navnesen]
-                    </div>
-                    <div className="truncate text-[11px] uppercase tracking-[0.2em] text-[var(--cream)]/40">
-                      [Rolle · Firma]
-                    </div>
-                  </div>
-                  {/* Logo placeholder */}
-                  <span
-                    aria-hidden
-                    className="inline-block h-5 w-12 shrink-0 rounded-sm border border-dashed border-[var(--cream)]/20 bg-[var(--cream)]/5"
-                    title="Logo placeholder"
-                  />
-                </div>
-              </article>
+              </div>
             ))}
           </div>
         </div>
       </section>
-      <section className="relative overflow-hidden bg-[#f6efe4] py-32 text-[#29261f] sm:py-44">
-        <div aria-hidden className="paper-grain" />
-
-        {/* EmberSpark — top: bridges down from dark process */}
+      )}
+      <section className="relative overflow-hidden bg-[#0a0907] py-32 text-[var(--cream)] sm:py-44">
+        {/* EmberSpark — top */}
         <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-10 bg-[linear-gradient(180deg,rgba(255,107,44,0.18),transparent)]" />
         <div aria-hidden className="pointer-events-none absolute left-1/2 top-0 h-[2px] w-[min(680px,60%)] -translate-x-1/2 bg-[linear-gradient(90deg,transparent,#ff6b2c_30%,#ff6b2c_70%,transparent)] shadow-[0_0_28px_rgba(255,107,44,0.7)]" />
 
@@ -2134,32 +2186,30 @@ export default function Home() {
           {/* Centered headline + CTA — anchors the scatter */}
           <div className="absolute left-1/2 top-1/2 z-[3] w-[calc(100%-4rem)] max-w-[40rem] -translate-x-1/2 -translate-y-1/2 text-center sm:w-[calc(100%-7.5rem)]">
             <h2 className="font-display text-4xl leading-[0.96] tracking-[-0.035em] sm:text-5xl lg:text-[3.75rem]">
-              Du beholder alt du har.
-              <br />
-              <span className="italic text-[var(--clay)]">Jeg får det bare til at tale sammen.</span>
+              Du beholder alt <span className="italic text-[var(--clay)]">du har.</span>
             </h2>
-            <p className="mx-auto mt-6 max-w-[28rem] text-[15px] leading-relaxed text-[#29261f]/70">
-              Annonce → CRM → kalender. Jeg forbinder dine værktøjer og lægger dem oven på systemet — uden migrering, uden ny stack.
+            <p className="mx-auto mt-6 max-w-[28rem] text-[15px] leading-relaxed text-[var(--cream)]/70">
+              Du behøver ikke en ny stack. Annonce → CRM → kalender — jeg kobler det I allerede har, lægger systemet oven på.
             </p>
 
             {/* CTA stack — forest-green pill (won-color CTA on paper) + email link */}
             <div className="mt-9 flex flex-col items-center gap-4">
               <button
                 type="button"
-                onClick={resetAndOpen}
+                onClick={() => setQuizOpen(true)}
                 className="inline-flex items-center gap-3 rounded-full bg-[var(--forest)] px-8 py-4 text-xs font-bold uppercase tracking-[0.25em] text-[#fff8ea] shadow-[0_18px_50px_-16px_rgba(25,70,58,0.5)] transition hover:-translate-y-0.5 hover:shadow-[0_24px_60px_-16px_rgba(25,70,58,0.6)]"
               >
-                Få et 30-min lead-tjek <span aria-hidden>→</span>
+                Tag lead-quizzen <span aria-hidden>→</span>
               </button>
               <a
                 href="mailto:louis@carterco.dk"
-                className="text-[10px] font-bold uppercase tracking-[0.25em] text-[#29261f]/55 transition hover:text-[#29261f]"
+                className="text-[10px] font-bold uppercase tracking-[0.25em] text-[var(--cream)]/55 transition hover:text-[var(--cream)]"
               >
                 louis@carterco.dk →
               </a>
             </div>
 
-            <p className="mt-8 text-[10px] font-bold uppercase tracking-[0.3em] text-[#29261f]/45">
+            <p className="mt-8 text-[10px] font-bold uppercase tracking-[0.3em] text-[var(--cream)]/45">
               + 30 andre · Calendly · Twilio · Gmail · Outlook · Aircall · Slack · Notion · …
             </p>
           </div>
@@ -2212,159 +2262,125 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="relative overflow-hidden bg-[#0a0907] py-32 sm:py-44">
+      {/* ─────── Section: Founder card — Værksteds-kortet ─────── */}
+      <section className="relative overflow-hidden bg-[#f6efe4] py-24 text-[#29261f] sm:py-32 lg:py-40">
+        <div aria-hidden className="paper-grain" />
+
+        {/* Atmospheric backdrop — soft warm glow on paper */}
         <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
-          <div className="absolute right-[10%] top-[8%] h-[680px] w-[680px] rounded-full bg-[radial-gradient(ellipse_at_center,rgba(255,107,44,0.16),transparent_60%)] blur-2xl" />
-          <div className="absolute -left-[8%] bottom-[6%] h-[480px] w-[480px] rounded-full bg-[radial-gradient(ellipse_at_center,rgba(25,70,58,0.22),transparent_60%)] blur-2xl" />
-          <div className="absolute bottom-0 left-0 right-0 h-[40%] bg-[linear-gradient(180deg,transparent,#0a0907)]" />
+          <div className="absolute right-[8%] top-[10%] h-[680px] w-[680px] rounded-full bg-[radial-gradient(ellipse_at_center,rgba(255,107,44,0.10),transparent_65%)] blur-2xl" />
+          <div className="absolute -left-[8%] bottom-[8%] h-[480px] w-[480px] rounded-full bg-[radial-gradient(ellipse_at_center,rgba(25,70,58,0.08),transparent_65%)] blur-2xl" />
         </div>
 
-        <div className="mx-auto w-full max-w-[1400px] px-8 sm:px-12">
-          <div className="grid gap-10 sm:grid-cols-12 sm:items-end sm:gap-14">
-            {/* Massive name treatment */}
-            <div className="relative sm:col-span-7">
-              {/* Ghost numeral / mark behind the name — echoes the journey section */}
-              <span
-                aria-hidden
-                className="ghost-numeral pointer-events-none absolute -left-4 -top-20 select-none text-[14rem] leading-none sm:-top-32 sm:text-[20rem]"
-              >
-                01
-              </span>
+        <div className="relative mx-auto w-full max-w-[1080px] px-4 sm:px-8">
+          <div className="relative">
+            {/* Letter on left, photo on right */}
+            <div className="relative z-[1] grid gap-12 p-8 sm:gap-14 sm:p-14 lg:grid-cols-12 lg:gap-20 lg:p-20">
 
-              <h2 className="relative font-display text-[20vw] leading-[0.84] tracking-[-0.05em] sm:text-[12vw] lg:text-[10rem]">
-                Hej.
-                <br />
-                <span className="relative inline-block">
-                  <span className="absolute inset-0 -z-10 scale-125 bg-[radial-gradient(ellipse_at_center,rgba(255,107,44,0.40),transparent_65%)] blur-2xl" />
-                  <span className="bg-gradient-to-b from-[#ffb86b] via-[#ff6b2c] to-[#c93c0a] bg-clip-text italic text-transparent">
-                    Louis
-                  </span>
-                </span>
-                <span className="text-[#ff6b2c]">.</span>
-              </h2>
+              {/* LEFT — the letter */}
+              <div className="lg:col-span-7">
 
-              <p
-                className="mt-6 max-w-md text-[1.2rem] leading-snug text-[var(--cream)]/85 sm:mt-8 sm:text-[1.45rem]"
-                style={{ fontFamily: "var(--font-handwritten)" }}
-              >
-                Få kunder ad gangen. Ét direkte nummer.
-              </p>
-            </div>
-
-            {/* Photo with handwritten annotation */}
-            <div className="relative sm:col-span-5">
-              <div className="relative mx-auto w-full max-w-[24rem] sm:ml-auto sm:mr-0">
-                <div className="absolute -inset-4 -z-10 rounded-[1.8rem] bg-[radial-gradient(ellipse_at_30%_30%,rgba(255,107,44,0.55),transparent_65%)] blur-2xl" />
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src="/louis.jpeg"
-                  alt="Louis Carter"
-                  className="aspect-square w-full rounded-[1.6rem] object-cover shadow-[0_60px_120px_-30px_rgba(0,0,0,0.8)] ring-1 ring-[var(--cream)]/10"
-                  style={{ transform: "rotate(-1.5deg)" }}
-                  draggable={false}
-                />
-
-                {/* Handwritten annotation pointing at the photo */}
-                <div
-                  className="pointer-events-none absolute -left-12 top-8 hidden items-center gap-2 whitespace-nowrap text-[var(--cream)]/95 sm:flex"
-                  style={{
-                    fontFamily: "var(--font-handwritten)",
-                    fontSize: "1.15rem",
-                    transform: "rotate(-6deg)",
-                  }}
-                >
-                  ja — det er mig
+                <h2 className="font-display text-[14vw] leading-[0.92] tracking-[-0.045em] sm:text-[7vw] lg:text-[5.5rem]">
+                  Hej.
                   <br />
-                  der svarer
-                  <span
-                    aria-hidden
-                    className="ml-1 inline-block h-[1.4em] w-[1.4em] shrink-0 bg-[#ff6b2c]"
-                    style={{
-                      maskImage: "url(/annotation-arrow.png)",
-                      maskSize: "contain",
-                      maskRepeat: "no-repeat",
-                      maskPosition: "center",
-                      WebkitMaskImage: "url(/annotation-arrow.png)",
-                      WebkitMaskSize: "contain",
-                      WebkitMaskRepeat: "no-repeat",
-                      WebkitMaskPosition: "center",
-                      transform: "rotate(20deg)",
-                    }}
+                  <span className="bg-gradient-to-b from-[#ff8244] via-[#ff6b2c] to-[#c93c0a] bg-clip-text italic text-transparent">
+                    Det er mig der bygger.
+                  </span>
+                </h2>
+
+                {/* Body — positive Hormozy beats: craft, mechanism, commitment, phone */}
+                <div className="mt-8 max-w-md space-y-5 text-[15px] leading-[1.7] text-[#29261f]/85 sm:mt-10 sm:text-[16px]">
+                  <p>
+                    <span className="font-semibold text-[#29261f]">
+                      Hvert system bygges af mig.
+                    </span>
+                  </p>
+                  <p>
+                    Fra første dag til den dag den kører selv.
+                  </p>
+                  <p>
+                    Du har mig fra dag ét. Du beholder mig efter overdragelsen.
+                  </p>
+                  <p>
+                    Oplev et rigtigt flow fra kundens side — og se hvad dit eget system mangler.
+                  </p>
+                  <div className="pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setQuizOpen(true)}
+                      className="inline-flex items-center gap-3 rounded-full bg-[var(--forest)] px-7 py-3.5 text-xs font-bold uppercase tracking-[0.25em] text-[#fff8ea] shadow-[0_18px_50px_-16px_rgba(25,70,58,0.5)] transition hover:-translate-y-0.5 hover:shadow-[0_24px_60px_-16px_rgba(25,70,58,0.6)]"
+                    >
+                      Tag lead-quizzen <span aria-hidden>→</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Sign-off — email */}
+                <div className="mt-10 sm:mt-12">
+                  <a
+                    href="mailto:louis@carterco.dk"
+                    className="group inline-flex items-center gap-2 font-display text-base italic text-[#29261f]/85 transition hover:text-[#c93c0a] sm:text-lg"
+                  >
+                    louis@carterco.dk
+                    <span aria-hidden className="inline-block transition group-hover:translate-x-1">
+                      →
+                    </span>
+                  </a>
+                </div>
+              </div>
+
+              {/* RIGHT — polaroid */}
+              <div className="lg:col-span-5">
+                <div className="relative mx-auto w-full max-w-[22rem] lg:ml-auto lg:mr-0">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src="/louis.jpeg"
+                    alt="Louis Carter"
+                    className="aspect-[3/4] w-full rounded-lg object-cover shadow-[0_30px_60px_-25px_rgba(0,0,0,0.35)] ring-1 ring-[#29261f]/10"
+                    draggable={false}
                   />
+
+                  {/* Archive caption */}
+                  <div className="mt-3 flex items-center gap-2 font-mono text-[9px] font-bold uppercase tracking-[0.3em] text-[#29261f]/55">
+                    <span>Louis Carter</span>
+                    <span aria-hidden className="h-px flex-1 bg-[#29261f]/20" />
+                    <span>OP. №01</span>
+                  </div>
+
+                  {/* Handwritten arrow + caption — points at photo */}
+                  <div
+                    className="pointer-events-none absolute right-full top-10 mr-2 hidden items-center gap-1 whitespace-nowrap text-[#29261f] sm:flex"
+                    style={{
+                      fontFamily: "var(--font-handwritten)",
+                      fontSize: "1.1rem",
+                      transform: "rotate(-6deg)",
+                    }}
+                  >
+                    <span className="text-right leading-tight">
+                      det er mig
+                      <br />
+                      der svarer
+                    </span>
+                    <span
+                      aria-hidden
+                      className="ml-1 inline-block h-[1.4em] w-[1.4em] shrink-0 bg-[#ff6b2c]"
+                      style={{
+                        maskImage: "url(/annotation-arrow.png)",
+                        maskSize: "contain",
+                        maskRepeat: "no-repeat",
+                        maskPosition: "center",
+                        WebkitMaskImage: "url(/annotation-arrow.png)",
+                        WebkitMaskSize: "contain",
+                        WebkitMaskRepeat: "no-repeat",
+                        WebkitMaskPosition: "center",
+                        transform: "translate(-40px, 40px) scaleX(-1) rotate(90deg)",
+                      }}
+                    />
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
 
-          {/* Pull quote — magazine scale */}
-          <blockquote className="relative mt-24 sm:mt-32">
-            <span
-              aria-hidden
-              className="pointer-events-none absolute -left-2 -top-12 select-none font-display text-[12rem] italic leading-none text-[var(--clay)]/15 sm:-left-6 sm:-top-20 sm:text-[18rem]"
-            >
-              &ldquo;
-            </span>
-            <p className="relative font-display text-[10vw] italic leading-[0.96] tracking-[-0.03em] text-[var(--cream)] sm:text-[5.5vw] lg:text-[5.25rem]">
-              Det er ikke et bureau.
-              <br />
-              <span className="text-[var(--cream)]/55">Det er et</span>{" "}
-              <span className="bg-gradient-to-b from-[#ffb86b] via-[#ff6b2c] to-[#c93c0a] bg-clip-text text-transparent">
-                værksted.
-              </span>
-            </p>
-          </blockquote>
-
-          {/* Body + contact + signature */}
-          <div className="mt-20 grid gap-12 sm:mt-24 sm:grid-cols-12 sm:gap-16">
-            <div className="sm:col-span-7">
-              <p className="max-w-xl text-[16px] leading-[1.7] text-[var(--cream)]/75 sm:text-[17px]">
-                Carter &amp; Co er ikke et bureau. Det er et værksted — bygget rundt om systemet, ikke om timerne. Få kunder ad gangen, så maskinen der fanger jeres leads mens jernet stadig er varmt bliver bygget skarpt — kørt ind hos jer — og overdraget når den kører af sig selv.
-              </p>
-              <p className="mt-5 max-w-xl text-[16px] leading-[1.7] text-[var(--cream)]/75 sm:text-[17px]">
-                Ingen junior-konsulenter mellem dig og arbejdet. Ingen strategidage. Ingen rapporter du ikke læser. Du taler med den der bygger systemet — fra dag ét.
-              </p>
-            </div>
-
-            <div className="flex flex-col items-start gap-5 sm:col-span-5 sm:items-end sm:text-right">
-              <a
-                href="tel:+4593966390"
-                className="group inline-flex items-center gap-3 font-display text-2xl italic text-[var(--cream)] transition hover:text-[#ff6b2c] sm:text-[1.875rem]"
-              >
-                +45 93 96 63 90
-                <span
-                  aria-hidden
-                  className="inline-block transition group-hover:translate-x-1"
-                >
-                  →
-                </span>
-              </a>
-              <a
-                href="mailto:louis@carterco.dk"
-                className="group inline-flex items-center gap-3 font-display text-xl italic text-[var(--cream)]/80 transition hover:text-[#ff6b2c] sm:text-2xl"
-              >
-                louis@carterco.dk
-                <span
-                  aria-hidden
-                  className="inline-block transition group-hover:translate-x-1"
-                >
-                  →
-                </span>
-              </a>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="/signature.png"
-                alt=""
-                aria-hidden
-                draggable={false}
-                onContextMenu={(e) => e.preventDefault()}
-                className="pointer-events-none mt-3 h-16 w-auto select-none sm:h-20"
-                style={{
-                  filter: "invert(1)",
-                  mixBlendMode: "screen",
-                  WebkitUserDrag: "none",
-                } as React.CSSProperties}
-              />
-            </div>
           </div>
         </div>
       </section>
@@ -2390,6 +2406,17 @@ export default function Home() {
           </a>
         </div>
       </footer>
+
+      <LeadQuiz
+        open={quizOpen}
+        onClose={() => setQuizOpen(false)}
+        onConvert={resetAndOpen}
+      />
+
+      <ExitIntent
+        onOpenQuiz={() => setQuizOpen(true)}
+        suppressed={quizOpen || open}
+      />
 
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
