@@ -58,7 +58,7 @@ export async function POST(req: Request) {
   const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Pause length="1"/>
-  <Say voice="Polly.Naja" language="da-DK">Hej. Du har ringet til Louis Sustmann Carter.</Say>
+  <Say voice="Polly.Naja" language="da-DK">Hej, du har ringet til Louis.</Say>
   <Pause length="1"/>
   <Say voice="Polly.Naja" language="da-DK">Vil du venligst sige dit navn og hvad opkaldet drejer sig om efter bippet, så ser jeg om Louis er ledig — ellers ringer han tilbage.</Say>
   <Record
