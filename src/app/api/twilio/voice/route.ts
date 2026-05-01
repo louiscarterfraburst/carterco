@@ -45,12 +45,30 @@ export async function POST(req: Request) {
     match_confidence: sub ? 0.95 : null,
   });
 
-  // Friendly TwiML response: brief greeting then hang up.
-  // (We don't want to actually take a voicemail; the call event itself
-  //  is the signal we care about — we know they tried to reach us, fast.)
+  // Casual "I'm in a meeting" greeting + record what they say, so we capture
+  // who's calling and why. Audio URL + auto-transcription land via the
+  // recording-status and transcribe callbacks on the same domain.
+  //
+  // Pacing notes: short pause between sentences ("...") makes Polly read
+  // less robotically. Polly.Mads is Twilio's Danish male voice.
+  const recCallback = `https://${req.headers.get("host")}/api/twilio/voice-recording`;
+  const transcribeCallback = `https://${req.headers.get("host")}/api/twilio/voice-transcript`;
   const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="Polly.Mads" language="da-DK">Hej. Du har ringet til en testlinje. Tak.</Say>
+  <Pause length="1"/>
+  <Say voice="Polly.Mads" language="da-DK">Hej, det er Louis.</Say>
+  <Pause length="1"/>
+  <Say voice="Polly.Mads" language="da-DK">Jeg er midt i noget lige nu — men hvis du efter bippet siger hvem du er og hvad det drejer sig om, så ringer jeg tilbage.</Say>
+  <Record
+    maxLength="60"
+    timeout="3"
+    finishOnKey="#"
+    playBeep="true"
+    transcribe="true"
+    transcribeCallback="${transcribeCallback}"
+    recordingStatusCallback="${recCallback}"
+    recordingStatusCallbackMethod="POST"/>
+  <Say voice="Polly.Mads" language="da-DK">Tak. Jeg ringer.</Say>
   <Hangup/>
 </Response>`;
 
