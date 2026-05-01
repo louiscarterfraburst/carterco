@@ -60,7 +60,7 @@ export async function POST(req: Request) {
   <Pause length="1"/>
   <Say voice="Polly.Naja" language="da-DK">Hej, du har ringet til Louis.</Say>
   <Pause length="1"/>
-  <Say voice="Polly.Naja" language="da-DK">Vil du venligst sige dit navn og hvad opkaldet drejer sig om efter bippet, så ser jeg om Louis er ledig — ellers ringer han tilbage.</Say>
+  <Say voice="Polly.Naja" language="da-DK">Vil du venligst sige dit navn og hvad opkaldet drejer sig om, så ser jeg om Louis er ledig — ellers ringer han tilbage.</Say>
   <Record
     maxLength="60"
     timeout="3"
