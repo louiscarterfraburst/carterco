@@ -3,7 +3,7 @@ import { markSubmitted, markSkipped, assignResponse } from "./actions";
 
 export const dynamic = "force-dynamic";
 
-type Tab = "worklist" | "submissions" | "unmatched";
+type Tab = "worklist" | "submissions" | "ambiguous" | "failed" | "unmatched";
 
 type Submission = {
   id: string;
@@ -70,17 +70,22 @@ export default async function TestLeadsPage({
   searchParams: Promise<{ tab?: string }>;
 }) {
   const params = await searchParams;
+  const validTabs: Tab[] = ["worklist", "submissions", "ambiguous", "failed", "unmatched"];
   const tab: Tab =
-    params.tab === "submissions" || params.tab === "unmatched"
-      ? params.tab
-      : "worklist";
+    validTabs.includes(params.tab as Tab) ? (params.tab as Tab) : "worklist";
 
   const sb = createAdminClient();
 
   // Counts for the tab labels
-  const [worklistCount, submittedCount, unmatchedCount] = await Promise.all([
+  const [worklistCount, submittedCount, ambiguousCount, failedCount, unmatchedCount] = await Promise.all([
     sb.from("test_submissions").select("id", { count: "exact", head: true }).eq("status", "pending"),
     sb.from("test_submissions").select("id", { count: "exact", head: true }).eq("status", "submitted"),
+    // Ambiguous: status='failed' but submission DID fire — notes contain "no clear success signal"
+    sb.from("test_submissions").select("id", { count: "exact", head: true })
+      .eq("status", "failed").like("notes", "%no clear success signal%"),
+    // Hard-failed: status='failed' AND notes don't say submission fired
+    sb.from("test_submissions").select("id", { count: "exact", head: true })
+      .eq("status", "failed").not("notes", "ilike", "%no clear success signal%"),
     sb.from("test_responses").select("id", { count: "exact", head: true }).is("submission_id", null),
   ]);
 
@@ -96,9 +101,11 @@ export default async function TestLeadsPage({
             Submit real form leads to companies. Track who responds, how fast, on what channel.
             Use the data as personalized hooks in Sendspark.
           </p>
-          <nav className="mt-6 flex gap-2 text-[11px] font-bold uppercase tracking-[0.18em]">
+          <nav className="mt-6 flex flex-wrap gap-2 text-[11px] font-bold uppercase tracking-[0.18em]">
             <TabLink current={tab} target="worklist" label={`Worklist · ${worklistCount.count ?? 0}`} />
             <TabLink current={tab} target="submissions" label={`Submitted · ${submittedCount.count ?? 0}`} />
+            <TabLink current={tab} target="ambiguous" label={`Ambiguous · ${ambiguousCount.count ?? 0}`} />
+            <TabLink current={tab} target="failed" label={`Failed · ${failedCount.count ?? 0}`} />
             <TabLink current={tab} target="unmatched" label={`Unmatched · ${unmatchedCount.count ?? 0}`} />
           </nav>
         </div>
@@ -107,6 +114,8 @@ export default async function TestLeadsPage({
       <main className="mx-auto max-w-6xl px-8 py-8">
         {tab === "worklist" && <WorklistTab />}
         {tab === "submissions" && <SubmissionsTab />}
+        {tab === "ambiguous" && <AmbiguousTab />}
+        {tab === "failed" && <FailedTab />}
         {tab === "unmatched" && <UnmatchedTab />}
       </main>
     </div>
@@ -279,6 +288,131 @@ async function SubmissionsTab() {
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+async function AmbiguousTab() {
+  const sb = createAdminClient();
+  const { data, error } = await sb
+    .from("test_submissions")
+    .select("id, ref_code, company, website, domain, industry, city, status, submitted_at, first_response_at, notes")
+    .eq("status", "failed")
+    .like("notes", "%no clear success signal%")
+    .order("updated_at", { ascending: false })
+    .limit(200);
+
+  if (error) return <ErrorBox message={error.message} />;
+  const subs: Submission[] = data ?? [];
+  if (subs.length === 0) return <EmptyBox label="No ambiguous submissions." />;
+
+  return (
+    <div className="space-y-3">
+      <p className="text-[12px] text-[var(--cream)]/55">
+        Auto-submit filled the form and clicked submit, but couldn&apos;t confirm a thank-you signal.
+        Likely went through — verify by checking if any of these companies reply (calls, SMS, or emails will appear in
+        Submitted/Unmatched tabs once attributed). Click <strong>Mark as submitted</strong> only after you&apos;ve
+        manually confirmed the submission landed (e.g. by checking your inbox).
+      </p>
+      <div className="overflow-hidden rounded-2xl border border-[var(--cream)]/10">
+        {subs.map((s) => (
+          <div
+            key={s.id}
+            className="flex flex-col gap-3 border-b border-[var(--cream)]/8 p-5 last:border-b-0 sm:flex-row sm:items-center"
+          >
+            <div className="flex-1 min-w-0">
+              <div className="flex flex-wrap items-baseline gap-3">
+                <span className="font-display text-lg">{s.company || "—"}</span>
+                <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#ff6b2c]/80">
+                  {s.ref_code}
+                </span>
+              </div>
+              <div className="mt-1 flex flex-wrap items-center gap-3 text-[12px] text-[var(--cream)]/55">
+                {s.website && (
+                  <a href={s.website} target="_blank" rel="noreferrer"
+                    className="text-[var(--cream)]/75 underline-offset-2 hover:text-[var(--cream)] hover:underline">
+                    {s.domain ?? s.website}
+                  </a>
+                )}
+                {s.industry && <span>{s.industry}</span>}
+                {s.city && <span>{s.city}</span>}
+              </div>
+              {s.notes && <div className="mt-1 text-[11px] text-[var(--cream)]/40">{s.notes}</div>}
+            </div>
+            <form action={markSubmitted} className="flex shrink-0 items-center gap-2">
+              <input type="hidden" name="id" value={s.id} />
+              <input
+                name="submitted_by"
+                placeholder="who confirmed?"
+                className="w-32 rounded-md border border-[var(--cream)]/15 bg-transparent px-3 py-2 text-[12px] placeholder:text-[var(--cream)]/35 focus:border-[#ff6b2c] focus:outline-none"
+              />
+              <button
+                type="submit"
+                className="rounded-full bg-[var(--forest)] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#fff8ea] hover:opacity-90"
+              >
+                Mark submitted
+              </button>
+            </form>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+async function FailedTab() {
+  const sb = createAdminClient();
+  const { data, error } = await sb
+    .from("test_submissions")
+    .select("id, ref_code, company, website, domain, industry, city, status, submitted_at, first_response_at, notes")
+    .eq("status", "failed")
+    .not("notes", "ilike", "%no clear success signal%")
+    .order("updated_at", { ascending: false })
+    .limit(200);
+
+  if (error) return <ErrorBox message={error.message} />;
+  const subs: Submission[] = data ?? [];
+  if (subs.length === 0) return <EmptyBox label="No hard failures." />;
+
+  // Group failures by reason for visibility
+  const byReason: Record<string, Submission[]> = {};
+  for (const s of subs) {
+    const reason = (s.notes || "unknown").split("·")[0].trim().slice(0, 60);
+    (byReason[reason] = byReason[reason] || []).push(s);
+  }
+
+  return (
+    <div className="space-y-4">
+      <p className="text-[12px] text-[var(--cream)]/55">
+        Submissions where auto-submit couldn&apos;t even fill the form. Most common: contact form not discoverable,
+        site behind anti-bot, or page structure too unusual.
+      </p>
+      {Object.entries(byReason)
+        .sort((a, b) => b[1].length - a[1].length)
+        .map(([reason, items]) => (
+          <details key={reason} className="overflow-hidden rounded-2xl border border-[var(--cream)]/10">
+            <summary className="cursor-pointer bg-[var(--cream)]/[0.03] px-4 py-3 text-[12px]">
+              <span className="font-mono uppercase tracking-[0.2em] text-[var(--cream)]/65">{reason}</span>
+              <span className="ml-3 text-[var(--cream)]/45">{items.length}</span>
+            </summary>
+            <ul className="divide-y divide-[var(--cream)]/8">
+              {items.map((s) => (
+                <li key={s.id} className="flex items-baseline gap-3 px-4 py-2 text-[12px]">
+                  <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#ff6b2c]/70">
+                    {s.ref_code}
+                  </span>
+                  <span className="flex-1">{s.company}</span>
+                  {s.website && (
+                    <a href={s.website} target="_blank" rel="noreferrer"
+                      className="text-[var(--cream)]/55 hover:text-[var(--cream)]">
+                      {s.domain}
+                    </a>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </details>
+        ))}
     </div>
   );
 }
