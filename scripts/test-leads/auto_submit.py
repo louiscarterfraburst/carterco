@@ -49,17 +49,31 @@ from _supabase import select_paged, update
 CANDIDATE_PATHS = [
     "/kontakt",
     "/kontakt-os",
+    "/kontakt-os/",
     "/contact",
     "/contact-us",
     "/contact/",
+    "/contact-us/",
     "/da/kontakt",
     "/en/contact",
+    "/en/contact-us",
     "/about/contact",
     "/get-in-touch",
     "/skriv-til-os",
     "/book-mode",
+    "/booking",
     "/forespoergsel",
     "/get-quote",
+    "/quote",
+    "/enquiry",
+    "/inquiry",
+    "/sales",
+    "/sales-contact",
+    "/support",
+    "/help",
+    "/info",
+    "/contact-form",
+    "/contactform",
 ]
 
 # Cookie-banner buttons we'll auto-click. Danish + English.
@@ -94,6 +108,11 @@ Returnér KUN gyldig JSON i denne form:
   "message_selector": "textarea[name='message']",
   "consent_checkboxes": ["input[name='gdpr']"],
   "submit_selector": "button[type='submit']",
+  "other_required_fields": [
+    {"selector": "select[name='industry']", "type": "select", "label": "Industry"},
+    {"selector": "input[name='vat']", "type": "text", "label": "VAT number"},
+    {"selector": "input[name='employees']", "type": "number", "label": "Employees"}
+  ],
   "notes": "kort beskrivelse hvis noget er specielt"
 }
 
@@ -102,6 +121,13 @@ Regler:
 - Hvis et felt ikke findes, sæt værdien til null. NULL betyder springes over — fx hvis der ikke er et phone-felt.
 - name_selector OG (first_name_selector + last_name_selector): brug name_selector hvis der er ét fuldt-navn-felt; ellers brug first/last hvis felterne er adskilt.
 - consent_checkboxes: alle GDPR/marketing-tickbokse der skal sættes for at submission går igennem.
+- other_required_fields: ALLE andre påkrævede felter (markeret med * eller "required") som ikke passer til de standard-felter ovenfor. Inkludér:
+  • Dropdowns (type "select"): industri, branche, land, henvendelsestype, "Hvor hørte du om os?"
+  • Radio buttons (type "radio"): inkludér selector for HELE gruppen, fx 'input[name="inquiry_type"]'
+  • Number inputs (type "number"): antal medarbejdere, budget, omsætning
+  • Date pickers (type "date"): foretrukket møde-tidspunkt
+  • Tekstfelter (type "text"): VAT, CVR, adresse, postnr, by — alt der ikke er navn/email/telefon/firma/besked
+  Spring over file-uploads, captchas, og hidden felter.
 - has_form: false hvis siden ikke har en kontakformular.
 - Returnér KUN JSON, ingen markdown-fences, ingen forklaring."""
 
@@ -200,45 +226,83 @@ def page_has_form(page) -> bool:
 
 
 def navigate_to_contact(page, base: str) -> str | None:
-    """Try common paths, then scan nav. Return final URL on success."""
+    """Try common paths, then scan nav, then click contact CTAs. Return final URL on success."""
     base = base.rstrip("/")
-    # Check landing page itself first
-    try:
-        page.goto(base, wait_until="domcontentloaded", timeout=20000)
+
+    def settle_and_check() -> str | None:
+        """Wait for JS, check for a form."""
         try_accept_cookies(page)
+        try:
+            page.wait_for_load_state("networkidle", timeout=4000)
+        except Exception:
+            pass
         if page_has_form(page):
             return page.url
+        return None
+
+    # 1. Landing page
+    try:
+        page.goto(base, wait_until="domcontentloaded", timeout=20000)
+        u = settle_and_check()
+        if u: return u
     except Exception:
         pass
 
-    # Common contact paths
+    # 2. Common contact paths
     for path in CANDIDATE_PATHS:
         url = base + path
         try:
             resp = page.goto(url, wait_until="domcontentloaded", timeout=15000)
             if resp and resp.status == 200:
-                try_accept_cookies(page)
-                if page_has_form(page):
-                    return page.url
+                u = settle_and_check()
+                if u: return u
         except Exception:
             continue
 
-    # Scan nav links for "kontakt"/"contact"
+    # 3. Scan nav anchors with kontakt/contact/skriv/book/sales/quote text
     try:
         page.goto(base, wait_until="domcontentloaded", timeout=15000)
         try_accept_cookies(page)
-        href = page.evaluate(
+        hrefs = page.evaluate(
             """
             () => {
+              const re = /kontakt|contact|skriv|book|sales|quote|forespørg|samtale|hør\\s+mere|get\\s+started|book\\s+møde/i;
               const links = Array.from(document.querySelectorAll('a[href]'));
-              const hit = links.find(a => /kontakt|contact|skriv|book/i.test(a.textContent || ''));
-              return hit ? hit.href : null;
+              const matches = links.filter(a => re.test(a.textContent || ''));
+              return matches.slice(0, 5).map(a => a.href);
             }
             """
         )
-        if href:
-            page.goto(href, wait_until="domcontentloaded", timeout=15000)
-            try_accept_cookies(page)
+        for href in hrefs or []:
+            try:
+                page.goto(href, wait_until="domcontentloaded", timeout=15000)
+                u = settle_and_check()
+                if u: return u
+            except Exception:
+                continue
+    except Exception:
+        pass
+
+    # 4. Click contact CTA buttons (open modal forms etc.)
+    try:
+        page.goto(base, wait_until="domcontentloaded", timeout=15000)
+        try_accept_cookies(page)
+        clicked = page.evaluate(
+            """
+            () => {
+              const re = /kontakt|contact|skriv|book\\s|forespørg|samtale|get\\s+in\\s+touch|hør\\s+mere/i;
+              const candidates = Array.from(document.querySelectorAll('button, [role="button"], a'));
+              const hit = candidates.find(el => re.test(el.textContent || '') && el.offsetParent !== null);
+              if (hit) { hit.click(); return true; }
+              return false;
+            }
+            """
+        )
+        if clicked:
+            try:
+                page.wait_for_load_state("networkidle", timeout=4000)
+            except Exception:
+                pass
             if page_has_form(page):
                 return page.url
     except Exception:
@@ -330,24 +394,70 @@ def get_form_html_excerpt(page) -> str:
         return ""
 
 
-def detect_submission_success(page, before_url: str) -> tuple[bool, str]:
+SUCCESS_BODY_RE = re.compile(
+    r"(tak\s+for\s+din\s+henvendelse|tak\s+for\s+din\s+besked|tak\s+for\s+kontakt|"
+    r"tak,?\s+vi\s+vender\s+tilbage|din\s+besked\s+er\s+sendt|"
+    r"thanks?\s+for|message\s+(has\s+been\s+)?(sent|received)|"
+    r"we[''']?ll\s+(get\s+back|be\s+in\s+touch)|vi\s+vender\s+tilbage|"
+    r"submitted\s+successfully|form\s+submitted|tak\s+for\s+din\s+forespørgsel|"
+    r"successfully\s+sent|beskeden\s+er\s+modtaget|du\s+hører\s+fra\s+os)",
+    re.IGNORECASE,
+)
+
+
+def snapshot_form_values(page) -> dict[str, str]:
+    """Capture all input/textarea values so we can detect form-clear after submit."""
+    try:
+        return page.evaluate(
+            """
+            () => {
+              const out = {};
+              for (const el of document.querySelectorAll('input, textarea')) {
+                const k = el.name || el.id || ''; if (!k) continue;
+                if (['submit','button','hidden','checkbox','radio'].includes(el.type)) continue;
+                out[k] = el.value || '';
+              }
+              return out;
+            }
+            """
+        ) or {}
+    except Exception:
+        return {}
+
+
+def detect_submission_success(page, before_url: str, before_values: dict[str, str]) -> tuple[bool, str]:
     """After clicking submit, did it look like it worked?"""
-    page.wait_for_timeout(2500)
+    # Wait progressively — some sites take 4-5s to show the thank-you state
+    page.wait_for_timeout(3500)
     after_url = page.url
-    if after_url != before_url and "thank" in after_url.lower():
-        return True, "url contains 'thank'"
-    if after_url != before_url and re.search(r"(success|tak|received|done|sent)", after_url.lower()):
-        return True, f"url changed to {after_url}"
+
+    if after_url != before_url:
+        if "thank" in after_url.lower():
+            return True, "url contains 'thank'"
+        if re.search(r"(success|tak|received|done|sent|complete|submitted)", after_url.lower()):
+            return True, f"url changed to {after_url}"
+
+    # Visible body text contains a thank-you phrase
     body = ""
     try:
         body = page.inner_text("body", timeout=3000)
     except Exception:
         pass
-    if re.search(r"(tak for din henvendelse|thanks?\s+for|tak.*beskeden|message (has been )?sent|we'?ll get back|vi vender tilbage)",
-                 body, re.IGNORECASE):
+    if SUCCESS_BODY_RE.search(body):
         return True, "success text on page"
+
+    # Form fields cleared after submit → site accepted the data and reset the form
+    if before_values:
+        after_values = snapshot_form_values(page)
+        cleared = [k for k, v in before_values.items()
+                   if v and not (after_values.get(k) or "")]
+        if len(cleared) >= 2:
+            return True, f"form cleared {len(cleared)} fields"
+
+    # Generic URL change is a weak but real signal
     if after_url != before_url:
         return True, f"url changed to {after_url}"
+
     return False, "no clear success signal"
 
 
@@ -376,6 +486,95 @@ def persona_payload(ref_code: str) -> dict[str, str | None]:
 # ─── Single-submission worker ────────────────────────────────────────────
 
 
+def fill_other_field(page, sel: str, ftype: str, label: str, payload: dict) -> None:
+    """Best-effort fill for fields beyond the standard 7. Silently no-ops on miss."""
+    loc = page.locator(sel).first
+
+    if ftype == "select":
+        # Pick the first option that isn't a "please choose" placeholder.
+        options = page.evaluate(
+            """
+            (s) => {
+              const el = document.querySelector(s);
+              if (!el || el.tagName !== 'SELECT') return [];
+              return Array.from(el.options).map(o => ({value: o.value, text: o.textContent || ''}));
+            }
+            """,
+            sel,
+        ) or []
+        BAD = ("vælg", "select", "choose", "please", "—", "-- ", "--", "")
+        for o in options:
+            txt = (o["text"] or "").strip().lower()
+            val = (o["value"] or "").strip()
+            if not val:
+                continue
+            if any(bad in txt for bad in BAD):
+                continue
+            try:
+                loc.select_option(value=val, timeout=2000)
+                return
+            except Exception:
+                continue
+        # Fallback: pick the option at index 1 (skip the empty "Choose..." at index 0)
+        try:
+            loc.select_option(index=1, timeout=2000)
+        except Exception:
+            pass
+        return
+
+    if ftype == "radio":
+        # The selector might point at the group; pick the first radio in it.
+        try:
+            page.locator(sel).first.check(timeout=2000)
+        except Exception:
+            pass
+        return
+
+    if ftype == "number":
+        # Sensible defaults by label hint
+        val = "1"
+        if any(k in label for k in ("budget", "omsætning", "revenue", "spend")):
+            val = "10000"
+        if any(k in label for k in ("medarbejder", "employee", "staff", "size")):
+            val = "10"
+        try:
+            loc.fill(val, timeout=2000)
+        except Exception:
+            pass
+        return
+
+    if ftype == "date":
+        # Today + 7 days, ISO format (works for native HTML5 date inputs)
+        from datetime import datetime, timedelta
+        d = (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d")
+        try:
+            loc.fill(d, timeout=2000)
+        except Exception:
+            pass
+        return
+
+    # text or anything else: stuff the message in (handles VAT/address weakly,
+    # but the form goes through with SOME value rather than rejecting).
+    if ftype in ("text", "textarea", ""):
+        # Use a small relevant string for short-looking fields
+        val = payload.get("company") or payload.get("full_name") or "1234567890"
+        # If label hints at zip/postcode, use a Danish 4-digit
+        if any(k in label for k in ("zip", "postcode", "postnr", "postal")):
+            val = "2100"
+        elif any(k in label for k in ("city", "by")):
+            val = "København"
+        elif any(k in label for k in ("vat", "cvr", "tax")):
+            val = "12345678"
+        elif any(k in label for k in ("address", "adresse", "gade")):
+            val = "Testgade 1"
+        elif any(k in label for k in ("country", "land")):
+            val = "Denmark"
+        try:
+            loc.fill(val, timeout=2000)
+        except Exception:
+            pass
+
+
 def fill_and_submit(page, fmap: dict, payload: dict, dry_run: bool) -> tuple[bool, str]:
     def fill_if(sel: str | None, val: str | None):
         if sel and val:
@@ -402,6 +601,18 @@ def fill_and_submit(page, fmap: dict, payload: dict, dry_run: bool) -> tuple[boo
         except Exception:
             pass
 
+    # Other required fields: dropdowns, radios, numbers, dates, misc text
+    for f in fmap.get("other_required_fields") or []:
+        sel = f.get("selector")
+        ftype = (f.get("type") or "").lower()
+        label = (f.get("label") or "").lower()
+        if not sel:
+            continue
+        try:
+            fill_other_field(page, sel, ftype, label, payload)
+        except Exception:
+            pass
+
     if dry_run:
         return False, "dry-run — fields filled, did not submit"
 
@@ -410,12 +621,27 @@ def fill_and_submit(page, fmap: dict, payload: dict, dry_run: bool) -> tuple[boo
         return False, "no submit selector"
 
     before_url = page.url
-    try:
-        page.locator(submit_sel).first.click(timeout=5000)
-    except Exception as e:
-        return False, f"submit click failed: {e}"
+    before_values = snapshot_form_values(page)
 
-    return detect_submission_success(page, before_url)
+    # Try the locator click first; fall back to JS-dispatched click if hidden
+    submit = page.locator(submit_sel).first
+    try:
+        submit.scroll_into_view_if_needed(timeout=2000)
+    except Exception:
+        pass
+    try:
+        submit.click(timeout=5000)
+    except Exception:
+        # Force click via JS (bypasses overlay-blocking)
+        try:
+            page.evaluate(
+                "(sel) => { const el = document.querySelector(sel); if (el) el.click(); }",
+                submit_sel,
+            )
+        except Exception as e:
+            return False, f"submit click failed (incl. JS fallback): {e}"
+
+    return detect_submission_success(page, before_url, before_values)
 
 
 def process_one(playwright_ctx, sub: dict, dry_run: bool) -> dict:
@@ -424,8 +650,7 @@ def process_one(playwright_ctx, sub: dict, dry_run: bool) -> dict:
     if not website:
         return {"ok": False, "reason": "no website"}
 
-    browser = playwright_ctx
-    page = browser.new_page(viewport={"width": 1280, "height": 1600})
+    page = playwright_ctx.new_page()
     page.set_default_timeout(15000)
     out: dict[str, Any] = {"ok": False, "reason": ""}
     try:
@@ -521,14 +746,19 @@ def main():
                  "  playwright install chromium")
 
     if args.only_ref:
-        pending = select_paged(
+        from _supabase import select as _select
+        pending = _select(
             "test_submissions",
             f"ref_code=eq.{args.only_ref}&select=*",
         )
     else:
-        q = "status=eq.pending&website=not.is.null&select=*&order=inserted_at.asc&limit="
-        q += str(args.limit if args.limit else 10000)
-        pending = select_paged("test_submissions", q)
+        q = "status=eq.pending&website=not.is.null&select=*&order=inserted_at.asc"
+        if args.limit:
+            # Plain select respects query-level limit (paged ignores it)
+            from _supabase import select as _select
+            pending = _select("test_submissions", f"{q}&limit={args.limit}")
+        else:
+            pending = select_paged("test_submissions", q)
 
     print(f"Pending: {len(pending)}", file=sys.stderr)
     if not pending:
@@ -547,6 +777,7 @@ def main():
                     user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
                                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
                     locale="da-DK",
+                    viewport={"width": 1280, "height": 900},
                 )
                 try:
                     res = process_one(ctx, sub, args.dry_run)
