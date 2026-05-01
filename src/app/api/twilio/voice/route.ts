@@ -51,14 +51,16 @@ export async function POST(req: Request) {
   //
   // Pacing notes: short pause between sentences ("...") makes Polly read
   // less robotically. Polly.Mads is Twilio's Danish male voice.
+  // Gatekeeper persona: a virtual assistant / answering service for Louis,
+  // not Louis himself. Naturally elicits "who's calling + why".
   const recCallback = `https://${req.headers.get("host")}/api/twilio/voice-recording`;
   const transcribeCallback = `https://${req.headers.get("host")}/api/twilio/voice-transcript`;
   const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Pause length="1"/>
-  <Say voice="Polly.Mads" language="da-DK">Hej, det er Louis.</Say>
+  <Say voice="Polly.Naja" language="da-DK">Hej. Du har ringet til Louis Sustmann Carter.</Say>
   <Pause length="1"/>
-  <Say voice="Polly.Mads" language="da-DK">Jeg er midt i noget lige nu — men hvis du efter bippet siger hvem du er og hvad det drejer sig om, så ringer jeg tilbage.</Say>
+  <Say voice="Polly.Naja" language="da-DK">Vil du venligst sige dit navn og hvad opkaldet drejer sig om efter bippet, så ser jeg om Louis er ledig — ellers ringer han tilbage.</Say>
   <Record
     maxLength="60"
     timeout="3"
@@ -68,7 +70,7 @@ export async function POST(req: Request) {
     transcribeCallback="${transcribeCallback}"
     recordingStatusCallback="${recCallback}"
     recordingStatusCallbackMethod="POST"/>
-  <Say voice="Polly.Mads" language="da-DK">Tak. Jeg ringer.</Say>
+  <Say voice="Polly.Naja" language="da-DK">Tak. Jeg giver Louis besked.</Say>
   <Hangup/>
 </Response>`;
 
