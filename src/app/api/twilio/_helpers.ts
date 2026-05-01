@@ -105,3 +105,35 @@ export function getWebhookUrl(req: Request, defaultPath: string): string {
     "";
   return `${fwdProto}://${host}${defaultPath}`;
 }
+
+/**
+ * Send an outbound SMS via Twilio. Returns the Twilio message SID on success.
+ * Throws on failure.
+ */
+export async function sendTwilioSMS(to: string, body: string): Promise<string> {
+  const sid = process.env.TWILIO_ACCOUNT_SID;
+  const tok = process.env.TWILIO_AUTH_TOKEN;
+  const from = process.env.TWILIO_NUMBER;
+  if (!sid || !tok || !from) {
+    throw new Error("TWILIO_ACCOUNT_SID/AUTH_TOKEN/NUMBER not configured");
+  }
+  const auth = Buffer.from(`${sid}:${tok}`).toString("base64");
+  const form = new URLSearchParams({ From: from, To: to, Body: body });
+  const res = await fetch(
+    `https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Basic ${auth}`,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: form.toString(),
+    },
+  );
+  if (!res.ok) {
+    const errText = await res.text().catch(() => "");
+    throw new Error(`Twilio SMS send failed: ${res.status} ${errText.slice(0, 300)}`);
+  }
+  const json = (await res.json()) as { sid: string };
+  return json.sid;
+}

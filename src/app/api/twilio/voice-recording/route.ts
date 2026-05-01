@@ -7,8 +7,12 @@ import {
   verifyTwilioSignature,
   parseFormParams,
   getWebhookUrl,
+  sendTwilioSMS,
 } from "../_helpers";
 import { createAdminClient } from "@/utils/supabase/admin";
+
+const MIN_REC_SECS_FOR_KEEP = 3;
+const FOLLOWUP_SMS_BODY = "Hej, hvem er det?";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -37,17 +41,43 @@ export async function POST(req: Request) {
 
   // Find the test_responses row inserted by the /voice route on this call
   const sb = createAdminClient();
-  const { error } = await sb
+  const { data: row, error } = await sb
     .from("test_responses")
     .update({
       recording_url: recordingUrl || null,
       recording_sid: recordingSid || null,
       recording_secs: duration,
     })
-    .eq("message_id", `twilio-call-${callSid}`);
+    .eq("message_id", `twilio-call-${callSid}`)
+    .select("from_address")
+    .maybeSingle();
 
   if (error) {
     console.error("voice-recording update failed:", error.message);
+  }
+
+  // If they hung up before saying anything (or barely said anything),
+  // follow up with an SMS asking who they are. We dedupe on caller +
+  // recent SMS so we don't pester repeat callers.
+  const callerNumber = row?.from_address || null;
+  const recordingTooShort = (duration || 0) < MIN_REC_SECS_FOR_KEEP;
+  if (callerNumber && recordingTooShort) {
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const { data: recent } = await sb
+      .from("test_responses")
+      .select("id")
+      .eq("from_address", callerNumber)
+      .eq("channel", "sms")
+      .gte("received_at", oneHourAgo)
+      .limit(1);
+    const alreadyMessaged = (recent || []).length > 0;
+    if (!alreadyMessaged) {
+      try {
+        await sendTwilioSMS(callerNumber, FOLLOWUP_SMS_BODY);
+      } catch (e) {
+        console.error("hangup follow-up SMS failed:", e);
+      }
+    }
   }
 
   // Twilio expects 200 OK; no TwiML needed for status callbacks
