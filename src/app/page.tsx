@@ -2024,7 +2024,7 @@ export default function Home() {
               </p>
               <h3 className="mt-3 font-display text-3xl italic leading-tight tracking-tight sm:text-[2.25rem]">
                 <span className="bg-gradient-to-b from-[#ffb86b] via-[#ff6b2c] to-[#c93c0a] bg-clip-text text-transparent">
-                  Smedet før det køler.
+                  Ringet op før leadet køler.
                 </span>
               </h3>
               <ul className="mt-7 flex flex-col gap-3.5 text-[15px] leading-relaxed text-[#29261f]/82">

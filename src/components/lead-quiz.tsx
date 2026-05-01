@@ -219,7 +219,7 @@ export function LeadQuiz({ open, onClose, onConvert }: Props) {
         {/* Body */}
         <div
           key={currentStepKey}
-          className="flex flex-1 flex-col overflow-y-auto px-8 pb-8 pt-8"
+          className="flex flex-1 flex-col overflow-y-auto px-6 pb-8 pt-6 sm:px-8 sm:pt-8"
         >
           {currentStepKey === "url" && (
             <UrlStep
@@ -362,7 +362,7 @@ function PrimaryButton({
       type={type ?? "button"}
       onClick={onClick}
       disabled={disabled}
-      className="inline-flex items-center gap-3 self-start rounded-full bg-[var(--forest)] px-7 py-3.5 text-xs font-bold uppercase tracking-[0.25em] text-[#fff8ea] shadow-[0_18px_50px_-16px_rgba(25,70,58,0.5)] transition hover:-translate-y-0.5 hover:shadow-[0_24px_60px_-16px_rgba(25,70,58,0.6)] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:translate-y-0"
+      className="inline-flex items-center gap-3 self-start rounded-full bg-[var(--forest)] px-7 py-3.5 text-center text-[11px] font-bold uppercase leading-snug tracking-[0.18em] text-[#fff8ea] shadow-[0_18px_50px_-16px_rgba(25,70,58,0.5)] transition hover:-translate-y-0.5 hover:shadow-[0_24px_60px_-16px_rgba(25,70,58,0.6)] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:translate-y-0 sm:text-xs sm:tracking-[0.25em]"
     >
       {children}
     </button>
@@ -463,7 +463,7 @@ function NumberStep({
               onSubmit();
             }
           }}
-          className="w-full max-w-[12ch] border-b border-[var(--cream)]/20 bg-transparent pb-3 font-display text-4xl text-[var(--cream)] placeholder:text-[var(--cream)]/25 focus:border-[#ff6b2c] focus:outline-none sm:text-5xl"
+          className="w-full max-w-[12ch] border-b border-[var(--cream)]/20 bg-transparent pb-3 font-display text-3xl text-[var(--cream)] tabular-nums placeholder:text-[var(--cream)]/25 focus:border-[#ff6b2c] focus:outline-none sm:text-5xl"
         />
         <span className="font-mono text-[11px] font-bold uppercase tracking-[0.25em] text-[var(--cream)]/55">
           {suffix}
@@ -644,7 +644,7 @@ function ResultStep({
         <p className="font-mono text-[10px] font-bold uppercase tracking-[0.3em] text-[#ff6b2c]/85">
           Du taber
         </p>
-        <p className="mt-1 font-display text-5xl leading-none tracking-tight text-[var(--cream)] sm:text-7xl">
+        <p className="mt-1 font-display text-[2.25rem] leading-none tracking-tight text-[var(--cream)] tabular-nums sm:text-7xl">
           <span className="bg-gradient-to-b from-[#ffb86b] via-[#ff6b2c] to-[#c93c0a] bg-clip-text italic text-transparent">
             {formatKr(animatedLoss)}
           </span>
