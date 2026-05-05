@@ -40,6 +40,7 @@ from _supabase import select, update
 
 JINA_KEY = os.environ.get("JINA_API_KEY")
 ANTHROPIC_KEY = os.environ.get("ANTHROPIC_API_KEY")
+BRAVE_KEY = os.environ.get("BRAVE_SEARCH_API_KEY")
 
 # Jina renders LinkedIn's Website field as a Markdown link with a tracking redirect.
 # Format on a company page: "Website [https://acme.dk](https://www.linkedin.com/redir/redirect?url=...)"
@@ -168,20 +169,23 @@ Svar i én linje uden forklaring eller markdown.
 Foretræk korporatets officielle domæne (acme.dk, acme.com) over LinkedIn, Facebook, Trustpilot, Crunchbase, business directories.
 """
 
+HAIKU_DIRECT_SYSTEM = """Du er en B2B-virksomhedsdatabase. Brugeren giver dig et dansk virksomhedsnavn (evt. med branche, by, land).
+Hvis du er HØJST SIKKER på virksomhedens officielle hjemmeside-URL — svar med URL'en (én linje, intet andet).
+Hvis du er det mindste i tvivl — svar UNKNOWN. Det er bedre at sige UNKNOWN end at gætte.
+Svar aldrig med en LinkedIn-, Facebook-, Trustpilot-, Crunchbase- eller registry-URL.
+Eksempel godt svar: https://novo-nordisk.com
+Eksempel dårligt svar: https://www.linkedin.com/company/novonordisk
+"""
 
-def haiku_pick_url(company: str, serp_text: str) -> str:
+
+def _haiku_call(system: str, user: str, max_tokens: int = 80, model: str = "claude-haiku-4-5-20251001") -> str:
     if not ANTHROPIC_KEY:
         raise RuntimeError("ANTHROPIC_API_KEY not set")
     payload = {
-        "model": "claude-haiku-4-5-20251001",
-        "max_tokens": 100,
-        "system": HAIKU_SYSTEM,
-        "messages": [
-            {
-                "role": "user",
-                "content": f"Virksomhed: {company}\n\nGoogle-resultater:\n{serp_text[:6000]}",
-            }
-        ],
+        "model": model,
+        "max_tokens": max_tokens,
+        "system": system,
+        "messages": [{"role": "user", "content": user}],
     }
     req = urllib.request.Request(
         "https://api.anthropic.com/v1/messages",
@@ -196,12 +200,78 @@ def haiku_pick_url(company: str, serp_text: str) -> str:
     with urllib.request.urlopen(req, timeout=45) as f:
         body = json.loads(f.read().decode("utf-8"))
     blocks = body.get("content") or []
-    text = "".join(b.get("text", "") for b in blocks if b.get("type") == "text").strip()
+    return "".join(b.get("text", "") for b in blocks if b.get("type") == "text").strip()
+
+
+def haiku_pick_url(company: str, serp_text: str) -> str:
+    text = _haiku_call(
+        HAIKU_SYSTEM,
+        f"Virksomhed: {company}\n\nGoogle-resultater:\n{serp_text[:6000]}",
+    )
     if text.upper().startswith("NONE"):
         return ""
-    # Sometimes Haiku wraps in <url> or markdown — extract first http(s) URL
     m = re.search(r"https?://[^\s\)\]<>\"']+", text)
     return m.group(0) if m else ""
+
+
+def haiku_direct_guess(company: str, industry: str = "", city: str = "", country: str = "") -> str:
+    """Ask Sonnet directly for the company website. Returns "" if Sonnet says UNKNOWN."""
+    ctx_lines = [f"Virksomhed: {company}"]
+    if industry: ctx_lines.append(f"Branche: {industry}")
+    if city or country: ctx_lines.append(f"Lokation: {', '.join(x for x in (city, country) if x)}")
+    text = _haiku_call(
+        HAIKU_DIRECT_SYSTEM,
+        "\n".join(ctx_lines),
+        max_tokens=60,
+        model="claude-sonnet-4-6",
+    )
+    if text.upper().startswith("UNKNOWN") or text.upper().startswith("NONE"):
+        return ""
+    m = re.search(r"https?://[^\s\)\]<>\"']+", text)
+    return m.group(0) if m else ""
+
+
+def brave_search(query: str, count: int = 5) -> list[dict]:
+    """Hit Brave Search API. Returns list of {title, url, description} dicts.
+    Empty list on any failure (caller decides what to do)."""
+    if not BRAVE_KEY:
+        raise RuntimeError("BRAVE_SEARCH_API_KEY not set")
+    qs = urllib.parse.urlencode({"q": query, "count": count})
+    req = urllib.request.Request(
+        f"https://api.search.brave.com/res/v1/web/search?{qs}",
+        headers={
+            "Accept": "application/json",
+            "X-Subscription-Token": BRAVE_KEY,
+        },
+    )
+    with urllib.request.urlopen(req, timeout=20) as f:
+        body = json.loads(f.read().decode("utf-8"))
+    web = (body.get("web") or {}).get("results") or []
+    return [
+        {
+            "title": r.get("title") or "",
+            "url": r.get("url") or "",
+            "description": r.get("description") or "",
+        }
+        for r in web
+    ]
+
+
+def head_check(url: str, timeout: int = 6) -> bool:
+    """HEAD-request the URL to confirm it resolves. Treats any 2xx/3xx as live."""
+    try:
+        req = urllib.request.Request(
+            url, method="HEAD",
+            headers={"User-Agent": "Mozilla/5.0 (compatible; CarterCo/1.0)"},
+        )
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return 200 <= r.status < 400
+    except urllib.error.HTTPError as e:
+        # Many sites block HEAD or 405-it but return content on GET — accept 4xx as "exists"
+        # only for codes that imply the host is real (400, 401, 403, 405, 429).
+        return e.code in (400, 401, 403, 405, 429)
+    except Exception:
+        return False
 
 
 def pass_b(lead: dict) -> dict:
@@ -215,25 +285,48 @@ def pass_b(lead: dict) -> dict:
     if not company:
         out["error"] = "no company name"
         return out
-    q = urllib.parse.quote(company)
-    google_url = f"https://www.google.com/search?q={q}"
+
+    # Step 1 — Sonnet-direct: ~$0.001/lead, ~1.5s. Catches well-known names cheaply.
     try:
-        body = jina_read_with_retry(google_url)
+        guess = haiku_direct_guess(
+            company,
+            (lead.get("industry") or "").strip(),
+            (lead.get("city") or "").strip(),
+            (lead.get("country") or "").strip(),
+        )
     except Exception as e:
-        out["error"] = f"jina-google: {e}"
+        guess = ""
+        out["error"] = f"sonnet-direct: {e}"
+    if guess and head_check(guess):
+        out.update(website=guess, source_url="sonnet:direct", website_pass="B_sonnet_direct")
+        return out
+
+    # Step 2 — Brave Search → Haiku reranks the top hits.
+    if not BRAVE_KEY:
+        # No Brave key configured; nothing more to do for this lead
         return out
     try:
-        url = haiku_pick_url(company, body)
+        results = brave_search(company, count=5)
     except Exception as e:
-        out["error"] = f"haiku: {e}"
+        out["error"] = f"brave: {e}"
+        return out
+    if not results:
+        return out
+    serp_text = "\n".join(
+        f"- {r['title']}\n  {r['url']}\n  {r['description']}" for r in results
+    )
+    try:
+        url = haiku_pick_url(company, serp_text)
+    except Exception as e:
+        out["error"] = f"haiku-pick: {e}"
         return out
     if not url:
         return out
-    out.update(
-        website=url,
-        source_url=google_url,
-        website_pass="B_google",
-    )
+    if not head_check(url):
+        out["error"] = f"head-fail: {url}"
+        return out
+    out.update(website=url, source_url="brave:search", website_pass="B_google")
+    out["error"] = None  # clear any earlier non-fatal sonnet-direct error
     return out
 
 
