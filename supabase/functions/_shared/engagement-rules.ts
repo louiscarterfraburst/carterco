@@ -4,6 +4,8 @@
 // See docs/outreach-playbook.md for intent, signal vocabulary, and the
 // step-by-step "how to add a rule" checklist.
 
+import { normalizeCompanyName } from "./text.ts";
+
 export type Signal =
     | "sent"          // we sent the post-render LinkedIn message
     | "viewed"        // SendSpark "Video Viewed"
@@ -91,6 +93,6 @@ export function renderTemplate(
 ): string {
     return tpl
         .replaceAll("{firstName}", (lead.first_name ?? "").trim() || "der")
-        .replaceAll("{company}",   (lead.company ?? "").trim())
+        .replaceAll("{company}",   normalizeCompanyName(lead.company))
         .replaceAll("{videoLink}", (lead.video_link ?? "").trim());
 }

@@ -20,6 +20,7 @@
 // outreach_events, prune the map to the actual strings.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.103.3";
+import { normalizeCompanyName, normalizeWebsiteUrl } from "../_shared/text.ts";
 
 const corsHeaders = {
     "Access-Control-Allow-Origin": "*",
@@ -175,8 +176,8 @@ async function handleRenderReady(evt: SendSparkEvent, email: string, videoLink: 
         .maybeSingle();
 
     const firstName = (lead?.first_name ?? "").trim() || "der";
-    const company = (lead?.company ?? "").trim();
-    const website = (lead?.website ?? "").trim().replace(/^https?:\/\//i, "").replace(/\/+$/, "");
+    const company = normalizeCompanyName(lead?.company);
+    const website = normalizeWebsiteUrl(lead?.website);
     const message = MESSAGE_TEMPLATE
         .replaceAll("{firstName}", firstName)
         .replaceAll("{company}", company)

@@ -16,6 +16,7 @@
 // sendpilot_lead_id OR linkedin_url) are skipped, so re-runs don't re-render.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.103.3";
+import { normalizeCompanyName, urlOrigin } from "../_shared/text.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -315,9 +316,9 @@ async function sendsparkRender(lead: Record<string, unknown>) {
     prospect: {
       contactName: ((lead.first_name as string) ?? "").trim() || "there",
       contactEmail: lead.contact_email as string,
-      company: ((lead.company as string) ?? "").slice(0, 80),
+      company: normalizeCompanyName(lead.company as string).slice(0, 80),
       jobTitle: ((lead.title as string) ?? "").slice(0, 100),
-      backgroundUrl: (lead.website as string) ?? "",
+      backgroundUrl: urlOrigin(lead.website as string),
     },
   };
   const url =
