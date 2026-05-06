@@ -166,7 +166,7 @@ async function handleRenderReady(evt: SendSparkEvent, email: string, videoLink: 
 
     const { data: pipe } = await supabase
         .from("outreach_pipeline")
-        .select("sendpilot_lead_id, contact_email, status")
+        .select("sendpilot_lead_id, contact_email, status, campaign_id")
         .eq("contact_email", email)
         .maybeSingle();
 
@@ -188,7 +188,10 @@ async function handleRenderReady(evt: SendSparkEvent, email: string, videoLink: 
     const firstName = (lead?.first_name ?? "").trim() || "der";
     const company = normalizeCompanyName(lead?.company);
     const website = normalizeWebsiteUrl(lead?.website);
-    const message = pickTemplate(evt.campaignId)
+    // Use the SendPilot campaign_id we stored on the pipeline row, not
+    // SendSpark's own campaignId — keeps env-var keys consistent with the
+    // sequence-template overrides in outreach-engagement-tick.
+    const message = pickTemplate(pipe.campaign_id ?? undefined)
         .replaceAll("{firstName}", firstName)
         .replaceAll("{company}", company)
         .replaceAll("{website}", website)
