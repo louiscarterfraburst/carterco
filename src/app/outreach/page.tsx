@@ -90,7 +90,7 @@ type Reply = {
   lead?: LeadEnrich;
 };
 
-type Tab = "pending" | "replies" | "sent" | "all";
+type Tab = "pending" | "accepted" | "replies" | "sent" | "all";
 type SortKey = "queued_oldest" | "queued_newest" | "name";
 type ColdFilter = "all" | "cold" | "warm";
 
@@ -248,7 +248,7 @@ export default function OutreachPage() {
   }
 
   // ---------- approval flow ----------
-  async function decide(leadId: string, decision: "approve" | "reject", messageOverride?: string) {
+  async function decide(leadId: string, decision: "approve" | "reject" | "render", messageOverride?: string) {
     setBusyLead(leadId); setErr(null);
     const { data, error } = await supabase.functions.invoke("outreach-approve", {
       body: { leadId, decision, ...(messageOverride ? { messageOverride } : {}) },
@@ -349,6 +349,32 @@ export default function OutreachPage() {
     [rows],
   );
 
+  // Accepted-but-no-approved-video: leads we know accepted, that are stuck
+  // somewhere before the Afventer queue (rendering/failed/no video at all).
+  // Used to recover leads when the SendSpark webhook never fired or when the
+  // poll only just discovered them via DONE status.
+  const accepted = useMemo(() => {
+    return rows
+      .filter((r) => {
+        if (!r.accepted_at) return false;
+        if (r.status === "pending_approval" || r.status === "sent" || r.status === "rejected") return false;
+        return true;
+      })
+      .sort((a, b) => (b.accepted_at ?? "").localeCompare(a.accepted_at ?? ""));
+  }, [rows]);
+
+  async function renderLead(leadId: string) {
+    setBusyLead(leadId); setErr(null); setInfo(null);
+    const { data, error } = await supabase.functions.invoke("outreach-approve", {
+      body: { leadId, decision: "render" },
+    });
+    setBusyLead(null);
+    if (error) { setErr(error.message ?? String(error)); return; }
+    if (data?.error) { setErr(`${data.error}${data.details ? `: ${data.details}` : ""}`); return; }
+    setInfo("Render kickstartet — videoen lander i Afventer når SendSpark er færdig.");
+    await load();
+  }
+
   const allRecent = useMemo(
     () => [...rows].sort((a, b) => b.updated_at.localeCompare(a.updated_at)).slice(0, 100),
     [rows],
@@ -422,6 +448,7 @@ export default function OutreachPage() {
 
       <Tabs tab={tab} setTab={setTab} counts={{
         pending: stats.pending,
+        accepted: accepted.length,
         replies: unhandledReplies.length,
         sent: stats.sent,
         all: stats.total,
@@ -445,6 +472,12 @@ export default function OutreachPage() {
             onRejectOne={(r) => void singleDecide(r, "reject")}
             onBulkApprove={() => void bulkDecide("approve")}
             onBulkReject={() => void bulkDecide("reject")}
+          />
+        ) : tab === "accepted" ? (
+          <AcceptedTab
+            rows={accepted}
+            busyLead={busyLead}
+            onRender={(id) => void renderLead(id)}
           />
         ) : tab === "replies" ? (
           <RepliesTab replies={replies} onMarkHandled={(id) => void markReplyHandled(id)} />
@@ -549,10 +582,11 @@ function Sparkline({ data }: { data: { day: string; count: number }[] }) {
 }
 
 function Tabs({ tab, setTab, counts }: {
-  tab: Tab; setTab: (t: Tab) => void; counts: { pending: number; replies: number; sent: number; all: number };
+  tab: Tab; setTab: (t: Tab) => void; counts: { pending: number; accepted: number; replies: number; sent: number; all: number };
 }) {
   const items: { id: Tab; label: string; count: number; accent?: boolean }[] = [
     { id: "pending", label: "Afventer", count: counts.pending, accent: counts.pending > 0 },
+    { id: "accepted", label: "Accepteret", count: counts.accepted, accent: counts.accepted > 0 },
     { id: "replies", label: "Svar", count: counts.replies, accent: counts.replies > 0 },
     { id: "sent", label: "Sendt", count: counts.sent },
     { id: "all", label: "Alle", count: counts.all },
@@ -765,6 +799,65 @@ function PendingTab(props: {
         </ul>
       )}
     </>
+  );
+}
+
+function AcceptedTab({ rows, busyLead, onRender }: {
+  rows: PipelineRow[];
+  busyLead: string | null;
+  onRender: (leadId: string) => void;
+}) {
+  if (rows.length === 0) {
+    return (
+      <p className="mt-4 text-sm text-[var(--ink)]/45">
+        Ingen accepterede leads venter på en video. Når en lead på SendPilot accepterer
+        connection-requesten kommer de automatisk i “Afventer” så snart videoen er klar.
+      </p>
+    );
+  }
+  return (
+    <ul className="mt-4 flex flex-col gap-3">
+      {rows.map((r) => {
+        const stuck = r.status === "failed" || r.status === "invited" || r.status === "accepted";
+        return (
+          <li key={r.sendpilot_lead_id}
+            className="rounded-sm border border-[var(--ink)]/12 bg-[var(--cream)]/40 p-4 sm:p-5">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="font-display text-xl italic leading-tight tracking-tight text-[var(--ink)]">
+                  {r.lead?.first_name} {r.lead?.last_name}
+                </div>
+                <div className="tabular mt-0.5 text-[12px] text-[var(--ink)]/55">
+                  {r.lead?.company}
+                  {" · "}
+                  <a href={r.linkedin_url} target="_blank" rel="noreferrer"
+                    className="underline underline-offset-2 hover:text-[var(--ink)]">LinkedIn ↗</a>
+                  {" · accepted "}{fmtRelative(r.accepted_at)}
+                </div>
+                <div className="tabular mt-0.5 text-[11px] text-[var(--ink)]/40">
+                  {r.lead?.title?.slice(0, 100)}
+                </div>
+                {r.error ? (
+                  <p className="tabular mt-2 text-[11px] italic text-[var(--clay)]">{r.error}</p>
+                ) : null}
+              </div>
+              <div className="flex flex-shrink-0 items-center gap-2">
+                <StatusPill status={r.status} />
+                {stuck ? (
+                  <button type="button" disabled={busyLead === r.sendpilot_lead_id}
+                    onClick={() => onRender(r.sendpilot_lead_id)}
+                    className="focus-orange tabular rounded-sm bg-[var(--forest)] px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-[var(--cream)] hover:bg-[#2f5e4e] disabled:opacity-50">
+                    {busyLead === r.sendpilot_lead_id ? "Sender…" : "Render video"}
+                  </button>
+                ) : (
+                  <span className="tabular text-[11px] text-[var(--ink)]/45">Render i gang…</span>
+                )}
+              </div>
+            </div>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 

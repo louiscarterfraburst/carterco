@@ -115,11 +115,16 @@ Deno.serve(async (req) => {
       summary.errors.push(`campaign ${campaignId} (sent): ${(e as Error).message}`);
     }
 
-    // CONNECTION_ACCEPTED — full webhook-equivalent flow with sendspark render.
+    // CONNECTION_ACCEPTED + DONE — full webhook-equivalent flow with sendspark
+    // render. SendPilot moves leads from CONNECTION_ACCEPTED to DONE once their
+    // sequence completes; we treat DONE the same so accepted leads we missed
+    // (webhook downtime, between-poll status flip) still get a video.
     try {
       const acceptedLeads = await fetchLeadsByStatus(campaignId, "CONNECTION_ACCEPTED");
-      summary.accepted_fetched += acceptedLeads.length;
-      for (const lead of acceptedLeads) {
+      const doneLeads = await fetchLeadsByStatus(campaignId, "DONE");
+      const allAccepted = [...acceptedLeads, ...doneLeads];
+      summary.accepted_fetched += allAccepted.length;
+      for (const lead of allAccepted) {
         try {
           const result = await processAcceptedLead(lead);
           switch (result) {
@@ -201,21 +206,23 @@ async function processAcceptedLead(spLead: SendPilotLead): Promise<ProcessResult
   const leadId = spLead.id;
   const linkedinUrl = spLead.linkedinUrl ?? "";
 
-  // Skip if we already have a pipeline row for this person — match either by
-  // current Sendpilot leadId or by stable linkedin_url.
+  // Skip only if the row is already past invited (accepted_at filled). A row
+  // in 'invited' state is exactly what we need to upgrade — earlier this was
+  // the webhook's job, but since the webhook went silent we have to treat the
+  // poll as the upgrade path too.
   const { data: byId } = await supabase
     .from("outreach_pipeline")
-    .select("sendpilot_lead_id")
+    .select("sendpilot_lead_id, accepted_at")
     .eq("sendpilot_lead_id", leadId)
     .maybeSingle();
-  if (byId) return "skipped";
-  if (linkedinUrl) {
+  if (byId?.accepted_at) return "skipped";
+  if (!byId && linkedinUrl) {
     const { data: byUrl } = await supabase
       .from("outreach_pipeline")
-      .select("sendpilot_lead_id")
+      .select("sendpilot_lead_id, accepted_at")
       .eq("linkedin_url", linkedinUrl)
       .maybeSingle();
-    if (byUrl) return "skipped";
+    if (byUrl?.accepted_at) return "skipped";
   }
 
   const lead = await lookupLead(leadId, linkedinUrl);
