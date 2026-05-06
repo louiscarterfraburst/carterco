@@ -382,6 +382,22 @@ deno_version = 2
 # [edge_runtime.secrets]
 # secret_key = "env(SECRET_VALUE)"
 
+# Webhook receivers — auth is signature-based (svix HMAC) inside the function,
+# so the platform JWT gate must be off or every call 401s before our code runs.
+[functions.sendspark-webhook]
+verify_jwt = false
+
+[functions.sendpilot-webhook]
+verify_jwt = false
+
+# Cron + DB-trigger callee. Header secret check is inside the function.
+[functions.outreach-engagement-tick]
+verify_jwt = false
+
+# One-shot recovery for the May 2026 webhook-401 incident. Manual invoke only.
+[functions.recover-stuck-renders]
+verify_jwt = false
+
 [analytics]
 enabled = true
 port = 54327
