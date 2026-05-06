@@ -77,7 +77,7 @@ export const SEQUENCES: Sequence[] = [
     {
         id: "unwatched_followup_v1",
         description:
-            "Lead got the video but hasn't played it. Qualify quickly (24h) then a final graceful exit at +3d.",
+            "Lead got the video but hasn't played it. Qualify at +3d, then a final graceful exit at +5d. Slower than the watched flow because no engagement yet — give them room for vacations / busy weeks before pushing.",
         trigger: { signal: "sent" },
         // Exit if they reply OR play. Played leads get re-enrolled in the
         // watched flow by the engine's re-enrolment path.
@@ -85,7 +85,7 @@ export const SEQUENCES: Sequence[] = [
         steps: [
             {
                 id: "qualifier",
-                waitHours: 24,
+                waitHours: 72, // 3 days after sent
                 branches: [
                     {
                         action: {
@@ -98,7 +98,7 @@ export const SEQUENCES: Sequence[] = [
             },
             {
                 id: "graceful_exit",
-                waitHours: 72, // 3 days after qualifier fired
+                waitHours: 120, // 5 days after qualifier fired
                 branches: [
                     {
                         action: {
