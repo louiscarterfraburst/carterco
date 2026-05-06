@@ -63,6 +63,7 @@ type PipelineRow = {
     render_failed_at: string | null;
     video_link: string | null;
     workspace_id: string | null;
+    campaign_id: string | null;
     sequence_id: string | null;
     sequence_step: number | null;
     sequence_parked_until: string | null;
@@ -268,15 +269,20 @@ async function evaluateLead(row: PipelineRow, bypassWait: boolean): Promise<numb
         return 0;
     }
 
-    // 7. Fire the action and advance.
-    const result = await executeAction(chosen.action, row);
+    // 7. Fire the action and advance. Per-campaign template override:
+    // if `OUTREACH_TEMPLATE_<campaignId>_<seqId>_<stepId>` is set in env,
+    // use it instead of the inline template. Lets the same sequences fire
+    // for two different campaigns with different copy (e.g. Carter & Co
+    // form-followup vs. the legacy product pitch).
+    const templatedAction = applyCampaignOverride(chosen.action, row.campaign_id, seq.id, step.id);
+    const result = await executeAction(templatedAction, row);
     await supabase.from("outreach_engagement_actions").insert({
         sendpilot_lead_id: row.sendpilot_lead_id,
         workspace_id: row.workspace_id,
         rule_id: ruleId,
-        action_type: chosen.action.type,
-        template_id: "template" in chosen.action
-            ? chosen.action.template.slice(0, 80)
+        action_type: templatedAction.type,
+        template_id: "template" in templatedAction
+            ? templatedAction.template.slice(0, 80)
             : null,
         result,
     });
@@ -333,6 +339,23 @@ async function markCompleted(sendpilotLeadId: string, now: Date): Promise<void> 
 }
 
 // --- Action dispatch (unchanged from rule-engine version) --------------------
+
+// Per-campaign template override. Returns the action with .template swapped
+// out if a campaign-specific env var is set; otherwise returns the action
+// untouched. Only applies to actions that carry a template field.
+function applyCampaignOverride(
+    action: Action,
+    campaignId: string | null,
+    seqId: string,
+    stepId: string,
+): Action {
+    if (!campaignId) return action;
+    if (action.type !== "auto_send" && action.type !== "queue_approval") return action;
+    const key = `OUTREACH_TEMPLATE_${campaignId}_${seqId}_${stepId}`;
+    const override = Deno.env.get(key);
+    if (!override) return action;
+    return { type: action.type, template: override };
+}
 
 async function executeAction(
     action: Action,

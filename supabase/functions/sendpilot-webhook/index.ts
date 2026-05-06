@@ -114,6 +114,7 @@ Deno.serve(async (request) => {
         status: "failed",
         accepted_at: now,
         workspace_id: workspaceId,
+        campaign_id: campaignId || null,
         error: "lead not in outreach_leads CSV",
       }, { onConflict: "sendpilot_lead_id" });
       return json({ ok: true, recorded: "accepted_no_lead" });
@@ -131,6 +132,7 @@ Deno.serve(async (request) => {
         status: "pre_connected",
         accepted_at: now,
         workspace_id: workspaceId,
+        campaign_id: campaignId || null,
       }, { onConflict: "sendpilot_lead_id" });
       return json({ ok: true, recorded: "pre_connected_skipped" });
     }
@@ -143,6 +145,7 @@ Deno.serve(async (request) => {
       status: "rendering",
       accepted_at: now,
       workspace_id: workspaceId,
+      campaign_id: campaignId || null,
     }, { onConflict: "sendpilot_lead_id" });
 
     const renderRes = await sendsparkRender(lead, campaignId);

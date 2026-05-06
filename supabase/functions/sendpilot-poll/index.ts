@@ -229,6 +229,8 @@ async function processAcceptedLead(spLead: SendPilotLead): Promise<ProcessResult
   const workspaceId = (lead?.workspace_id as string | null) ?? null;
   const now = new Date().toISOString();
 
+  const campaignId = spLead.campaignId ?? "";
+
   if (!lead) {
     await supabase.from("outreach_pipeline").upsert({
       sendpilot_lead_id: leadId,
@@ -238,6 +240,7 @@ async function processAcceptedLead(spLead: SendPilotLead): Promise<ProcessResult
       status: "failed",
       accepted_at: now,
       workspace_id: workspaceId,
+      campaign_id: campaignId || null,
       error: "lead not in outreach_leads CSV (poll)",
     }, { onConflict: "sendpilot_lead_id" });
     return "no_outreach_lead";
@@ -252,6 +255,7 @@ async function processAcceptedLead(spLead: SendPilotLead): Promise<ProcessResult
       status: "failed",
       accepted_at: now,
       workspace_id: workspaceId,
+      campaign_id: campaignId || null,
       error: "missing contact_email (poll)",
     }, { onConflict: "sendpilot_lead_id" });
     return "failed_no_email";
@@ -269,9 +273,10 @@ async function processAcceptedLead(spLead: SendPilotLead): Promise<ProcessResult
     status: "rendering",
     accepted_at: now,
     workspace_id: workspaceId,
+    campaign_id: campaignId || null,
   }, { onConflict: "sendpilot_lead_id" });
 
-  const renderRes = await sendsparkRender(lead, spLead.campaignId ?? "");
+  const renderRes = await sendsparkRender(lead, campaignId);
   if (!renderRes.ok) {
     await supabase.from("outreach_pipeline").update({
       status: "failed",
