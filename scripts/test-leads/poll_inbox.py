@@ -119,18 +119,38 @@ def extract_text(msg: email.message.EmailMessage) -> str:
     return ""
 
 
+EMAIL_TAG_RE = re.compile(r"\+(RX-[A-Z0-9]{6})@", re.IGNORECASE)
+
+
+def extract_email_tag_ref(addr: str) -> str | None:
+    """Pull the ref out of an email +tag, e.g.
+    'louis.sustmann.carter+RX-EEVSW4@gmail.com' → 'RX-EEVSW4'."""
+    if not addr:
+        return None
+    m = EMAIL_TAG_RE.search(addr)
+    return m.group(1).upper() if m else None
+
+
 def attribute(
-    from_addr: str, subject: str, body: str,
+    from_addr: str, subject: str, body: str, to_addr: str,
     by_domain: dict[str, dict], by_ref: dict[str, dict],
 ) -> tuple[dict | None, str | None, float]:
     """Return (matched_submission, matched_via, confidence)."""
-    # 1. Ref code wins (most specific, survives quoted replies)
+    # 1. Email +tag in To/Delivered-To — most reliable, survives even when
+    # the prospect replies without quoting the original. Doesn't depend on
+    # message body (which we no longer include the ref in).
+    tag_ref = extract_email_tag_ref(to_addr)
+    if tag_ref and tag_ref in by_ref:
+        return by_ref[tag_ref], "email_tag", 1.0
+
+    # 2. Ref code in subject or body (legacy — for old submissions that
+    # included "Ref: RX-XXXXXX" in the message body).
     for blob in (subject or "", body or ""):
         m = REF_CODE_RE.search(blob)
         if m and m.group(0) in by_ref:
             return by_ref[m.group(0)], "ref_code", 1.0
 
-    # 2. Sender domain
+    # 3. Sender domain
     addr_dom = domain_of(from_addr)
     if addr_dom and addr_dom not in GENERIC_DOMAINS and addr_dom in by_domain:
         return by_domain[addr_dom], "domain", 0.85
@@ -162,6 +182,17 @@ def fetch_new(
         from_name, from_addr = parseaddr(from_raw)
         if SYSTEM_FROM_RE.search(from_addr or ""):
             continue
+        # Capture ALL recipient addresses so we can look for +tags. Gmail
+        # preserves +tags in To: of a reply, but in some cases the original
+        # tag is only visible in Delivered-To: (server-side header), so we
+        # check both. parseaddr handles the "Name <addr>" form.
+        to_addrs = []
+        for hdr_name in ("To", "Delivered-To", "X-Original-To", "Cc"):
+            for raw in msg.get_all(hdr_name) or []:
+                _, a = parseaddr(raw)
+                if a:
+                    to_addrs.append(a.lower())
+        to_combined = " ".join(to_addrs)
         try:
             received = parsedate_to_datetime(msg.get("Date") or "")
             if received and not received.tzinfo:
@@ -176,6 +207,7 @@ def fetch_new(
             "from_domain": domain_of(from_addr or ""),
             "subject": msg.get("Subject") or "",
             "body": body,
+            "to_address": to_combined,
             "received_at": received.isoformat() if received else None,
         })
     return out
@@ -200,7 +232,8 @@ def run_once(args) -> int:
         attributed = 0
         for m in msgs:
             sub, via, conf = attribute(
-                m["from_address"], m["subject"], m["body"], by_domain, by_ref
+                m["from_address"], m["subject"], m["body"],
+                m.get("to_address") or "", by_domain, by_ref,
             )
             rows.append({
                 "submission_id": sub["id"] if sub else None,

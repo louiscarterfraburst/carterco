@@ -48,32 +48,13 @@ from _supabase import select_paged, update
 # falling back to scanning nav links.
 CANDIDATE_PATHS = [
     "/kontakt",
-    "/kontakt-os",
-    "/kontakt-os/",
     "/contact",
+    "/kontakt-os",
     "/contact-us",
-    "/contact/",
-    "/contact-us/",
     "/da/kontakt",
     "/en/contact",
-    "/en/contact-us",
-    "/about/contact",
     "/get-in-touch",
     "/skriv-til-os",
-    "/book-mode",
-    "/booking",
-    "/forespoergsel",
-    "/get-quote",
-    "/quote",
-    "/enquiry",
-    "/inquiry",
-    "/sales",
-    "/sales-contact",
-    "/support",
-    "/help",
-    "/info",
-    "/contact-form",
-    "/contactform",
 ]
 
 # Cookie-banner buttons we'll auto-click. Danish + English.
@@ -211,7 +192,7 @@ def try_accept_cookies(page) -> None:
     after page load, so wait briefly first."""
     page.wait_for_timeout(800)
 
-    # 1. Known consent-provider buttons by ID — fastest, no false positives.
+    # 1. Known consent-provider buttons by ID/class — fastest, no false positives.
     KNOWN_BTN_SELECTORS = [
         # Cookiebot (huge in DK)
         "#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll",
@@ -222,6 +203,17 @@ def try_accept_cookies(page) -> None:
         "button.ch2-allow-all-btn", "button.ch2-btn-primary",
         # Klaro
         "button.cm-btn-success",
+        # Insites cookieconsent2 (also huge in DK — used by ns.dk and many others).
+        # The accept button is an <a> with class "cc-btn cc-allow".
+        "a.cc-btn.cc-allow", "a.cc-allow", ".cc-btn.cc-allow",
+        # Civic UK Cookie Control
+        "button#ccc-recommended-settings", "button#ccc-notify-accept",
+        # Termly
+        "#termly-code-snippet-support button",
+        # Iubenda
+        ".iubenda-cs-accept-btn", "#iubenda-cs-banner button.iubenda-cs-accept-btn",
+        # Quantcast
+        "button#qc-cmp2-ui button[mode='primary']",
         # Generic patterns
         "button[data-testid='cookie-accept-all']",
         "button[data-cookieconsent='accept']",
@@ -236,6 +228,35 @@ def try_accept_cookies(page) -> None:
                 return
         except Exception:
             continue
+
+    # 1b. Aggressive text-based: any visible clickable element containing
+    # accept-language text. Catches custom banners that don't use a known
+    # provider. Uses Playwright's :has-text — forgiving substring match.
+    AGGRESSIVE_TEXTS = [
+        "Accepter alle", "Accepter cookies", "Accepter",
+        "Tillad alle", "Tillad cookies", "Tillad",
+        "Accept all", "Accept cookies", "Accept",
+        "Allow all", "Allow cookies", "Allow",
+        "Godkend alle", "Godkend",
+        "I accept", "I agree", "Agree",
+        "Jeg accepterer", "OK",
+    ]
+    for txt in AGGRESSIVE_TEXTS:
+        for selector in [
+            f"button:has-text(\"{txt}\")",
+            f"a:has-text(\"{txt}\")",
+            f"[role='button']:has-text(\"{txt}\")",
+            f"input[type='button'][value=\"{txt}\"]",
+            f"input[type='submit'][value=\"{txt}\"]",
+        ]:
+            try:
+                loc = page.locator(selector).first
+                if loc.count() and loc.is_visible(timeout=200):
+                    loc.click(timeout=1500)
+                    page.wait_for_timeout(500)
+                    return
+            except Exception:
+                continue
 
     # 2. Text-based across buttons + links (top-level)
     for txt in COOKIE_ACCEPT_TEXTS:
@@ -311,6 +332,7 @@ def page_has_form(page) -> bool:
 
 
 CONTACT_URL_RE = re.compile(r"/(kontakt|contact|skriv|book|forespørg|hor[-_]?os|get[-_]?in[-_]?touch)", re.IGNORECASE)
+ERROR_URL_RE = re.compile(r"/(error|404|not[-_]?found|page[-_]?not[-_]?found)", re.IGNORECASE)
 
 
 def looks_like_contact_url(url: str) -> bool:
@@ -321,28 +343,45 @@ def looks_like_contact_url(url: str) -> bool:
     return bool(CONTACT_URL_RE.search(url or ""))
 
 
+def looks_like_error_page(page) -> bool:
+    """Final URL or title indicates a 404 / error landing. Many sites
+    redirect unknown paths to /Error?s=404 instead of returning a true 404,
+    so HTTP status alone isn't enough. Cheap to check, saves time + cookies."""
+    try:
+        if ERROR_URL_RE.search(page.url or ""):
+            return True
+        title = (page.title() or "").lower()
+        if "404" in title or "not found" in title or "ikke fundet" in title:
+            return True
+    except Exception:
+        pass
+    return False
+
+
 def navigate_to_contact(page, base: str) -> str | None:
-    """Try common paths, then scan nav, then click contact CTAs. Return final URL on success."""
+    """Find the contact page. Strategy:
+      1. Visit homepage. Accept cookies. Form right there? Return.
+      2. Scan the homepage nav for "kontakt"/"contact" links — most reliable.
+      3. Fall back to a small set of common paths.
+      4. Try clicking a contact CTA button (modal forms).
+    Skips pages that visibly redirect to /Error / 404 / not-found landings."""
     base = base.rstrip("/")
 
     def settle_and_check(trust_url: bool = False) -> str | None:
-        """Wait for JS + cookies, then return the URL if it looks plausible.
-        If trust_url=True, return the URL as long as it's a contact-named
-        path — defer the form-existence judgement to Claude vision rather
-        than our heuristic. This avoids false negatives on React/iframe/
-        scroll-loaded forms."""
         try_accept_cookies(page)
         try:
             page.wait_for_load_state("networkidle", timeout=4000)
         except Exception:
             pass
+        if looks_like_error_page(page):
+            return None
         if page_has_form(page):
             return page.url
         if trust_url and looks_like_contact_url(page.url):
             return page.url
         return None
 
-    # 1. Landing page
+    # 1. Homepage — sometimes the form lives right there
     try:
         page.goto(base, wait_until="domcontentloaded", timeout=20000)
         u = settle_and_check()
@@ -350,21 +389,14 @@ def navigate_to_contact(page, base: str) -> str | None:
     except Exception:
         pass
 
-    # 2. Common contact paths — these are explicitly contact pages, so trust
-    # the URL even if our form-detection heuristic comes up empty.
-    for path in CANDIDATE_PATHS:
-        url = base + path
-        try:
-            resp = page.goto(url, wait_until="domcontentloaded", timeout=15000)
-            if resp and resp.status == 200:
-                u = settle_and_check(trust_url=True)
-                if u: return u
-        except Exception:
-            continue
-
-    # 3. Scan nav anchors with kontakt/contact/skriv/book/sales/quote text
+    # 2. Scan the homepage's nav for kontakt/contact links FIRST. This is
+    # far more reliable than path-guessing — the site itself tells us
+    # where its contact page lives.
     try:
-        page.goto(base, wait_until="domcontentloaded", timeout=15000)
+        # We're already on the homepage from step 1 (or its error). Re-goto
+        # only if we're now on an error page.
+        if looks_like_error_page(page):
+            page.goto(base, wait_until="domcontentloaded", timeout=15000)
         try_accept_cookies(page)
         hrefs = page.evaluate(
             """
@@ -372,7 +404,14 @@ def navigate_to_contact(page, base: str) -> str | None:
               const re = /kontakt|contact|skriv|book|sales|quote|forespørg|samtale|hør\\s+mere|get\\s+started|book\\s+møde/i;
               const links = Array.from(document.querySelectorAll('a[href]'));
               const matches = links.filter(a => re.test(a.textContent || ''));
-              return matches.slice(0, 5).map(a => a.href);
+              const seen = new Set();
+              const uniq = [];
+              for (const a of matches) {
+                if (seen.has(a.href)) continue;
+                seen.add(a.href);
+                uniq.push(a.href);
+              }
+              return uniq.slice(0, 5);
             }
             """
         )
@@ -386,10 +425,23 @@ def navigate_to_contact(page, base: str) -> str | None:
     except Exception:
         pass
 
-    # 4. Click contact CTA buttons (open modal forms etc.)
+    # 3. Fall back to common paths — only if nav scan didn't find a contact link
+    for path in CANDIDATE_PATHS:
+        url = base + path
+        try:
+            resp = page.goto(url, wait_until="domcontentloaded", timeout=15000)
+            if resp and resp.status == 200:
+                u = settle_and_check(trust_url=True)
+                if u: return u
+        except Exception:
+            continue
+
+    # 4. Click contact CTA buttons (modal forms)
     try:
         page.goto(base, wait_until="domcontentloaded", timeout=15000)
         try_accept_cookies(page)
+        if looks_like_error_page(page):
+            return None
         clicked = page.evaluate(
             """
             () => {
@@ -406,7 +458,7 @@ def navigate_to_contact(page, base: str) -> str | None:
                 page.wait_for_load_state("networkidle", timeout=4000)
             except Exception:
                 pass
-            if page_has_form(page):
+            if not looks_like_error_page(page) and page_has_form(page):
                 return page.url
     except Exception:
         pass
@@ -567,21 +619,52 @@ def detect_submission_success(page, before_url: str, before_values: dict[str, st
 # ─── Persona / message ───────────────────────────────────────────────────
 
 
+def _tagged_email(ref_code: str) -> str:
+    """Embed the ref in the email's +tag so we can attribute replies without
+    needing a visible code in the message body. Gmail (and most providers)
+    preserve `local+tag@domain` through replies — inbound shows up at the
+    same inbox with the tag intact in the To: header, then poll_inbox
+    extracts it for attribution."""
+    base = (os.environ.get("PERSONA_GMAIL_ADDRESS") or "").strip()
+    if not base or "@" not in base or not ref_code:
+        return base
+    local, _, domain = base.partition("@")
+    if "+" in local:
+        local = local.split("+", 1)[0]  # avoid double-tagging on retries
+    return f"{local}+{ref_code}@{domain}"
+
+
+def _normalize_phone(raw: str) -> str:
+    """Strip the +country-code prefix for site validators that only accept
+    digits (very common on Danish forms — they call this "normale karakter").
+    Falls back to digits-only if no recognised prefix."""
+    s = (raw or "").strip().replace(" ", "")
+    if s.startswith("+45"):
+        return s[3:]
+    if s.startswith("0045"):
+        return s[4:]
+    return re.sub(r"[^\d]", "", s)
+
+
 def persona_payload(ref_code: str) -> dict[str, str | None]:
     return {
         "full_name": os.environ.get("PERSONA_FULL_NAME") or "",
         "first_name": os.environ.get("PERSONA_FIRST_NAME") or "",
         "last_name": os.environ.get("PERSONA_LAST_NAME") or "",
-        "email": os.environ.get("PERSONA_GMAIL_ADDRESS") or "",
-        "phone": os.environ.get("PERSONA_PHONE") or "",
+        # +tagged email carries the ref invisibly; bare email available as
+        # fallback for sites that reject `+` in the email field.
+        "email": _tagged_email(ref_code),
+        "email_bare": os.environ.get("PERSONA_GMAIL_ADDRESS") or "",
+        "phone": _normalize_phone(os.environ.get("PERSONA_PHONE") or ""),
         "company": os.environ.get("PERSONA_COMPANY") or "",
         "subject": "Forespørgsel",
+        # No visible ref code in body — attribution rides on the email's +tag
+        # plus the (still-active) sender-domain matcher in poll_inbox.
         "message": (
             "Hej,\n\nJeg er ved at undersøge muligheder og kunne godt tænke mig "
             "at høre lidt mere om hvad I kan tilbyde. Kan I ringe tilbage eller "
             "skrive til mig?\n\nMvh\n"
-            f"{os.environ.get('PERSONA_FULL_NAME') or ''}\n"
-            f"Ref: {ref_code}"
+            f"{os.environ.get('PERSONA_FULL_NAME') or ''}"
         ),
     }
 
@@ -676,6 +759,84 @@ def fill_other_field(page, sel: str, ftype: str, label: str, payload: dict) -> N
             loc.fill(val, timeout=2000)
         except Exception:
             pass
+
+
+VISION_RETRY_SYSTEM = """Du analyserer et formular EFTER et submit-forsøg, hvor submit ikke synes at være gået igennem.
+
+Returnér KUN gyldig JSON i denne form:
+{
+  "success": false,
+  "errors": [
+    {
+      "selector": "input[name='phone']",
+      "label": "Telefon",
+      "error_text": "Du kan kun bruge tal",
+      "suggested_value": "91309279"
+    }
+  ]
+}
+
+Regler:
+- Hvis siden viser thank-you besked, success-tekst, eller URL'en er ændret til /tak, /thank-you, /success — sæt success=true og returnér tom errors-liste.
+- For HVER synlig fejlbesked på et inputfelt: identificér feltets selector (id/name/aria-label/type), kort error_text, og et FORSLAG til værdi der løser fejlen baseret på fejlteksten.
+- Eksempler på rettelser:
+  • "Du kan kun bruge tal" på phone → strip "+" og evt. landekode → "91309279"
+  • "Ugyldig email" på email-felt med "+tag" → fjern +tag → "louis.sustmann.carter@gmail.com"
+  • "Postnummer er ugyldigt" → prøv "2100"
+  • "Skal være mindst N tegn" → padder værdien
+- Ignorér fejl på skjulte felter, file-uploads, captchas — kan ikke fixes automatisk.
+- Returnér KUN JSON, ingen markdown-fences, ingen forklaring."""
+
+
+def claude_diagnose_errors(html_excerpt: str, screenshot_b64: str, current_payload: dict) -> dict | None:
+    """Ask Claude to identify visible validation errors + suggest corrected
+    values. Returns {"success": bool, "errors": [...]} or None on parse fail."""
+    import urllib.request as ur
+    import urllib.error
+    payload = {
+        "model": "claude-sonnet-4-6",
+        "max_tokens": 600,
+        "system": VISION_RETRY_SYSTEM,
+        "messages": [{
+            "role": "user",
+            "content": [
+                {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": screenshot_b64}},
+                {"type": "text", "text": (
+                    "Forsøgte værdier (det er det vi indtastede):\n"
+                    f"  full_name: {current_payload.get('full_name')!r}\n"
+                    f"  email: {current_payload.get('email')!r}\n"
+                    f"  phone: {current_payload.get('phone')!r}\n"
+                    f"  company: {current_payload.get('company')!r}\n"
+                    + (f"  email_bare (uden +tag, fallback hvis site afviser '+'): {current_payload.get('email_bare')!r}\n"
+                       if current_payload.get("email_bare") else "")
+                    + f"\nHTML-uddrag af formularen:\n{html_excerpt[:5000]}"
+                )},
+            ],
+        }],
+    }
+    req = ur.Request(
+        "https://api.anthropic.com/v1/messages",
+        data=json.dumps(payload).encode(),
+        headers={
+            "Content-Type": "application/json",
+            "x-api-key": ANTHROPIC_KEY,
+            "anthropic-version": "2023-06-01",
+        },
+        method="POST",
+    )
+    try:
+        with ur.urlopen(req, timeout=45) as f:
+            body = json.loads(f.read().decode("utf-8"))
+    except Exception:
+        return None
+    blocks = body.get("content") or []
+    text = "".join(b.get("text", "") for b in blocks if b.get("type") == "text").strip()
+    text = re.sub(r"^```(?:json)?\s*", "", text)
+    text = re.sub(r"\s*```\s*$", "", text)
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        return None
 
 
 def fill_and_submit(page, fmap: dict, payload: dict, dry_run: bool) -> tuple[bool, str]:
@@ -781,7 +942,85 @@ def fill_and_submit(page, fmap: dict, payload: dict, dry_run: bool) -> tuple[boo
         except Exception as e:
             return False, f"submit click failed (incl. JS fallback): {e}"
 
-    return detect_submission_success(page, before_url, before_values)
+    ok, reason = detect_submission_success(page, before_url, before_values)
+    if ok:
+        return ok, reason
+
+    # First submit didn't show clear success. Maybe a field validator
+    # rejected our value (e.g. "+45..." phone, "+tag" email, missing CVR).
+    # Send the post-submit screenshot back to Claude to diagnose visible
+    # field errors + suggest corrected values, apply, retry once.
+    try:
+        import base64 as _b64, time as _time
+        _time.sleep(0.5)  # let any error toast finish rendering
+        retry_screenshot = SCREENSHOT_DIR / "_retry.png"
+        page.screenshot(path=str(retry_screenshot), full_page=False)
+        with open(retry_screenshot, "rb") as f:
+            shot_b64 = _b64.b64encode(f.read()).decode()
+        retry_html = get_form_html_excerpt(page)
+        diag = claude_diagnose_errors(retry_html, shot_b64, payload)
+    except Exception:
+        diag = None
+
+    if not diag:
+        return ok, reason
+    if diag.get("success"):
+        return True, "success confirmed by retry diagnosis"
+    errors = diag.get("errors") or []
+    if not errors:
+        return ok, reason
+
+    # Apply suggested fixes — same humanized typing as the initial fill.
+    fixed_any = False
+    for err in errors:
+        sel = err.get("selector")
+        new_val = err.get("suggested_value")
+        if not (sel and new_val):
+            continue
+        try:
+            loc = page.locator(sel).first
+            loc.scroll_into_view_if_needed(timeout=1500)
+            jitter(0.15, 0.30)
+            loc.click(timeout=2000)
+            try:
+                loc.fill("", timeout=1500)
+            except Exception:
+                pass
+            import random as _random
+            loc.press_sequentially(new_val, delay=_random.randint(35, 75), timeout=8000)
+            jitter(0.20, 0.45)
+            fixed_any = True
+        except Exception:
+            continue
+
+    if not fixed_any:
+        return ok, reason
+
+    # Re-submit
+    jitter(1.0, 2.0)
+    before_url2 = page.url
+    before_values2 = snapshot_form_values(page)
+    submit2 = page.locator(submit_sel).first
+    try:
+        submit2.scroll_into_view_if_needed(timeout=2000)
+        jitter(0.20, 0.50)
+        submit2.click(timeout=5000)
+    except Exception:
+        try:
+            page.evaluate(
+                "(sel) => { const el = document.querySelector(sel); if (el) el.click(); }",
+                submit_sel,
+            )
+        except Exception:
+            return ok, reason
+
+    ok2, reason2 = detect_submission_success(page, before_url2, before_values2)
+    if ok2:
+        return True, f"retry-{reason2} (fixed {len(errors)} field(s))"
+    # Preserve "no clear success signal" prefix so the soft-success
+    # classifier in main() still treats this as submitted (the retry's
+    # submit click did fire).
+    return False, f"no clear success signal (after retrying {len(errors)} field(s))"
 
 
 def process_one(playwright_ctx, sub: dict, dry_run: bool) -> dict:
@@ -929,13 +1168,17 @@ def main():
                     res = process_one(ctx, sub, args.dry_run)
                 finally:
                     ctx.close()
-                # In dry-run mode, "fields filled, did not submit" is a WIN —
-                # it means form was found, mapped, filled. We just intentionally
-                # didn't click submit. Treat as success for reporting.
+                # Two cases get the ✓ even when fill_and_submit returned False:
+                #  1. dry-run + "fields filled, did not submit" — we filled OK,
+                #     intentionally skipped submit.
+                #  2. real run + "no clear success signal" — submit DID fire,
+                #     we just couldn't see a thank-you page; site likely got
+                #     the submission. The DB row is marked status=submitted.
                 reason = res.get("reason") or ""
                 dryrun_ok = args.dry_run and reason.startswith("dry-run — fields filled")
-                if res.get("ok") or dryrun_ok:
-                    mark = "✓"
+                soft_ok = (not args.dry_run) and reason.startswith("no clear success signal")
+                if res.get("ok") or dryrun_ok or soft_ok:
+                    mark = "✓" if (res.get("ok") or dryrun_ok) else "≈"
                     success += 1
                 else:
                     mark = "✗"
