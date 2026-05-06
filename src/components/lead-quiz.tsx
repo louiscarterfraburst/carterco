@@ -277,8 +277,8 @@ export function LeadQuiz({ open, onClose, onConvert }: Props) {
           )}
           {currentStepKey === "leads" && (
             <NumberStep
-              question="Hvor mange leads får du om måneden?"
-              hint="Et 'lead' = nogen der har vist interesse — formular, opkald, DM."
+              question="Leads om måneden?"
+              hint="Formular, opkald, DM."
               value={monthlyLeads}
               onChange={setMonthlyLeads}
               onSubmit={next}
@@ -287,8 +287,8 @@ export function LeadQuiz({ open, onClose, onConvert }: Props) {
           )}
           {currentStepKey === "deal" && (
             <NumberStep
-              question="Hvad er en kunde værd for dig?"
-              hint="Gennemsnitlig deal-værdi i kr (årsomsætning hvis det er abonnement)."
+              question="Hvad er en kunde værd?"
+              hint="Gennemsnit i kr · årsomsætning hvis abonnement."
               value={dealValue}
               onChange={setDealValue}
               onSubmit={next}
@@ -297,8 +297,7 @@ export function LeadQuiz({ open, onClose, onConvert }: Props) {
           )}
           {currentStepKey === "close" && (
             <SliderStep
-              question="Hvor mange procent af dine kvalificerede leads bliver til kunder?"
-              hint="Branchegennemsnit ligger på cirka 25%."
+              question="Hvor mange % af dine leads lukker?"
               value={closeRate}
               onChange={setCloseRate}
               onSubmit={next}
@@ -309,7 +308,7 @@ export function LeadQuiz({ open, onClose, onConvert }: Props) {
           )}
           {currentStepKey === "speed" && (
             <ChoiceStep
-              question="Hvor hurtigt ringer I i gennemsnit på et nyt lead?"
+              question="Hvor hurtigt ringer I tilbage?"
               value={responseTime}
               onChange={(v) => setResponseTime(v as ResponseTime)}
               options={RESPONSE_OPTIONS.map((v) => ({
@@ -321,8 +320,7 @@ export function LeadQuiz({ open, onClose, onConvert }: Props) {
           )}
           {currentStepKey === "channels" && (
             <MultiChoiceStep
-              question="Hvor får du leads fra i dag?"
-              hint="Vælg alle der passer."
+              question="Hvor får du leads fra?"
               values={channels}
               onToggle={toggleChannel}
               options={ALL_CHANNELS.map((c) => ({
@@ -681,6 +679,8 @@ function MultiChoiceStep<T extends string>({
 
 const EMAIL_RE_CLIENT = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+const PHONE_RE_CLIENT = /^\+?[\d\s-]{8,}$/;
+
 function ContactStep({
   name,
   email,
@@ -702,11 +702,13 @@ function ContactStep({
   submitting: boolean;
   error: string | null;
 }) {
-  const valid = name.trim().length > 1 && EMAIL_RE_CLIENT.test(email.trim());
+  const valid =
+    name.trim().length > 1 &&
+    EMAIL_RE_CLIENT.test(email.trim()) &&
+    PHONE_RE_CLIENT.test(phone.trim());
   return (
     <StepShell
-      question="Hvor skal jeg sende dine tal hen?"
-      hint="Resultatet ryger på mail. Indtaster du også dit nummer, ringer jeg dig op inden for 24t med en konkret 15-min plan på dine tal — ellers får du bare resultatet."
+      question="Et sidste skridt"
       footer={
         <div className="flex flex-col items-start gap-3">
           <PrimaryButton
@@ -719,68 +721,53 @@ function ContactStep({
           {error && (
             <p className="text-[12px] text-[#ff6b2c]">{error}</p>
           )}
-          <p className="text-[11px] leading-relaxed text-[var(--cream)]/45">
-            Jeg sender ingen nyhedsbrev — kun dine tal og evt. en
-            opfølgning hvis du har bedt om det.
-          </p>
         </div>
       }
     >
-      <div className="flex flex-col gap-5">
-        <label className="flex flex-col gap-2">
-          <span className="font-mono text-[10px] font-bold uppercase tracking-[0.25em] text-[var(--cream)]/55">
-            Navn
-          </span>
-          <input
-            autoFocus
-            type="text"
-            autoComplete="name"
-            value={name}
-            onChange={(e) => onNameChange(e.target.value)}
-            placeholder="Fulde navn"
-            className="w-full border-b border-[var(--cream)]/20 bg-transparent pb-2 text-[18px] text-[var(--cream)] placeholder:text-[var(--cream)]/25 focus:border-[#ff6b2c] focus:outline-none"
-          />
-        </label>
-        <label className="flex flex-col gap-2">
-          <span className="font-mono text-[10px] font-bold uppercase tracking-[0.25em] text-[var(--cream)]/55">
-            Email
-          </span>
-          <input
-            type="email"
-            autoComplete="email"
-            inputMode="email"
-            value={email}
-            onChange={(e) => onEmailChange(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && valid && !submitting) {
-                e.preventDefault();
-                onSubmit();
-              }
-            }}
-            placeholder="dig@firma.dk"
-            className="w-full border-b border-[var(--cream)]/20 bg-transparent pb-2 text-[18px] text-[var(--cream)] placeholder:text-[var(--cream)]/25 focus:border-[#ff6b2c] focus:outline-none"
-          />
-        </label>
-        <label className="flex flex-col gap-2">
-          <span className="font-mono text-[10px] font-bold uppercase tracking-[0.25em] text-[var(--cream)]/55">
-            Telefon <span className="text-[var(--cream)]/40">(valgfrit · ringes op inden for 24t)</span>
-          </span>
-          <input
-            type="tel"
-            autoComplete="tel"
-            inputMode="tel"
-            value={phone}
-            onChange={(e) => onPhoneChange(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && valid && !submitting) {
-                e.preventDefault();
-                onSubmit();
-              }
-            }}
-            placeholder="+45 12 34 56 78"
-            className="w-full border-b border-[var(--cream)]/20 bg-transparent pb-2 text-[18px] text-[var(--cream)] placeholder:text-[var(--cream)]/25 focus:border-[#ff6b2c] focus:outline-none"
-          />
-        </label>
+      <div className="flex flex-col gap-4">
+        <input
+          autoFocus
+          type="text"
+          autoComplete="name"
+          value={name}
+          onChange={(e) => onNameChange(e.target.value)}
+          placeholder="Navn"
+          className="w-full border-b border-[var(--cream)]/20 bg-transparent pb-2 text-[18px] text-[var(--cream)] placeholder:text-[var(--cream)]/25 focus:border-[#ff6b2c] focus:outline-none"
+        />
+        <input
+          type="email"
+          autoComplete="email"
+          inputMode="email"
+          value={email}
+          onChange={(e) => onEmailChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && valid && !submitting) {
+              e.preventDefault();
+              onSubmit();
+            }
+          }}
+          placeholder="Email"
+          className="w-full border-b border-[var(--cream)]/20 bg-transparent pb-2 text-[18px] text-[var(--cream)] placeholder:text-[var(--cream)]/25 focus:border-[#ff6b2c] focus:outline-none"
+        />
+        <input
+          type="tel"
+          autoComplete="tel"
+          inputMode="tel"
+          value={phone}
+          onChange={(e) => onPhoneChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && valid && !submitting) {
+              e.preventDefault();
+              onSubmit();
+            }
+          }}
+          placeholder="Telefon"
+          className="w-full border-b border-[var(--cream)]/20 bg-transparent pb-2 text-[18px] text-[var(--cream)] placeholder:text-[var(--cream)]/25 focus:border-[#ff6b2c] focus:outline-none"
+        />
+        <p className="text-[12px] leading-relaxed text-[var(--cream)]/55">
+          Jeg ringer dig op inden for 24t med en 15-min gennemgang af dine
+          huller.
+        </p>
       </div>
     </StepShell>
   );
@@ -803,9 +790,6 @@ function ResultStep({
 }) {
   const animatedLoss = useCountUp(result.totalLoss);
 
-  const presentLabels = result.presentValuableChannels.map(
-    (c) => CHANNEL_LABELS[c],
-  );
   const missingLabels = result.missingChannels.map((c) => CHANNEL_LABELS[c]);
 
   return (
@@ -820,7 +804,7 @@ function ResultStep({
           </span>
         </p>
         <p className="mt-2 text-[13px] text-[var(--cream)]/55">
-          om måneden — baseret på dine tal og MIT-studiet om speed-to-lead.
+          om måneden — baseret på dine tal.
         </p>
       </div>
 
@@ -868,8 +852,7 @@ function ResultStep({
               {formatKr(result.speedLoss)}
             </span>
             <span className="flex-1 text-[var(--cream)]/70">
-              fra langsom respons — leads er 21× mere kvalificerede når sælger
-              svarer på under 5 min (MIT).
+              fra langsom respons — 21× lavere kvalitet over 5 min.
             </span>
           </li>
           <li className="flex items-start gap-3">
@@ -878,8 +861,7 @@ function ResultStep({
             </span>
             <span className="flex-1 text-[var(--cream)]/70">
               fra lav lukkerate — du er på{" "}
-              {Math.round(inputs.closeRate * 100)}%, branchegennemsnit ligger
-              omkring 25%.
+              {Math.round(inputs.closeRate * 100)}%.
             </span>
           </li>
           {result.channelLoss > 0 && (
@@ -888,11 +870,7 @@ function ResultStep({
                 {formatKr(result.channelLoss)}
               </span>
               <span className="flex-1 text-[var(--cream)]/70">
-                fra manglende kanaler —{" "}
-                {presentLabels.length
-                  ? `du bruger ${presentLabels.join(", ")}, du mangler ${missingLabels.join(", ")}`
-                  : `du mangler ${missingLabels.join(", ")}`}
-                .
+                fra manglende kanaler — du mangler {missingLabels.join(", ")}.
               </span>
             </li>
           )}

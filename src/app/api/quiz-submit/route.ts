@@ -27,6 +27,10 @@ type Body = {
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+// CarterCo workspace — the leads table requires workspace_id and the
+// notify-new-lead trigger keys push notifications to it.
+const CARTERCO_WORKSPACE_ID = "1e067f9a-d453-41a7-8bc4-9fdb5644a5fa";
+
 function normalizePhone(raw: string): string | null {
   const digits = raw.replace(/[^\d+]/g, "");
   if (!digits) return null;
@@ -57,9 +61,12 @@ export async function POST(req: Request) {
 
   if (!name) return NextResponse.json({ error: "name required" }, { status: 400 });
   if (!EMAIL_RE.test(email)) return NextResponse.json({ error: "valid email required" }, { status: 400 });
-  if (rawPhone && !phone) return NextResponse.json({ error: "phone format invalid" }, { status: 400 });
+  if (!rawPhone) return NextResponse.json({ error: "phone required" }, { status: 400 });
+  if (!phone) return NextResponse.json({ error: "phone format invalid" }, { status: 400 });
 
   const supabase = createAdminClient();
+  const userAgent = req.headers.get("user-agent")?.slice(0, 300) ?? null;
+  const referer = req.headers.get("referer")?.slice(0, 300) ?? null;
 
   const { data: row, error: insErr } = await supabase
     .from("quiz_submissions")
@@ -77,8 +84,8 @@ export async function POST(req: Request) {
       speed_loss: body.speedLoss ?? null,
       close_rate_loss: body.closeRateLoss ?? null,
       channel_loss: body.channelLoss ?? null,
-      user_agent: req.headers.get("user-agent")?.slice(0, 300) ?? null,
-      referrer: req.headers.get("referer")?.slice(0, 300) ?? null,
+      user_agent: userAgent,
+      referrer: referer,
     })
     .select("id")
     .single();
@@ -90,9 +97,29 @@ export async function POST(req: Request) {
     );
   }
 
-  // Fire SMS if a phone was given. Failure here is non-fatal — the submission
-  // is already saved and the user still gets the result.
-  if (phone) {
+  // Mirror into `leads` so the existing notify-new-lead DB trigger fires
+  // push notifications + the lead shows up in /leads. Failure non-fatal.
+  try {
+    await supabase.from("leads").insert({
+      name,
+      email,
+      phone,
+      source: "quiz",
+      page_url: referer,
+      user_agent: userAgent,
+      monthly_leads:
+        body.monthlyLeads != null ? String(body.monthlyLeads) : null,
+      response_time: body.responseTime ?? null,
+      workspace_id: CARTERCO_WORKSPACE_ID,
+      is_draft: false,
+    });
+  } catch (e) {
+    console.error("quiz-submit: leads-mirror failed", e);
+  }
+
+  // Fire SMS to the prospect (phone is required). Failure is non-fatal —
+  // submission is already saved and the user still sees the result.
+  {
     const firstName = name.split(/\s+/)[0] ?? name;
     const lossLine = body.totalLoss
       ? `Dine tal viser ca. ${formatKr(body.totalLoss)}/md i tabt potentiale. `
