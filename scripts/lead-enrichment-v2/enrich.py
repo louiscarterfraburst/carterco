@@ -165,14 +165,22 @@ HAIKU_SYSTEM = """Du hjælper med at finde en virksomheds officielle hjemmeside 
 Input er virksomhedsnavnet og en uddrag af Google-søgeresultater (titler + URLs + uddrag).
 Returnér KUN den ene URL der mest sandsynligt er virksomhedens officielle hjemmeside.
 Hvis ingen af resultaterne ser ud til at være den rigtige virksomhed, returnér NONE.
+Det er bedre at returnere NONE end en directory-URL.
 Svar i én linje uden forklaring eller markdown.
-Foretræk korporatets officielle domæne (acme.dk, acme.com) over LinkedIn, Facebook, Trustpilot, Crunchbase, business directories.
+Foretræk virksomhedens eget domæne (acme.dk, acme.com).
+RETURNER ALDRIG en URL fra disse domæner (de er sociale medier, anmeldelses-sider eller virksomhedsregistre, ikke virksomhedens egen hjemmeside):
+  linkedin.com, facebook.com, instagram.com, twitter.com, x.com, youtube.com, tiktok.com,
+  trustpilot.com, crunchbase.com, glassdoor.com, indeed.com, bloomberg.com,
+  proff.dk, cvr.dk, virk.dk, degulesider.dk, krak.dk, eniro.dk, 118.dk, nn-markedsdata.dk,
+  bizz.dk, greens.dk, wikipedia.org, yelp.com, mapy.cz, google.com
+Hvis kun den slags URLs er i resultaterne, svar NONE.
 """
 
 HAIKU_DIRECT_SYSTEM = """Du er en B2B-virksomhedsdatabase. Brugeren giver dig et dansk virksomhedsnavn (evt. med branche, by, land).
 Hvis du er HØJST SIKKER på virksomhedens officielle hjemmeside-URL — svar med URL'en (én linje, intet andet).
 Hvis du er det mindste i tvivl — svar UNKNOWN. Det er bedre at sige UNKNOWN end at gætte.
-Svar aldrig med en LinkedIn-, Facebook-, Trustpilot-, Crunchbase- eller registry-URL.
+Svar ALDRIG med en URL fra: linkedin.com, facebook.com, trustpilot.com, crunchbase.com,
+proff.dk, cvr.dk, virk.dk, degulesider.dk, krak.dk, eniro.dk, wikipedia.org eller andre directories/registre.
 Eksempel godt svar: https://novo-nordisk.com
 Eksempel dårligt svar: https://www.linkedin.com/company/novonordisk
 """
@@ -258,18 +266,44 @@ def brave_search(query: str, count: int = 5) -> list[dict]:
 
 
 def head_check(url: str, timeout: int = 6) -> bool:
-    """HEAD-request the URL to confirm it resolves. Treats any 2xx/3xx as live."""
+    """Confirm a URL resolves. Tries HEAD first; falls back to a tiny GET if
+    HEAD fails or the server rejects HEAD (common — many sites do).
+    Browser-like User-Agent because some hosts 403 the python-urllib default."""
+    UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+          "(KHTML, like Gecko) Chrome/124.0 Safari/537.36")
+
+    def _live_status(code: int) -> bool:
+        # 2xx/3xx → live. 4xx codes that imply the host exists (just refusing
+        # this particular request method) → live. Other 4xx/5xx → dead.
+        if 200 <= code < 400:
+            return True
+        return code in (400, 401, 403, 405, 429)
+
+    # 1) HEAD
+    try:
+        req = urllib.request.Request(url, method="HEAD", headers={"User-Agent": UA})
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return _live_status(r.status)
+    except urllib.error.HTTPError as e:
+        if _live_status(e.code):
+            return True
+        # 405/501 → server rejects HEAD, try GET
+        if e.code not in (405, 501):
+            # Hard fail (e.g. 404) — but try GET anyway; some CDNs lie on HEAD
+            pass
+    except Exception:
+        pass  # connection error, timeout, SSL, etc — fall through to GET
+
+    # 2) GET with a 1KB range cap so we don't actually download the page
     try:
         req = urllib.request.Request(
-            url, method="HEAD",
-            headers={"User-Agent": "Mozilla/5.0 (compatible; CarterCo/1.0)"},
+            url, method="GET",
+            headers={"User-Agent": UA, "Range": "bytes=0-1023", "Accept": "*/*"},
         )
         with urllib.request.urlopen(req, timeout=timeout) as r:
-            return 200 <= r.status < 400
+            return _live_status(r.status)
     except urllib.error.HTTPError as e:
-        # Many sites block HEAD or 405-it but return content on GET — accept 4xx as "exists"
-        # only for codes that imply the host is real (400, 401, 403, 405, 429).
-        return e.code in (400, 401, 403, 405, 429)
+        return _live_status(e.code)
     except Exception:
         return False
 
@@ -302,11 +336,13 @@ def pass_b(lead: dict) -> dict:
         return out
 
     # Step 2 — Brave Search → Haiku reranks the top hits.
+    # Append "hjemmeside" (Danish for "homepage") to bias the SERP toward the
+    # company's actual website over directories (proff.dk, rocketreach, etc.).
+    # Same cost as a bare-name query; substantial quality lift for DK leads.
     if not BRAVE_KEY:
-        # No Brave key configured; nothing more to do for this lead
         return out
     try:
-        results = brave_search(company, count=5)
+        results = brave_search(f"{company} hjemmeside", count=5)
     except Exception as e:
         out["error"] = f"brave: {e}"
         return out
