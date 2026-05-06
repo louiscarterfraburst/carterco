@@ -31,9 +31,9 @@ from typing import Any
 
 from _supabase import select, upsert
 
-# Hard-coded carterco workspace UUID. Same value present on every existing
-# outreach_leads / outreach_pipeline row.
-WORKSPACE_ID = "2740ba1f-d5d5-4008-bf43-b45367c73134"
+# CarterCo workspace UUID (louis@carterco.dk). Verified via the workspaces
+# table — DO NOT confuse with 2740ba1f-… which is Tresyv (rm@tresyv.dk).
+WORKSPACE_ID = "1e067f9a-d453-41a7-8bc4-9fdb5644a5fa"
 
 SLUG_NORMALIZE_RE = re.compile(r"[^a-z0-9-]+")
 
