@@ -38,6 +38,7 @@ const STEP_KEYS = [
   "close",
   "speed",
   "channels",
+  "contact",
   "result",
 ] as const;
 
@@ -50,6 +51,7 @@ const STEP_LABELS: Record<StepKey, string> = {
   close: "Lukkerate",
   speed: "Reaktionstid",
   channels: "Kanaler",
+  contact: "Kontakt",
   result: "Resultat",
 };
 
@@ -80,6 +82,11 @@ export function LeadQuiz({ open, onClose, onConvert }: Props) {
   const [responseTime, setResponseTime] = useState<ResponseTime>("30mto1h");
   const [channels, setChannels] = useState<Channel[]>(["linkedin"]);
   const [analysis, setAnalysis] = useState<AnalysisState>({ status: "idle" });
+  const [contactName, setContactName] = useState("");
+  const [contactEmail, setContactEmail] = useState("");
+  const [contactPhone, setContactPhone] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const currentStepKey = STEP_KEYS[stepIndex];
   const isResultStep = currentStepKey === "result";
@@ -167,6 +174,45 @@ export function LeadQuiz({ open, onClose, onConvert }: Props) {
   function handleNextFromUrl() {
     if (url.trim()) startAnalysis(url);
     next();
+  }
+
+  async function submitContact() {
+    if (submitting) return;
+    setSubmitError(null);
+    setSubmitting(true);
+    try {
+      const res = await fetch("/api/quiz-submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: contactName.trim(),
+          email: contactEmail.trim(),
+          phone: contactPhone.trim() || undefined,
+          url: url.trim() || undefined,
+          monthlyLeads: inputs.monthlyLeads,
+          dealValue: inputs.dealValue,
+          closeRate: inputs.closeRate,
+          responseTime: inputs.responseTime,
+          channels: inputs.channels,
+          totalLoss: result.totalLoss,
+          speedLoss: result.speedLoss,
+          closeRateLoss: result.closeRateLoss,
+          channelLoss: result.channelLoss,
+        }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+      };
+      if (!res.ok) {
+        setSubmitError(data.error || `HTTP ${res.status}`);
+        return;
+      }
+      next();
+    } catch (e) {
+      setSubmitError(e instanceof Error ? e.message : "Ukendt fejl");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   if (!open) return null;
@@ -284,7 +330,20 @@ export function LeadQuiz({ open, onClose, onConvert }: Props) {
                 label: CHANNEL_LABELS[c],
               }))}
               onSubmit={next}
-              submitLabel="Beregn →"
+              submitLabel="Næste →"
+            />
+          )}
+          {currentStepKey === "contact" && (
+            <ContactStep
+              name={contactName}
+              email={contactEmail}
+              phone={contactPhone}
+              onNameChange={setContactName}
+              onEmailChange={setContactEmail}
+              onPhoneChange={setContactPhone}
+              onSubmit={submitContact}
+              submitting={submitting}
+              error={submitError}
             />
           )}
           {currentStepKey === "result" && (
@@ -611,6 +670,117 @@ function MultiChoiceStep<T extends string>({
             </button>
           );
         })}
+      </div>
+    </StepShell>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Contact gate (before result)
+// ─────────────────────────────────────────────────────────────────────
+
+const EMAIL_RE_CLIENT = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function ContactStep({
+  name,
+  email,
+  phone,
+  onNameChange,
+  onEmailChange,
+  onPhoneChange,
+  onSubmit,
+  submitting,
+  error,
+}: {
+  name: string;
+  email: string;
+  phone: string;
+  onNameChange: (v: string) => void;
+  onEmailChange: (v: string) => void;
+  onPhoneChange: (v: string) => void;
+  onSubmit: () => void;
+  submitting: boolean;
+  error: string | null;
+}) {
+  const valid = name.trim().length > 1 && EMAIL_RE_CLIENT.test(email.trim());
+  return (
+    <StepShell
+      question="Hvor skal jeg sende dine tal hen?"
+      hint="Resultatet ryger på mail. Indtaster du også dit nummer, ringer jeg dig op inden for 24t med en konkret 15-min plan på dine tal — ellers får du bare resultatet."
+      footer={
+        <div className="flex flex-col items-start gap-3">
+          <PrimaryButton
+            type="button"
+            onClick={onSubmit}
+            disabled={!valid || submitting}
+          >
+            {submitting ? "Sender…" : "Vis mit resultat →"}
+          </PrimaryButton>
+          {error && (
+            <p className="text-[12px] text-[#ff6b2c]">{error}</p>
+          )}
+          <p className="text-[11px] leading-relaxed text-[var(--cream)]/45">
+            Jeg sender ingen nyhedsbrev — kun dine tal og evt. en
+            opfølgning hvis du har bedt om det.
+          </p>
+        </div>
+      }
+    >
+      <div className="flex flex-col gap-5">
+        <label className="flex flex-col gap-2">
+          <span className="font-mono text-[10px] font-bold uppercase tracking-[0.25em] text-[var(--cream)]/55">
+            Navn
+          </span>
+          <input
+            autoFocus
+            type="text"
+            autoComplete="name"
+            value={name}
+            onChange={(e) => onNameChange(e.target.value)}
+            placeholder="Fulde navn"
+            className="w-full border-b border-[var(--cream)]/20 bg-transparent pb-2 text-[18px] text-[var(--cream)] placeholder:text-[var(--cream)]/25 focus:border-[#ff6b2c] focus:outline-none"
+          />
+        </label>
+        <label className="flex flex-col gap-2">
+          <span className="font-mono text-[10px] font-bold uppercase tracking-[0.25em] text-[var(--cream)]/55">
+            Email
+          </span>
+          <input
+            type="email"
+            autoComplete="email"
+            inputMode="email"
+            value={email}
+            onChange={(e) => onEmailChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && valid && !submitting) {
+                e.preventDefault();
+                onSubmit();
+              }
+            }}
+            placeholder="dig@firma.dk"
+            className="w-full border-b border-[var(--cream)]/20 bg-transparent pb-2 text-[18px] text-[var(--cream)] placeholder:text-[var(--cream)]/25 focus:border-[#ff6b2c] focus:outline-none"
+          />
+        </label>
+        <label className="flex flex-col gap-2">
+          <span className="font-mono text-[10px] font-bold uppercase tracking-[0.25em] text-[var(--cream)]/55">
+            Telefon <span className="text-[var(--cream)]/40">(valgfrit · ringes op inden for 24t)</span>
+          </span>
+          <input
+            type="tel"
+            autoComplete="tel"
+            inputMode="tel"
+            value={phone}
+            onChange={(e) => onPhoneChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && valid && !submitting) {
+                e.preventDefault();
+                onSubmit();
+              }
+            }}
+            placeholder="+45 12 34 56 78"
+            className="w-full border-b border-[var(--cream)]/20 bg-transparent pb-2 text-[18px] text-[var(--cream)] placeholder:text-[var(--cream)]/25 focus:border-[#ff6b2c] focus:outline-none"
+          />
+        </label>
       </div>
     </StepShell>
   );
