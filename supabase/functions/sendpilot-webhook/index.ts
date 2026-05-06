@@ -4,7 +4,7 @@
 // in the svix-signature header.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.103.3";
-import { normalizeCompanyName, urlOrigin } from "../_shared/text.ts";
+import { normalizeCompanyName, normalizeWebsiteUrl, urlOrigin } from "../_shared/text.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -135,6 +135,33 @@ Deno.serve(async (request) => {
         campaign_id: campaignId || null,
       }, { onConflict: "sendpilot_lead_id" });
       return json({ ok: true, recorded: "pre_connected_skipped" });
+    }
+
+    // Pause gate: campaigns listed in SENDSPARK_PAUSED_CAMPAIGNS skip the
+    // render entirely. Don't write a pipeline row — the cron poll will
+    // back-fill the lead via CONNECTION_ACCEPTED status when the pause is
+    // lifted, so we don't lose progress. Audit trail lives in
+    // outreach_events (already inserted above).
+    if (isCampaignPaused(campaignId)) {
+      return json({ ok: true, recorded: "render_paused", campaignId });
+    }
+
+    // Gate: a missing website turns the SendSpark render into a video shot
+    // against the workspace's fallback (carterco.dk) — useless and confusing
+    // for the prospect. Mark the row failed and surface it for manual fix.
+    if (!normalizeWebsiteUrl(lead.website)) {
+      await supabase.from("outreach_pipeline").upsert({
+        sendpilot_lead_id: leadId,
+        linkedin_url: linkedinUrl,
+        contact_email: lead.contact_email,
+        is_cold: true,
+        status: "failed",
+        accepted_at: now,
+        workspace_id: workspaceId,
+        campaign_id: campaignId || null,
+        error: "missing_website: lead.website empty — render skipped to avoid carterco.dk fallback",
+      }, { onConflict: "sendpilot_lead_id" });
+      return json({ ok: false, error: "missing_website" });
     }
 
     await supabase.from("outreach_pipeline").upsert({
@@ -280,6 +307,17 @@ function pickDynamic(campaignId: string): string {
     if (perCampaign) return perCampaign;
   }
   return SS_DYNAMIC;
+}
+
+// Kill switch for SendSpark renders by SendPilot campaignId. Set
+// SENDSPARK_PAUSED_CAMPAIGNS=<id1>,<id2> in env to suppress all video
+// renders for those campaigns. Used to avoid burning SendSpark credits
+// while a campaign is parked. LinkedIn invites still flow (SendPilot
+// drives those independently); we just skip the render step.
+function isCampaignPaused(campaignId: string): boolean {
+  const list = Deno.env.get("SENDSPARK_PAUSED_CAMPAIGNS") ?? "";
+  if (!list || !campaignId) return false;
+  return list.split(",").map((s) => s.trim()).includes(campaignId);
 }
 
 async function sendsparkRender(lead: Record<string, unknown>, campaignId: string = "") {

@@ -16,7 +16,7 @@
 // sendpilot_lead_id OR linkedin_url) are skipped, so re-runs don't re-render.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.103.3";
-import { normalizeCompanyName, urlOrigin } from "../_shared/text.ts";
+import { normalizeCompanyName, normalizeWebsiteUrl, urlOrigin } from "../_shared/text.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -57,7 +57,8 @@ type ProcessResult =
   | "invited"
   | "failed_no_email"
   | "no_outreach_lead"
-  | "sendspark_fail";
+  | "sendspark_fail"
+  | "missing_website";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -92,6 +93,7 @@ Deno.serve(async (req) => {
     accepted_backfilled_failed: 0,
     accepted_not_in_outreach_leads: 0,
     accepted_sendspark_failures: 0,
+    accepted_missing_website: 0,
     errors: [] as string[],
   };
 
@@ -133,6 +135,7 @@ Deno.serve(async (req) => {
             case "failed_no_email": summary.accepted_backfilled_failed++; break;
             case "no_outreach_lead": summary.accepted_not_in_outreach_leads++; break;
             case "sendspark_fail": summary.accepted_sendspark_failures++; break;
+            case "missing_website": summary.accepted_missing_website++; break;
           }
         } catch (e) {
           summary.errors.push(`accepted lead ${lead.id}: ${(e as Error).message}`);
@@ -231,6 +234,14 @@ async function processAcceptedLead(spLead: SendPilotLead): Promise<ProcessResult
 
   const campaignId = spLead.campaignId ?? "";
 
+  // Pause gate: skip both pipeline upsert and render so we don't spend
+  // SendSpark credits while a campaign is parked. The lead stays in
+  // CONNECTION_ACCEPTED on SendPilot's side; when the pause lifts, the
+  // next poll will pick it up and process normally.
+  if (isCampaignPaused(campaignId)) {
+    return "skipped";
+  }
+
   if (!lead) {
     await supabase.from("outreach_pipeline").upsert({
       sendpilot_lead_id: leadId,
@@ -265,6 +276,24 @@ async function processAcceptedLead(spLead: SendPilotLead): Promise<ProcessResult
   // webhook so we have no connection.sent signal to determine pre-connected
   // status. Worst case: a pre-connected lead gets rendered. That's preferable
   // to leaving them stranded.
+  // Gate: empty website → SendSpark renders against workspace fallback
+  // (carterco.dk). Skip render and mark failed so we notice + fix the lead
+  // rather than ship a generic video.
+  if (!normalizeWebsiteUrl(lead.website)) {
+    await supabase.from("outreach_pipeline").upsert({
+      sendpilot_lead_id: leadId,
+      linkedin_url: linkedinUrl,
+      contact_email: lead.contact_email,
+      is_cold: true,
+      status: "failed",
+      accepted_at: now,
+      workspace_id: workspaceId,
+      campaign_id: campaignId || null,
+      error: "missing_website: lead.website empty — render skipped to avoid carterco.dk fallback",
+    }, { onConflict: "sendpilot_lead_id" });
+    return "missing_website";
+  }
+
   await supabase.from("outreach_pipeline").upsert({
     sendpilot_lead_id: leadId,
     linkedin_url: linkedinUrl,
@@ -333,6 +362,13 @@ function pickDynamic(campaignId: string): string {
     if (perCampaign) return perCampaign;
   }
   return SS_DYNAMIC;
+}
+
+// Kill switch for SendSpark renders. Mirrors sendpilot-webhook's helper.
+function isCampaignPaused(campaignId: string): boolean {
+  const list = Deno.env.get("SENDSPARK_PAUSED_CAMPAIGNS") ?? "";
+  if (!list || !campaignId) return false;
+  return list.split(",").map((s) => s.trim()).includes(campaignId);
 }
 
 async function sendsparkRender(lead: Record<string, unknown>, campaignId: string = "") {
