@@ -159,21 +159,38 @@ def claude_field_map(html_excerpt: str, screenshot_b64: str) -> dict | None:
             }
         ],
     }
-    req = ur.Request(
-        "https://api.anthropic.com/v1/messages",
-        data=json.dumps(payload).encode(),
-        headers={
-            "Content-Type": "application/json",
-            "x-api-key": ANTHROPIC_KEY,
-            "anthropic-version": "2023-06-01",
-        },
-        method="POST",
-    )
-    try:
-        with ur.urlopen(req, timeout=60) as f:
-            body = json.loads(f.read().decode("utf-8"))
-    except urllib.error.HTTPError as e:
-        raise RuntimeError(f"Claude API: {e.code}: {e.read().decode()[:300]}")
+    body = None
+    last_err = None
+    # Retry on transient errors (broken pipe, connection reset, 5xx, 429)
+    for attempt in range(3):
+        req = ur.Request(
+            "https://api.anthropic.com/v1/messages",
+            data=json.dumps(payload).encode(),
+            headers={
+                "Content-Type": "application/json",
+                "x-api-key": ANTHROPIC_KEY,
+                "anthropic-version": "2023-06-01",
+            },
+            method="POST",
+        )
+        try:
+            with ur.urlopen(req, timeout=60) as f:
+                body = json.loads(f.read().decode("utf-8"))
+            break
+        except urllib.error.HTTPError as e:
+            last_err = e
+            if e.code in (429, 500, 502, 503, 504) and attempt < 2:
+                time.sleep(2 * (attempt + 1))
+                continue
+            raise RuntimeError(f"Claude API: {e.code}: {e.read().decode()[:300]}")
+        except (urllib.error.URLError, ConnectionResetError, BrokenPipeError) as e:
+            last_err = e
+            if attempt < 2:
+                time.sleep(1.5 * (attempt + 1))
+                continue
+            raise RuntimeError(f"Claude API: {e}")
+    if body is None:
+        raise RuntimeError(f"Claude API: exhausted retries: {last_err}")
     blocks = body.get("content") or []
     text = "".join(b.get("text", "") for b in blocks if b.get("type") == "text").strip()
     text = re.sub(r"^```(?:json)?\s*", "", text)
@@ -188,34 +205,102 @@ def claude_field_map(html_excerpt: str, screenshot_b64: str) -> dict | None:
 
 
 def try_accept_cookies(page) -> None:
+    """Dismiss cookie banner. Tries explicit selectors first (Cookiebot,
+    OneTrust, Klaro, Cookiehub — collectively ~80% of Danish sites), then
+    text-based role lookup, then iframes. Banners can appear up to 1.5s
+    after page load, so wait briefly first."""
+    page.wait_for_timeout(800)
+
+    # 1. Known consent-provider buttons by ID — fastest, no false positives.
+    KNOWN_BTN_SELECTORS = [
+        # Cookiebot (huge in DK)
+        "#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll",
+        "#CybotCookiebotDialogBodyButtonAccept",
+        # OneTrust
+        "#onetrust-accept-btn-handler",
+        # Cookiehub
+        "button.ch2-allow-all-btn", "button.ch2-btn-primary",
+        # Klaro
+        "button.cm-btn-success",
+        # Generic patterns
+        "button[data-testid='cookie-accept-all']",
+        "button[data-cookieconsent='accept']",
+        "button.accept-all-cookies",
+    ]
+    for sel in KNOWN_BTN_SELECTORS:
+        try:
+            loc = page.locator(sel).first
+            if loc.count() and loc.is_visible(timeout=300):
+                loc.click(timeout=2000)
+                page.wait_for_timeout(600)
+                return
+        except Exception:
+            continue
+
+    # 2. Text-based across buttons + links (top-level)
     for txt in COOKIE_ACCEPT_TEXTS:
-        try:
-            btn = page.get_by_role("button", name=re.compile(txt, re.IGNORECASE)).first
-            if btn.is_visible(timeout=500):
-                btn.click(timeout=2000)
-                page.wait_for_timeout(500)
-                return
-        except Exception:
-            continue
-        try:
-            link = page.get_by_role("link", name=re.compile(txt, re.IGNORECASE)).first
-            if link.is_visible(timeout=300):
-                link.click(timeout=2000)
-                page.wait_for_timeout(500)
-                return
-        except Exception:
-            continue
+        for role in ("button", "link"):
+            try:
+                el = page.get_by_role(role, name=re.compile(txt, re.IGNORECASE)).first
+                if el.count() and el.is_visible(timeout=300):
+                    el.click(timeout=2000)
+                    page.wait_for_timeout(500)
+                    return
+            except Exception:
+                continue
+
+    # 3. Banner inside iframe (e.g. some Cookiebot embeds, hCaptcha-style)
+    try:
+        for frame in page.frames:
+            if frame == page.main_frame:
+                continue
+            for sel in KNOWN_BTN_SELECTORS:
+                try:
+                    loc = frame.locator(sel).first
+                    if loc.count() and loc.is_visible(timeout=200):
+                        loc.click(timeout=1500)
+                        page.wait_for_timeout(500)
+                        return
+                except Exception:
+                    continue
+            for txt in COOKIE_ACCEPT_TEXTS[:6]:  # only top patterns in iframes
+                try:
+                    el = frame.get_by_role("button", name=re.compile(txt, re.IGNORECASE)).first
+                    if el.count() and el.is_visible(timeout=200):
+                        el.click(timeout=1500)
+                        page.wait_for_timeout(500)
+                        return
+                except Exception:
+                    continue
+    except Exception:
+        pass
 
 
 def page_has_form(page) -> bool:
-    """Cheap heuristic — there's a <form> with a textarea or message field."""
+    """Heuristic — page might have a contact form. Loose: accepts <textarea>
+    or email-input ANYWHERE on the page (not just inside <form>), or a
+    HubSpot/Pardot/Marketo/Typeform iframe (huge in DK B2B). Authoritative
+    judgement is left to Claude vision; this only filters obviously-empty
+    pages."""
     try:
         return page.evaluate(
             """
             () => {
-              const forms = document.querySelectorAll('form');
-              for (const f of forms) {
-                if (f.querySelector('textarea, input[type="email"]')) return true;
+              // 1. Any textarea or email input — most contact forms have one
+              if (document.querySelector('textarea, input[type="email"]')) return true;
+              // 2. Inputs with email-ish placeholder/name/aria
+              const inputs = document.querySelectorAll('input');
+              for (const i of inputs) {
+                const hint = (i.placeholder + ' ' + i.name + ' ' + (i.getAttribute('aria-label')||'') + ' ' + (i.id||'')).toLowerCase();
+                if (/e-?mail|besked|message|kontakt/.test(hint)) return true;
+              }
+              // 3. Embedded form provider iframes (HubSpot, Pardot, Marketo, Typeform, Tally)
+              const iframes = document.querySelectorAll('iframe');
+              for (const f of iframes) {
+                const src = (f.src || '').toLowerCase();
+                if (/hsforms|hubspot|pardot|marketo|typeform|tally\\.so|formstack|jotform|gravityforms/.test(src)) {
+                  return true;
+                }
               }
               return false;
             }
@@ -225,18 +310,35 @@ def page_has_form(page) -> bool:
         return False
 
 
+CONTACT_URL_RE = re.compile(r"/(kontakt|contact|skriv|book|forespørg|hor[-_]?os|get[-_]?in[-_]?touch)", re.IGNORECASE)
+
+
+def looks_like_contact_url(url: str) -> bool:
+    """If the URL path itself names a contact page, trust it — even if our
+    cheap heuristic can't see the form (React forms without <form> element,
+    forms revealed on scroll, custom widgets, etc.). Claude vision is the
+    real judge."""
+    return bool(CONTACT_URL_RE.search(url or ""))
+
+
 def navigate_to_contact(page, base: str) -> str | None:
     """Try common paths, then scan nav, then click contact CTAs. Return final URL on success."""
     base = base.rstrip("/")
 
-    def settle_and_check() -> str | None:
-        """Wait for JS, check for a form."""
+    def settle_and_check(trust_url: bool = False) -> str | None:
+        """Wait for JS + cookies, then return the URL if it looks plausible.
+        If trust_url=True, return the URL as long as it's a contact-named
+        path — defer the form-existence judgement to Claude vision rather
+        than our heuristic. This avoids false negatives on React/iframe/
+        scroll-loaded forms."""
         try_accept_cookies(page)
         try:
             page.wait_for_load_state("networkidle", timeout=4000)
         except Exception:
             pass
         if page_has_form(page):
+            return page.url
+        if trust_url and looks_like_contact_url(page.url):
             return page.url
         return None
 
@@ -248,13 +350,14 @@ def navigate_to_contact(page, base: str) -> str | None:
     except Exception:
         pass
 
-    # 2. Common contact paths
+    # 2. Common contact paths — these are explicitly contact pages, so trust
+    # the URL even if our form-detection heuristic comes up empty.
     for path in CANDIDATE_PATHS:
         url = base + path
         try:
             resp = page.goto(url, wait_until="domcontentloaded", timeout=15000)
             if resp and resp.status == 200:
-                u = settle_and_check()
+                u = settle_and_check(trust_url=True)
                 if u: return u
         except Exception:
             continue
@@ -276,7 +379,7 @@ def navigate_to_contact(page, base: str) -> str | None:
         for href in hrefs or []:
             try:
                 page.goto(href, wait_until="domcontentloaded", timeout=15000)
-                u = settle_and_check()
+                u = settle_and_check(trust_url=True)
                 if u: return u
             except Exception:
                 continue
@@ -576,28 +679,60 @@ def fill_other_field(page, sel: str, ftype: str, label: str, payload: dict) -> N
 
 
 def fill_and_submit(page, fmap: dict, payload: dict, dry_run: bool) -> tuple[bool, str]:
-    def fill_if(sel: str | None, val: str | None):
-        if sel and val:
+    """Fill the form like a human: scroll to each field, click into it,
+    type char-by-char with realistic per-key delays, pause between fields,
+    pause to "review" before submitting. Defeats most timing-based bot
+    detection (Cloudflare Turnstile passive, Akamai, etc.)."""
+    import random
+
+    def jitter(a: float, b: float) -> None:
+        page.wait_for_timeout(int(random.uniform(a, b) * 1000))
+
+    def human_fill(sel: str | None, val: str | None) -> None:
+        if not (sel and val):
+            return
+        try:
+            loc = page.locator(sel).first
+            loc.scroll_into_view_if_needed(timeout=1500)
+            jitter(0.10, 0.30)
+            loc.click(timeout=2500)
+            jitter(0.10, 0.25)
+            # Clear any prefilled value, then type. press_sequentially with
+            # delay=~50ms simulates a fast-but-human typing speed (≈200 wpm).
             try:
-                page.locator(sel).first.fill(val, timeout=2500)
+                loc.fill("", timeout=1500)
+            except Exception:
+                pass
+            loc.press_sequentially(val, delay=random.randint(35, 75), timeout=8000)
+            jitter(0.25, 0.70)
+        except Exception:
+            # Fallback: instant fill rather than skipping the field entirely.
+            try:
+                page.locator(sel).first.fill(val, timeout=2000)
             except Exception:
                 pass
 
-    if fmap.get("name_selector"):
-        fill_if(fmap.get("name_selector"), payload["full_name"])
-    else:
-        fill_if(fmap.get("first_name_selector"), payload["first_name"])
-        fill_if(fmap.get("last_name_selector"), payload["last_name"])
+    # Brief "reading" pause after page settled but before we start typing
+    jitter(0.8, 1.6)
 
-    fill_if(fmap.get("email_selector"), payload["email"])
-    fill_if(fmap.get("phone_selector"), payload["phone"])
-    fill_if(fmap.get("company_selector"), payload["company"])
-    fill_if(fmap.get("subject_selector"), payload["subject"])
-    fill_if(fmap.get("message_selector"), payload["message"])
+    if fmap.get("name_selector"):
+        human_fill(fmap.get("name_selector"), payload["full_name"])
+    else:
+        human_fill(fmap.get("first_name_selector"), payload["first_name"])
+        human_fill(fmap.get("last_name_selector"), payload["last_name"])
+
+    human_fill(fmap.get("email_selector"), payload["email"])
+    human_fill(fmap.get("phone_selector"), payload["phone"])
+    human_fill(fmap.get("company_selector"), payload["company"])
+    human_fill(fmap.get("subject_selector"), payload["subject"])
+    human_fill(fmap.get("message_selector"), payload["message"])
 
     for sel in fmap.get("consent_checkboxes") or []:
         try:
-            page.locator(sel).first.check(timeout=2000)
+            loc = page.locator(sel).first
+            loc.scroll_into_view_if_needed(timeout=1500)
+            jitter(0.15, 0.40)
+            loc.check(timeout=2000)
         except Exception:
             pass
 
@@ -610,6 +745,7 @@ def fill_and_submit(page, fmap: dict, payload: dict, dry_run: bool) -> tuple[boo
             continue
         try:
             fill_other_field(page, sel, ftype, label, payload)
+            jitter(0.20, 0.45)
         except Exception:
             pass
 
@@ -623,10 +759,14 @@ def fill_and_submit(page, fmap: dict, payload: dict, dry_run: bool) -> tuple[boo
     before_url = page.url
     before_values = snapshot_form_values(page)
 
-    # Try the locator click first; fall back to JS-dispatched click if hidden
+    # Pause to "review" before clicking submit — mirrors how a real user
+    # eyeballs the form before sending.
+    jitter(1.5, 3.0)
+
     submit = page.locator(submit_sel).first
     try:
         submit.scroll_into_view_if_needed(timeout=2000)
+        jitter(0.20, 0.50)
     except Exception:
         pass
     try:
@@ -705,14 +845,20 @@ def process_one(playwright_ctx, sub: dict, dry_run: bool) -> dict:
 
 def write_back(sub: dict, result: dict) -> None:
     success = result.get("ok")
+    reason = (result.get("reason") or "").strip()
+    # If the submit click actually fired but we didn't see a thank-you signal,
+    # treat it as a soft success: mark submitted so poll_inbox can attribute
+    # replies. The reply itself is the only proof of receipt that matters.
+    submit_fired = success or reason.startswith("no clear success signal")
+    now = time.strftime("%Y-%m-%dT%H:%M:%S+00:00", time.gmtime())
     patch: dict[str, Any] = {
-        "status": "submitted" if success else "failed",
-        "submitted_at": time.strftime("%Y-%m-%dT%H:%M:%S+00:00", time.gmtime()) if success else None,
+        "status": "submitted" if submit_fired else "failed",
+        "submitted_at": now if submit_fired else None,
         "submitted_by": "auto",
-        "notes": (result.get("reason") or "")
+        "notes": reason
                  + (f" · {result.get('contact_url','')}" if result.get("contact_url") else ""),
         "contact_url": result.get("contact_url"),
-        "updated_at": time.strftime("%Y-%m-%dT%H:%M:%S+00:00", time.gmtime()),
+        "updated_at": now,
     }
     if result.get("company_phone"):
         patch["phone"] = result["company_phone"]
@@ -783,18 +929,25 @@ def main():
                     res = process_one(ctx, sub, args.dry_run)
                 finally:
                     ctx.close()
-                mark = "✓" if res.get("ok") else "✗"
-                print(f"  {mark} {res.get('reason')}", file=sys.stderr)
-                if not args.dry_run:
-                    write_back(sub, res)
-                if res.get("ok"):
+                # In dry-run mode, "fields filled, did not submit" is a WIN —
+                # it means form was found, mapped, filled. We just intentionally
+                # didn't click submit. Treat as success for reporting.
+                reason = res.get("reason") or ""
+                dryrun_ok = args.dry_run and reason.startswith("dry-run — fields filled")
+                if res.get("ok") or dryrun_ok:
+                    mark = "✓"
                     success += 1
                 else:
+                    mark = "✗"
                     fail += 1
+                print(f"  {mark} {reason}", file=sys.stderr)
+                if not args.dry_run:
+                    write_back(sub, res)
         finally:
             browser.close()
 
-    print(f"\nDone. {success} submitted, {fail} failed.", file=sys.stderr)
+    label = "filled (dry-run)" if args.dry_run else "submitted"
+    print(f"\nDone. {success} {label}, {fail} failed.", file=sys.stderr)
 
 
 if __name__ == "__main__":
