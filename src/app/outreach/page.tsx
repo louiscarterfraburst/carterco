@@ -298,7 +298,12 @@ export default function OutreachPage() {
     e.preventDefault(); setErr(null); setInfo(null);
     const t = email.trim().toLowerCase();
     if (!t) { setErr("Indtast din e-mail."); return; }
-    const { error } = await supabase.auth.signInWithOtp({ email: t, options: { shouldCreateUser: false } });
+    // Access is gated by workspace_members (page falls back to "Adgang
+    // afventer" for users without a workspace). Allow auth.users creation so
+    // first-time invitees can self-onboard via OTP — gating on
+    // shouldCreateUser:false silently locks out members added to a workspace
+    // before they've ever signed in (e.g. rm@tresyv.dk, haugefrom).
+    const { error } = await supabase.auth.signInWithOtp({ email: t, options: { shouldCreateUser: true } });
     if (error) setErr(error.message); else setInfo("Tjek din mail for kode.");
   }
   async function verifyOtp(e: FormEvent<HTMLFormElement>) {
