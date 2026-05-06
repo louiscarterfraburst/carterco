@@ -166,9 +166,13 @@ async function WorklistTab() {
             <div className="flex-1 min-w-0">
               <div className="flex flex-wrap items-baseline gap-3">
                 <span className="font-display text-lg">{s.company || "—"}</span>
-                <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#ff6b2c]/80">
+                <a
+                  href={`/test-leads/${s.ref_code}`}
+                  className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#ff6b2c]/80 underline-offset-2 hover:text-[#ff6b2c] hover:underline"
+                  title="View prospect timeline"
+                >
                   {s.ref_code}
-                </span>
+                </a>
               </div>
               <div className="mt-1 flex flex-wrap items-center gap-3 text-[12px] text-[var(--cream)]/55">
                 {s.website && (
@@ -268,7 +272,12 @@ async function SubmissionsTab() {
               return (
                 <tr key={s.id} className="border-t border-[var(--cream)]/6">
                   <td className="px-4 py-3">
-                    <div className="font-medium">{s.company}</div>
+                    <a
+                      href={`/test-leads/${s.ref_code}`}
+                      className="font-medium underline-offset-2 hover:text-[#ff6b2c] hover:underline"
+                    >
+                      {s.company}
+                    </a>
                     <div className="text-[11px] text-[var(--cream)]/45">{s.domain}</div>
                   </td>
                   <td className="px-4 py-3 text-[var(--cream)]/65">
@@ -323,9 +332,13 @@ async function AmbiguousTab() {
             <div className="flex-1 min-w-0">
               <div className="flex flex-wrap items-baseline gap-3">
                 <span className="font-display text-lg">{s.company || "—"}</span>
-                <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#ff6b2c]/80">
+                <a
+                  href={`/test-leads/${s.ref_code}`}
+                  className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#ff6b2c]/80 underline-offset-2 hover:text-[#ff6b2c] hover:underline"
+                  title="View prospect timeline"
+                >
                   {s.ref_code}
-                </span>
+                </a>
               </div>
               <div className="mt-1 flex flex-wrap items-center gap-3 text-[12px] text-[var(--cream)]/55">
                 {s.website && (
@@ -398,9 +411,12 @@ async function FailedTab() {
             <ul className="divide-y divide-[var(--cream)]/8">
               {items.map((s) => (
                 <li key={s.id} className="flex items-baseline gap-3 px-4 py-2 text-[12px]">
-                  <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#ff6b2c]/70">
+                  <a
+                    href={`/test-leads/${s.ref_code}`}
+                    className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#ff6b2c]/70 underline-offset-2 hover:text-[#ff6b2c] hover:underline"
+                  >
                     {s.ref_code}
-                  </span>
+                  </a>
                   <span className="flex-1">{s.company}</span>
                   {s.website && (
                     <a href={s.website} target="_blank" rel="noreferrer"
