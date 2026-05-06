@@ -301,9 +301,14 @@ export default function LeadsPage() {
       return;
     }
 
+    // Access is gated by workspace_members (page falls back to "Ingen
+    // workspace" for users without a workspace). Allow auth.users creation
+    // so first-time invitees can self-onboard via OTP — gating on
+    // shouldCreateUser:false silently 422's anyone added to a workspace
+    // before they've ever signed in.
     const { error } = await supabase.auth.signInWithOtp({
       email: trimmed,
-      options: { shouldCreateUser: false },
+      options: { shouldCreateUser: true },
     });
 
     if (error) {
