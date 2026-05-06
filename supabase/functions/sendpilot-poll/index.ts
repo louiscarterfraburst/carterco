@@ -271,7 +271,7 @@ async function processAcceptedLead(spLead: SendPilotLead): Promise<ProcessResult
     workspace_id: workspaceId,
   }, { onConflict: "sendpilot_lead_id" });
 
-  const renderRes = await sendsparkRender(lead);
+  const renderRes = await sendsparkRender(lead, spLead.campaignId ?? "");
   if (!renderRes.ok) {
     await supabase.from("outreach_pipeline").update({
       status: "failed",
@@ -317,7 +317,20 @@ function linkedinSlug(url: string): string {
   }
 }
 
-async function sendsparkRender(lead: Record<string, unknown>) {
+// Per-campaign SendSpark dynamic override. Set SS_DYNAMIC_<sendpilotCampaignId>
+// to point a specific SendPilot campaign at a different SendSpark dynamic;
+// falls back to SENDSPARK_DYNAMIC. Mirrors the pickDynamic helper in
+// sendpilot-webhook so both code paths agree.
+function pickDynamic(campaignId: string): string {
+  const id = (campaignId ?? "").trim();
+  if (id) {
+    const perCampaign = Deno.env.get(`SS_DYNAMIC_${id}`);
+    if (perCampaign) return perCampaign;
+  }
+  return SS_DYNAMIC;
+}
+
+async function sendsparkRender(lead: Record<string, unknown>, campaignId: string = "") {
   const payload = {
     processAndAuthorizeCharge: true,
     prospect: {
@@ -328,8 +341,9 @@ async function sendsparkRender(lead: Record<string, unknown>) {
       backgroundUrl: urlOrigin(lead.website as string),
     },
   };
+  const dynamicId = pickDynamic(campaignId);
   const url =
-    `https://api-gw.sendspark.com/v1/workspaces/${SS_WORKSPACE}/dynamics/${SS_DYNAMIC}/prospect`;
+    `https://api-gw.sendspark.com/v1/workspaces/${SS_WORKSPACE}/dynamics/${dynamicId}/prospect`;
   const res = await fetch(url, {
     method: "POST",
     headers: {

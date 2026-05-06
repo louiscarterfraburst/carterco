@@ -65,6 +65,7 @@ Deno.serve(async (request) => {
   const data = evt.data ?? {};
   const leadId = (data.leadId ?? "").toString();
   const linkedinUrl = (data.linkedinUrl ?? "").toString();
+  const campaignId = (data.campaignId ?? "").toString();
   const lead = leadId ? await lookupLead(leadId, linkedinUrl) : null;
   const workspaceId = lead?.workspace_id ?? null;
 
@@ -144,7 +145,7 @@ Deno.serve(async (request) => {
       workspace_id: workspaceId,
     }, { onConflict: "sendpilot_lead_id" });
 
-    const renderRes = await sendsparkRender(lead);
+    const renderRes = await sendsparkRender(lead, campaignId);
     if (!renderRes.ok) {
       await supabase.from("outreach_pipeline").update({
         status: "failed",
@@ -265,7 +266,20 @@ function linkedinSlug(url: string): string {
   } catch { return ""; }
 }
 
-async function sendsparkRender(lead: Record<string, unknown>) {
+// Pick the SendSpark dynamic to render against. Per-campaign override:
+// set SS_DYNAMIC_<sendpilotCampaignId> in the function env to point a
+// specific SendPilot campaign at a different SendSpark dynamic (e.g. for
+// a parallel "form-followup" angle). Falls back to SENDSPARK_DYNAMIC.
+function pickDynamic(campaignId: string): string {
+  const id = (campaignId ?? "").trim();
+  if (id) {
+    const perCampaign = Deno.env.get(`SS_DYNAMIC_${id}`);
+    if (perCampaign) return perCampaign;
+  }
+  return SS_DYNAMIC;
+}
+
+async function sendsparkRender(lead: Record<string, unknown>, campaignId: string = "") {
   const payload = {
     processAndAuthorizeCharge: true,
     prospect: {
@@ -276,7 +290,8 @@ async function sendsparkRender(lead: Record<string, unknown>) {
       backgroundUrl: urlOrigin(lead.website as string),
     },
   };
-  const url = `https://api-gw.sendspark.com/v1/workspaces/${SS_WORKSPACE}/dynamics/${SS_DYNAMIC}/prospect`;
+  const dynamicId = pickDynamic(campaignId);
+  const url = `https://api-gw.sendspark.com/v1/workspaces/${SS_WORKSPACE}/dynamics/${dynamicId}/prospect`;
   const res = await fetch(url, {
     method: "POST",
     headers: {

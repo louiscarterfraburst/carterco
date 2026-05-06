@@ -51,7 +51,17 @@ const DEFAULT_TEMPLATE = [
     "{videoLink}",
 ].join("\n");
 
-const MESSAGE_TEMPLATE = Deno.env.get("OUTREACH_MESSAGE_TEMPLATE") || DEFAULT_TEMPLATE;
+const FALLBACK_TEMPLATE = Deno.env.get("OUTREACH_MESSAGE_TEMPLATE") || DEFAULT_TEMPLATE;
+
+// Per-campaign template lookup. Set OUTREACH_TEMPLATE_<sendsparkCampaignId>
+// in the function's env vars to override the message body for one campaign
+// (e.g. the form-followup angle) while keeping the legacy default for others.
+function pickTemplate(campaignId: string | undefined): string {
+    const id = (campaignId ?? "").trim();
+    if (!id) return FALLBACK_TEMPLATE;
+    const perCampaign = Deno.env.get(`OUTREACH_TEMPLATE_${id}`);
+    return perCampaign || FALLBACK_TEMPLATE;
+}
 
 // Normalise a SendSpark eventType to one of our internal kinds. Accepts
 // several common slug forms (snake/camel/dot-separated) so we don't break if
@@ -178,7 +188,7 @@ async function handleRenderReady(evt: SendSparkEvent, email: string, videoLink: 
     const firstName = (lead?.first_name ?? "").trim() || "der";
     const company = normalizeCompanyName(lead?.company);
     const website = normalizeWebsiteUrl(lead?.website);
-    const message = MESSAGE_TEMPLATE
+    const message = pickTemplate(evt.campaignId)
         .replaceAll("{firstName}", firstName)
         .replaceAll("{company}", company)
         .replaceAll("{website}", website)
