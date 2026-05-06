@@ -46,14 +46,32 @@ export async function parseFormParams(req: Request): Promise<Record<string, stri
 }
 
 /**
- * Look up a test_submission by inbound caller-ID (E.164).
- * Returns the match or null.
+ * Look up a test_submission by inbound caller-ID (E.164). Checks two
+ * indexes in order:
+ *   1. caller_phones — populated when a prior voice/SMS interaction
+ *      identified this number's company. Most reliable.
+ *   2. test_submissions.phone — the company's listed contact number,
+ *      scraped at submission time. Less reliable (some companies share
+ *      switchboards) but fine as fallback.
  */
 export async function findSubmissionByCaller(
   fromE164: string,
 ): Promise<{ id: string; company: string | null } | null> {
   if (!fromE164) return null;
   const sb = createAdminClient();
+
+  const { data: known } = await sb
+    .from("caller_phones")
+    .select("submission_id, test_submissions(id, company)")
+    .eq("phone", fromE164)
+    .order("inserted_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (known?.test_submissions) {
+    const t = known.test_submissions as unknown as { id: string; company: string | null };
+    return { id: t.id, company: t.company };
+  }
+
   const { data } = await sb
     .from("test_submissions")
     .select("id, company")

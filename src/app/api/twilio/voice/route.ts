@@ -1,5 +1,7 @@
 // Twilio Voice webhook: fires when someone calls our +45 91 30 92 79 number.
-// We log the call into test_responses and send a short voicemail prompt.
+// Policy: never pick up. Let it ring out (a few seconds), hang up, then
+// follow up with an SMS asking who they are. The SMS reply is what places
+// them in the pipeline.
 
 import { NextResponse } from "next/server";
 import {
@@ -8,10 +10,14 @@ import {
   findSubmissionByCaller,
   insertResponse,
   getWebhookUrl,
+  sendTwilioSMS,
 } from "../_helpers";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+// Danish challenge SMS sent after every unknown inbound call.
+const CHALLENGE_SMS = "Hej, hvem er det? (har fået ny telefon)";
 
 export async function POST(req: Request) {
   const authToken = process.env.TWILIO_AUTH_TOKEN;
@@ -45,32 +51,22 @@ export async function POST(req: Request) {
     match_confidence: sub ? 0.95 : null,
   });
 
-  // Casual "I'm in a meeting" greeting + record what they say, so we capture
-  // who's calling and why. Audio URL + auto-transcription land via the
-  // recording-status and transcribe callbacks on the same domain.
-  //
-  // Pacing notes: short pause between sentences ("...") makes Polly read
-  // less robotically. Polly.Mads is Twilio's Danish male voice.
-  // Gatekeeper persona: a virtual assistant / answering service for Louis,
-  // not Louis himself. Naturally elicits "who's calling + why".
-  const recCallback = `https://${req.headers.get("host")}/api/twilio/voice-recording`;
-  const transcribeCallback = `https://${req.headers.get("host")}/api/twilio/voice-transcript`;
+  // Only challenge unknown callers — if we already matched them to a
+  // submission via phone, sending the "who is it" SMS would be weird.
+  // Silent on send failure (e.g. landline that can't receive SMS).
+  if (from && !sub) {
+    try {
+      await sendTwilioSMS(from, CHALLENGE_SMS);
+    } catch (e) {
+      console.error("[twilio/voice] SMS challenge send failed:", e);
+    }
+  }
+
+  // Don't pick up. Pause ~6s so it rings a few times then drops naturally
+  // ("missed call, in a meeting"), then hang up. No greeting, no recording.
   const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Pause length="1"/>
-  <Say voice="Polly.Naja" language="da-DK">Hej, du har ringet til Louis.</Say>
-  <Pause length="1"/>
-  <Say voice="Polly.Naja" language="da-DK">Vil du venligst sige dit navn og hvad opkaldet drejer sig om, så ser jeg om Louis er ledig — ellers ringer han tilbage.</Say>
-  <Record
-    maxLength="60"
-    timeout="3"
-    finishOnKey="#"
-    playBeep="true"
-    transcribe="true"
-    transcribeCallback="${transcribeCallback}"
-    recordingStatusCallback="${recCallback}"
-    recordingStatusCallbackMethod="POST"/>
-  <Say voice="Polly.Naja" language="da-DK">Tak. Jeg giver Louis besked.</Say>
+  <Pause length="6"/>
   <Hangup/>
 </Response>`;
 

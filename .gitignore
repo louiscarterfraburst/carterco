@@ -40,6 +40,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# throwaway local smoke scripts under scripts/
+scripts/**/_smoke_*.py
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
