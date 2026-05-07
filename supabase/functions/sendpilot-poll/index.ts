@@ -49,6 +49,10 @@ type SendPilotLead = {
   title?: string;
   status: string;
   campaignId: string;
+  // SendPilot's API includes the senderId on each lead since it's the
+  // sender LinkedIn account that issued the invite. Required by
+  // /v1/inbox/send so we capture it on the pipeline row.
+  senderId?: string;
 };
 
 type ProcessResult =
@@ -233,6 +237,7 @@ async function processAcceptedLead(spLead: SendPilotLead): Promise<ProcessResult
   const now = new Date().toISOString();
 
   const campaignId = spLead.campaignId ?? "";
+  const senderId = spLead.senderId ?? "";
 
   // Pause gate: skip both pipeline upsert and render so we don't spend
   // SendSpark credits while a campaign is parked. The lead stays in
@@ -252,6 +257,7 @@ async function processAcceptedLead(spLead: SendPilotLead): Promise<ProcessResult
       accepted_at: now,
       workspace_id: workspaceId,
       campaign_id: campaignId || null,
+      sendpilot_sender_id: senderId || null,
       error: "lead not in outreach_leads CSV (poll)",
     }, { onConflict: "sendpilot_lead_id" });
     return "no_outreach_lead";
@@ -267,6 +273,7 @@ async function processAcceptedLead(spLead: SendPilotLead): Promise<ProcessResult
       accepted_at: now,
       workspace_id: workspaceId,
       campaign_id: campaignId || null,
+      sendpilot_sender_id: senderId || null,
       error: "missing contact_email (poll)",
     }, { onConflict: "sendpilot_lead_id" });
     return "failed_no_email";
@@ -289,6 +296,7 @@ async function processAcceptedLead(spLead: SendPilotLead): Promise<ProcessResult
       accepted_at: now,
       workspace_id: workspaceId,
       campaign_id: campaignId || null,
+      sendpilot_sender_id: senderId || null,
       error: "missing_website: lead.website empty — render skipped to avoid carterco.dk fallback",
     }, { onConflict: "sendpilot_lead_id" });
     return "missing_website";
@@ -303,6 +311,7 @@ async function processAcceptedLead(spLead: SendPilotLead): Promise<ProcessResult
     accepted_at: now,
     workspace_id: workspaceId,
     campaign_id: campaignId || null,
+    sendpilot_sender_id: senderId || null,
   }, { onConflict: "sendpilot_lead_id" });
 
   const renderRes = await sendsparkRender(lead, campaignId);

@@ -66,6 +66,7 @@ Deno.serve(async (request) => {
   const leadId = (data.leadId ?? "").toString();
   const linkedinUrl = (data.linkedinUrl ?? "").toString();
   const campaignId = (data.campaignId ?? "").toString();
+  const senderId = (data.senderId ?? "").toString();
   const lead = leadId ? await lookupLead(leadId, linkedinUrl) : null;
   const workspaceId = lead?.workspace_id ?? null;
 
@@ -115,6 +116,7 @@ Deno.serve(async (request) => {
         accepted_at: now,
         workspace_id: workspaceId,
         campaign_id: campaignId || null,
+        sendpilot_sender_id: senderId || null,
         error: "lead not in outreach_leads CSV",
       }, { onConflict: "sendpilot_lead_id" });
       return json({ ok: true, recorded: "accepted_no_lead" });
@@ -133,6 +135,7 @@ Deno.serve(async (request) => {
         accepted_at: now,
         workspace_id: workspaceId,
         campaign_id: campaignId || null,
+        sendpilot_sender_id: senderId || null,
       }, { onConflict: "sendpilot_lead_id" });
       return json({ ok: true, recorded: "pre_connected_skipped" });
     }
@@ -159,6 +162,7 @@ Deno.serve(async (request) => {
         accepted_at: now,
         workspace_id: workspaceId,
         campaign_id: campaignId || null,
+        sendpilot_sender_id: senderId || null,
         error: "missing_website: lead.website empty — render skipped to avoid carterco.dk fallback",
       }, { onConflict: "sendpilot_lead_id" });
       return json({ ok: false, error: "missing_website" });
@@ -173,6 +177,7 @@ Deno.serve(async (request) => {
       accepted_at: now,
       workspace_id: workspaceId,
       campaign_id: campaignId || null,
+      sendpilot_sender_id: senderId || null,
     }, { onConflict: "sendpilot_lead_id" });
 
     const renderRes = await sendsparkRender(lead, campaignId);

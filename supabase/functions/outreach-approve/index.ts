@@ -63,7 +63,7 @@ Deno.serve(async (request) => {
   // Fetch the pipeline row.
   const { data: pipe, error: fetchErr } = await admin
     .from("outreach_pipeline")
-    .select("sendpilot_lead_id, contact_email, linkedin_url, status, rendered_message, video_link, accepted_at, workspace_id")
+    .select("sendpilot_lead_id, contact_email, linkedin_url, status, rendered_message, video_link, accepted_at, workspace_id, sendpilot_sender_id")
     .eq("sendpilot_lead_id", leadId)
     .maybeSingle();
   if (fetchErr) return json({ error: "db fetch", details: fetchErr.message }, 500);
@@ -105,15 +105,29 @@ Deno.serve(async (request) => {
   }
 
   // Approve → POST /inbox/send.
+  // SendPilot's API requires senderId + recipientLinkedinUrl + message
+  // (NOT leadId + message — that returned HTTP 400 "Validation failed").
+  // senderId is captured from the connection.accepted webhook payload and
+  // stored on the pipeline row; recipientLinkedinUrl is the prospect's URL.
   const message = (body.messageOverride && body.messageOverride.trim())
     ? body.messageOverride.trim()
     : pipe.rendered_message;
   if (!message) return json({ error: "no message to send" }, 400);
+  if (!pipe.sendpilot_sender_id) {
+    return json({ error: "lead has no sendpilot_sender_id (cannot send via /v1/inbox/send)" }, 400);
+  }
+  if (!pipe.linkedin_url) {
+    return json({ error: "lead has no linkedin_url" }, 400);
+  }
 
   const send = await fetch("https://api.sendpilot.ai/v1/inbox/send", {
     method: "POST",
     headers: { "X-API-Key": SP_API_KEY, "Content-Type": "application/json" },
-    body: JSON.stringify({ leadId, message }),
+    body: JSON.stringify({
+      senderId: pipe.sendpilot_sender_id,
+      recipientLinkedinUrl: pipe.linkedin_url,
+      message,
+    }),
   });
   let respBody: unknown = null;
   try { respBody = await send.json(); } catch { /* ignore */ }

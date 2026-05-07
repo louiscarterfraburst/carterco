@@ -64,6 +64,7 @@ type PipelineRow = {
     video_link: string | null;
     workspace_id: string | null;
     campaign_id: string | null;
+    sendpilot_sender_id: string | null;
     sequence_id: string | null;
     sequence_step: number | null;
     sequence_parked_until: string | null;
@@ -387,10 +388,23 @@ async function executeAction(
     }
 
     // auto_send → straight to SendPilot inbox.
+    // SendPilot's API requires senderId + recipientLinkedinUrl + message
+    // (NOT leadId + message). senderId is captured from the connection.accepted
+    // webhook payload at acceptance time and stored on the pipeline row.
+    if (!row.sendpilot_sender_id || !row.linkedin_url) {
+        await supabase.from("outreach_pipeline").update({
+            error: "auto_send skipped: missing sendpilot_sender_id or linkedin_url",
+        }).eq("sendpilot_lead_id", row.sendpilot_lead_id);
+        return { dispatched: "auto_send_skipped", reason: "missing sender_id or linkedin_url" };
+    }
     const send = await fetch("https://api.sendpilot.ai/v1/inbox/send", {
         method: "POST",
         headers: { "X-API-Key": SP_API_KEY, "Content-Type": "application/json" },
-        body: JSON.stringify({ leadId: row.sendpilot_lead_id, message }),
+        body: JSON.stringify({
+            senderId: row.sendpilot_sender_id,
+            recipientLinkedinUrl: row.linkedin_url,
+            message,
+        }),
     });
     let respBody: unknown = null;
     try { respBody = await send.json(); } catch { /* ignore */ }
