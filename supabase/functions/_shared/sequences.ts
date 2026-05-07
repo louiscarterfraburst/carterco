@@ -54,7 +54,7 @@ export const SEQUENCES: Sequence[] = [
                         action: {
                             type: "auto_send",
                             template:
-                                "Hej {firstName}\n\nEr nysgerrig på din vurdering. Er det noget, I kan genkende?\n\nJeg kan sende et par forslag til tider, hvis det giver mening at tage den videre",
+                                "Hej {firstName}\n\nEr nysgerrig på din vurdering. Er det noget, der lyder interessant?\n\nJeg kan sende et par forslag til tider, hvis det giver mening at tage den videre.",
                         },
                     },
                 ],
