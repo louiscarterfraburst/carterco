@@ -42,6 +42,19 @@ export const RULES: EngagementRule[] = [];
 export type LeadSignals = Partial<Record<Signal, Date>>;
 
 // Build the Signal → timestamp map from an outreach_pipeline row.
+//
+// IMPORTANT: engagement signals (viewed/played/watched_end/cta_clicked/liked)
+// only count if they happen AFTER the initial DM was actually sent. Without
+// this guard, an internal preview (Louis or Rasmus opening the video while
+// reviewing in /outreach) registers as `played` and arms the watched_followup
+// sequence. The engine then fires nysgerrig the moment the DM lands —
+// prospect gets two messages back-to-back. Confirmed in production: Erik
+// Mygind Nielsen got nysgerrig 109ms after his initial DM because the video
+// had been previewed 30 min earlier.
+//
+// `replied` and `render_failed` are NOT gated — they're terminal/branch
+// signals where false positives are safe (they only ever STOP further
+// sends, never trigger them).
 export function signalsForLead(row: {
     sent_at?: string | null;
     viewed_at?: string | null;
@@ -53,12 +66,21 @@ export function signalsForLead(row: {
     render_failed_at?: string | null;
 }): LeadSignals {
     const out: LeadSignals = {};
+    const sentAt = row.sent_at ? new Date(row.sent_at) : null;
+
+    function postSendOnly(ts: string | null | undefined): Date | null {
+        if (!ts) return null;
+        if (!sentAt) return null; // no DM dispatched yet → any engagement is noise
+        const d = new Date(ts);
+        return d > sentAt ? d : null;
+    }
+
     if (row.sent_at)          out.sent          = new Date(row.sent_at);
-    if (row.viewed_at)        out.viewed        = new Date(row.viewed_at);
-    if (row.played_at)        out.played        = new Date(row.played_at);
-    if (row.watched_end_at)   out.watched_end   = new Date(row.watched_end_at);
-    if (row.cta_clicked_at)   out.cta_clicked   = new Date(row.cta_clicked_at);
-    if (row.liked_at)         out.liked         = new Date(row.liked_at);
+    const viewed     = postSendOnly(row.viewed_at);     if (viewed)     out.viewed       = viewed;
+    const played     = postSendOnly(row.played_at);     if (played)     out.played       = played;
+    const watchedEnd = postSendOnly(row.watched_end_at); if (watchedEnd) out.watched_end  = watchedEnd;
+    const cta        = postSendOnly(row.cta_clicked_at); if (cta)        out.cta_clicked  = cta;
+    const liked      = postSendOnly(row.liked_at);       if (liked)      out.liked        = liked;
     if (row.last_reply_at)    out.replied       = new Date(row.last_reply_at);
     if (row.render_failed_at) out.render_failed = new Date(row.render_failed_at);
     return out;
