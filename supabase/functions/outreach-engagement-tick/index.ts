@@ -413,6 +413,33 @@ async function executeAction(
         }).eq("sendpilot_lead_id", row.sendpilot_lead_id);
         return { dispatched: "auto_send_skipped", reason: "missing sender_id or linkedin_url" };
     }
+    // Defense-in-depth reply check. last_reply_at on the row is the
+    // primary signal (set synchronously by sendpilot-webhook on reply
+    // receipt), but if for any reason that propagation failed, also
+    // scan outreach_events for ANY reply event for this leadId.
+    // This catches: webhook outages, renamed event types, async
+    // classification failures, manual data inconsistency. Erik Mygind
+    // Nielsen replied "På ingen måde!" and we still fired a follow-up
+    // because his reply never made it to last_reply_at — never again.
+    const { data: replyEvents } = await supabase
+        .from("outreach_events")
+        .select("event_id,received_at")
+        .eq("source", "sendpilot")
+        .in("event_type", ["message.received", "reply.received"])
+        .filter("payload->data->>leadId", "eq", row.sendpilot_lead_id)
+        .limit(1);
+    if (replyEvents && replyEvents.length > 0) {
+        const replyTs = replyEvents[0].received_at;
+        await supabase.from("outreach_pipeline").update({
+            last_reply_at: replyTs,
+            error: "auto_send aborted: reply event found in outreach_events but last_reply_at was null",
+        }).eq("sendpilot_lead_id", row.sendpilot_lead_id);
+        return {
+            dispatched: "auto_send_aborted",
+            reason: "reply detected via outreach_events fallback",
+            reply_received_at: replyTs,
+        };
+    }
     const send = await fetch("https://api.sendpilot.ai/v1/inbox/send", {
         method: "POST",
         headers: { "X-API-Key": SP_API_KEY, "Content-Type": "application/json" },

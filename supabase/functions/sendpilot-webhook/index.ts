@@ -223,8 +223,22 @@ Deno.serve(async (request) => {
       return json({ ok: false, error: "reply insert failed", details: insErr.message }, 500);
     }
 
-    // Fire intent classification (best effort).
-    // Keep the runtime alive while we classify after responding.
+    // CRITICAL: set last_reply_at SYNCHRONOUSLY before doing anything async.
+    // Previously this update lived inside classifyReplyAsync — meaning if
+    // the classify call failed or was slow, last_reply_at never got set
+    // and engagement-tick happily fired follow-ups on a lead who had
+    // already replied. This was the Erik Mygind Nielsen incident:
+    // reply landed, classification path was broken (renamed event types,
+    // webhook outage etc.), last_reply_at stayed null, follow-up went out.
+    //
+    // The `replied` signal must be authoritative the moment a reply is
+    // recorded. Intent classification is a nice-to-have that can be
+    // backfilled later; the safety guard cannot.
+    await supabase.from("outreach_pipeline").update({
+      last_reply_at: now,
+    }).eq("sendpilot_lead_id", leadId);
+
+    // Fire intent classification (best effort, async, only enriches data).
     // deno-lint-ignore no-explicit-any
     const er: any = (globalThis as any).EdgeRuntime;
     const task = classifyReplyAsync(replyRow.id, replyText, leadId, lead);
