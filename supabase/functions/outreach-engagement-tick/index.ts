@@ -105,6 +105,16 @@ Deno.serve(async (req) => {
 
 // --- Scan path ---------------------------------------------------------------
 
+// Workspace-level kill switch. Set OUTREACH_SEQUENCES_PAUSED_WORKSPACES
+// (comma-separated workspace UUIDs) to halt ALL sequence enrolment +
+// advancement for those workspaces. The function returns early per row
+// before doing anything else. Used when a campaign needs to be stopped
+// IMMEDIATELY (e.g. broken templates, client request, debugging).
+function pausedWorkspaceIds(): Set<string> {
+    const raw = Deno.env.get("OUTREACH_SEQUENCES_PAUSED_WORKSPACES") ?? "";
+    return new Set(raw.split(",").map((s) => s.trim()).filter(Boolean));
+}
+
 async function scan(): Promise<{ scanned: number; fires: number }> {
     if (SEQUENCES.length === 0) return { scanned: 0, fires: 0 };
 
@@ -118,8 +128,10 @@ async function scan(): Promise<{ scanned: number; fires: number }> {
         return { scanned: 0, fires: 0 };
     }
 
+    const paused = pausedWorkspaceIds();
     let fires = 0;
     for (const row of (data ?? []) as PipelineRow[]) {
+        if (row.workspace_id && paused.has(row.workspace_id)) continue;
         fires += await evaluateLead(row, /* bypassWait */ false);
     }
     return { scanned: data?.length ?? 0, fires };
@@ -140,6 +152,10 @@ async function tickLead(sendpilotLeadId: string): Promise<{ fires: number }> {
         return { fires: 0 };
     }
     const row = data as PipelineRow;
+    // Honour the workspace kill switch on per-lead invokes too.
+    if (row.workspace_id && pausedWorkspaceIds().has(row.workspace_id)) {
+        return { fires: 0 };
+    }
     if (TERMINAL_STATUSES.has(row.status)) return { fires: 0 };
 
     return { fires: await evaluateLead(row, /* bypassWait */ true) };
