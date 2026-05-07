@@ -43,7 +43,7 @@ export const SEQUENCES: Sequence[] = [
     {
         id: "watched_followup_v1",
         description:
-            "Lead played the video — react fast (20 min), then bump 3 days later if no reply.",
+            "Lead played the video. React fast (20 min), then bump 3 days later if no reply.",
         trigger: { signal: "played" },
         steps: [
             {
@@ -54,7 +54,7 @@ export const SEQUENCES: Sequence[] = [
                         action: {
                             type: "auto_send",
                             template:
-                                "Hej {firstName}\n\nEr nysgerrig på din vurdering – er det noget, I kan genkende?\n\nJeg kan sende et par forslag til tider, hvis det giver mening at tage den videre",
+                                "Hej {firstName}\n\nEr nysgerrig på din vurdering. Er det noget, I kan genkende?\n\nJeg kan sende et par forslag til tider, hvis det giver mening at tage den videre",
                         },
                     },
                 ],
@@ -67,7 +67,7 @@ export const SEQUENCES: Sequence[] = [
                         action: {
                             type: "auto_send",
                             template:
-                                "Hej {firstName}, vender tilbage på denne — er det noget vi skal sætte i kalenderen?",
+                                "Hej {firstName}, vender tilbage på denne. Er det noget vi skal sætte i kalenderen?",
                         },
                     },
                 ],
@@ -77,7 +77,7 @@ export const SEQUENCES: Sequence[] = [
     {
         id: "unwatched_followup_v1",
         description:
-            "Lead got the video but hasn't played it. Qualify at +3d, then a final graceful exit at +5d. Slower than the watched flow because no engagement yet — give them room for vacations / busy weeks before pushing.",
+            "Lead got the video but hasn't played it. Qualify at +3d, then a final graceful exit at +5d. Slower than the watched flow because no engagement yet, gives them room for vacations / busy weeks before pushing.",
         trigger: { signal: "sent" },
         // Exit if they reply OR play. Played leads get re-enrolled in the
         // watched flow by the engine's re-enrolment path.
@@ -91,7 +91,7 @@ export const SEQUENCES: Sequence[] = [
                         action: {
                             type: "auto_send",
                             template:
-                                "Hej {firstName} — hurtigt spørgsmål: er du den rigtige hos {company} at tale med om dette, eller skal jeg fange en anden? Sig også til hvis det ikke er relevant.",
+                                "Hej {firstName}\n\nHurtigt spørgsmål: er du den rigtige hos {company} at tale med om dette, eller skal jeg fange en anden? Sig også til hvis det ikke er relevant.",
                         },
                     },
                 ],
@@ -104,7 +104,7 @@ export const SEQUENCES: Sequence[] = [
                         action: {
                             type: "auto_send",
                             template:
-                                "Vender tilbage en sidste gang — siger ikke mere herefter. Sig endelig til hvis det giver mening senere.",
+                                "Hej {firstName}\n\nJeg lukker den herfra for nu.\n\nHvis det bliver relevant senere, er du meget velkommen til at skrive, så tager vi den derfra.\n\nGod dag.",
                         },
                     },
                 ],
