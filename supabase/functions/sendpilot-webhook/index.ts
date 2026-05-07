@@ -88,7 +88,16 @@ Deno.serve(async (request) => {
 
   const now = new Date().toISOString();
 
-  if (evt.eventType === "connection.sent") {
+  // SendPilot renamed event types at some point: connection.sent →
+  // connection_request.sent, connection.accepted → connection_request.accepted,
+  // message.received → reply.received. Accept both forms so we don't miss
+  // events in either naming era.
+  const evtType = evt.eventType;
+  const isConnectionSent     = evtType === "connection.sent"     || evtType === "connection_request.sent";
+  const isConnectionAccepted = evtType === "connection.accepted" || evtType === "connection_request.accepted";
+  const isReplyReceived      = evtType === "message.received"    || evtType === "reply.received";
+
+  if (isConnectionSent) {
     await supabase.rpc("outreach_record_invite", {
       _lead_id: leadId,
       _linkedin_url: linkedinUrl,
@@ -98,7 +107,7 @@ Deno.serve(async (request) => {
     return json({ ok: true, recorded: "invited" });
   }
 
-  if (evt.eventType === "connection.accepted") {
+  if (isConnectionAccepted) {
     const { data: existing } = await supabase
       .from("outreach_pipeline")
       .select("status,is_cold,contact_email")
@@ -191,7 +200,7 @@ Deno.serve(async (request) => {
     return json({ ok: true, recorded: "accepted_rendering", cold: true });
   }
 
-  if (evt.eventType === "message.received") {
+  if (isReplyReceived) {
     const replyText = String(
       (data as Record<string, unknown>)["message"]
         ?? (data as Record<string, unknown>)["messagePreview"]
