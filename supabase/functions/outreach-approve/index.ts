@@ -126,10 +126,22 @@ Deno.serve(async (request) => {
   // being current, or async classification succeeding. Fail-safe: if we
   // can't verify, we treat as replied and abort the send (better to miss a
   // follow-up than to fire on someone who already responded).
+  // We pass recipientName because SendPilot returns LinkedIn's id-encoded
+  // URL form, not the vanity URL we stored, so URL matching alone always
+  // fails — name match is the practical way to find the conversation.
+  const { data: leadForName } = await admin
+    .from("outreach_leads")
+    .select("first_name, last_name, full_name")
+    .eq("contact_email", pipe.contact_email ?? "")
+    .maybeSingle();
+  const fullName = (leadForName?.full_name as string | undefined)?.trim()
+    || [leadForName?.first_name, leadForName?.last_name].filter(Boolean).join(" ").trim()
+    || undefined;
   const replyCheck = await checkLeadReplied({
     apiKey: SP_API_KEY,
     senderAccountId: pipe.sendpilot_sender_id,
     recipientLinkedinUrl: pipe.linkedin_url,
+    recipientName: fullName,
   });
   if (replyCheck.replied) {
     const lastReplyAt = "lastReplyAt" in replyCheck ? replyCheck.lastReplyAt : now;

@@ -481,10 +481,22 @@ async function executeAction(
     //
     // (1) is authoritative; (2) is belt-and-suspenders for cases where (1)
     // fails open and we still want to halt.
+    // Look up the lead's name so checkLeadReplied can match by participant.name
+    // (SendPilot returns id-encoded LinkedIn URLs that don't match our vanity
+    // URLs — name match is the practical way to find the conversation).
+    const { data: leadForName } = await supabase
+        .from("outreach_leads")
+        .select("first_name, last_name, full_name")
+        .eq("contact_email", row.contact_email)
+        .maybeSingle();
+    const fullName = (leadForName?.full_name as string | undefined)?.trim()
+        || [leadForName?.first_name, leadForName?.last_name].filter(Boolean).join(" ").trim()
+        || undefined;
     const liveCheck = await checkLeadReplied({
         apiKey: SP_API_KEY,
         senderAccountId: row.sendpilot_sender_id,
         recipientLinkedinUrl: row.linkedin_url,
+        recipientName: fullName,
     });
     if (liveCheck.replied) {
         const lastReplyAt = "lastReplyAt" in liveCheck ? liveCheck.lastReplyAt : new Date().toISOString();

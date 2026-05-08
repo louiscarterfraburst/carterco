@@ -24,26 +24,35 @@ function normaliseLinkedinUrl(url: string): string {
  * conversation owned by `senderAccountId` in SendPilot? Calls SendPilot's
  * /v1/inbox/conversations endpoint and inspects lastMessage.direction.
  *
- * Returns:
- *   - { replied: true, lastReplyAt, source: "live_api" }     → prospect's last
- *       message was inbound. Abort the send.
- *   - { replied: false, checkedAt, source: "live_api" }      → either no
- *       conversation found OR last message was outbound. Safe to send.
- *   - { replied: true, reason, source: "fail_safe" }         → we couldn't
- *       verify (API error, missing inputs, etc.). Treated as replied so the
- *       send is BLOCKED. Caller logs the reason and moves on.
+ * Match strategy (in order of reliability):
+ *   1. Exact match on participant.profileUrl (vanity → vanity).
+ *   2. Match on participant.name vs `recipientName` (case/whitespace
+ *      normalised). REQUIRED in practice because SendPilot returns
+ *      LinkedIn's INTERNAL id-encoded URL form
+ *      (https://www.linkedin.com/in/ACoAAA...) NOT the vanity URL we
+ *      stored, so #1 almost never matches.
  *
- * Pagination note: only fetches the first 100 conversations. SendPilot
- * sorts by lastActivityAt desc, so any prospect who recently replied will
- * be near the top of the list. A long-silent lead that pushes off page 1
- * would correctly fall through to "not found" → safe-to-send.
+ * Pagination: fetches limit=20 (SendPilot's API 500s on limit≥50 — bug
+ * confirmed in production). Conversations sorted by lastActivityAt desc,
+ * so any prospect who recently replied is near the top.
  */
+const SAFE_PAGE_LIMIT = 20;
+
+function normaliseName(s: string): string {
+    return (s || "").toLowerCase().normalize("NFKD")
+        .replace(/[̀-ͯ]/g, "")  // strip diacritics
+        .replace(/[^a-z0-9 ]+/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+}
+
 export async function checkLeadReplied(args: {
     apiKey: string;
     senderAccountId: string;
     recipientLinkedinUrl: string;
+    recipientName?: string;
 }): Promise<ReplyCheckResult> {
-    const { apiKey, senderAccountId, recipientLinkedinUrl } = args;
+    const { apiKey, senderAccountId, recipientLinkedinUrl, recipientName } = args;
 
     if (!apiKey) {
         return { replied: true, source: "fail_safe", reason: "SENDPILOT_API_KEY missing" };
@@ -51,13 +60,13 @@ export async function checkLeadReplied(args: {
     if (!senderAccountId) {
         return { replied: true, source: "fail_safe", reason: "senderAccountId missing on lead" };
     }
-    if (!recipientLinkedinUrl) {
-        return { replied: true, source: "fail_safe", reason: "recipientLinkedinUrl missing on lead" };
+    if (!recipientLinkedinUrl && !recipientName) {
+        return { replied: true, source: "fail_safe", reason: "neither linkedinUrl nor name provided" };
     }
 
     const url = `${SP_API_BASE}/v1/inbox/conversations` +
         `?accountId=${encodeURIComponent(senderAccountId)}` +
-        `&limit=100`;
+        `&limit=${SAFE_PAGE_LIMIT}`;
 
     let res: Response;
     try {
@@ -89,7 +98,8 @@ export async function checkLeadReplied(args: {
 
     const conversations =
         ((payload as Record<string, unknown>)?.conversations as Array<Record<string, unknown>>) ?? [];
-    const target = normaliseLinkedinUrl(recipientLinkedinUrl);
+    const targetUrl = normaliseLinkedinUrl(recipientLinkedinUrl);
+    const targetName = normaliseName(recipientName ?? "");
     const checkedAt = new Date().toISOString();
 
     for (const conv of conversations) {
@@ -97,7 +107,12 @@ export async function checkLeadReplied(args: {
         let matched = false;
         for (const p of participants) {
             const profileUrl = (p.profileUrl as string) ?? (p.linkedinUrl as string) ?? "";
-            if (normaliseLinkedinUrl(profileUrl) === target) {
+            if (targetUrl && normaliseLinkedinUrl(profileUrl) === targetUrl) {
+                matched = true;
+                break;
+            }
+            const pname = normaliseName((p.name as string) ?? "");
+            if (targetName && pname && pname === targetName) {
                 matched = true;
                 break;
             }
@@ -117,9 +132,9 @@ export async function checkLeadReplied(args: {
         return { replied: false, checkedAt, source: "live_api" };
     }
 
-    // No conversation with this prospect on page 1 (or at all). Treat as not-replied.
-    // Edge case: if 100+ active conversations exist and the silent prospect's
-    // conversation has been pushed off page 1, we'd get a false negative — but
-    // by definition that prospect has had no activity, so "not replied" is correct.
+    // No conversation with this prospect in the top 20. Treat as not-replied.
+    // Edge case: a long-silent lead (>20 active conversations ahead of theirs)
+    // is by definition someone with no recent activity → "not replied" is
+    // correct for our purposes.
     return { replied: false, checkedAt, source: "live_api" };
 }
