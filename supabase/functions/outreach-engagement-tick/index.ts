@@ -72,6 +72,7 @@ type PipelineRow = {
     sequence_started_at: string | null;
     sequence_completed_at: string | null;
     sequence_step_entered_at: string | null;
+    sequence_step_attempts: number | null;
 };
 
 Deno.serve(async (req) => {
@@ -304,6 +305,55 @@ async function evaluateLead(row: PipelineRow, bypassWait: boolean): Promise<numb
             : null,
         result,
     });
+
+    // FIX: only advance the sequence step on actual success. Previously
+    // advanceStep ran unconditionally — meaning a failed auto_send (HTTP 400
+    // from SendPilot) silently advanced the step as if the message had
+    // landed. Chiara Coletta's row read sequence_step=2 (completed) when in
+    // reality both nysgerrig and kalender 400'd and she received zero
+    // follow-up DMs. DB and reality disagreed.
+    //
+    // Now: failed auto_sends DON'T advance, instead they retry on the next
+    // tick with a brief 15-min park (vs the original step waitHours). After
+    // MAX_AUTO_SEND_ATTEMPTS we give up + advance with a "max retries"
+    // error so the lead doesn't loop forever.
+    //
+    // queue_approval, push_only, auto_send_aborted, auto_send_skipped all
+    // advance normally — they're intentional terminal states for this step.
+    const MAX_AUTO_SEND_ATTEMPTS = 3;
+    const isAutoSend  = (result as Record<string, unknown>).dispatched === "auto_send";
+    const isFailedSend = isAutoSend && (result as Record<string, unknown>).ok === false;
+
+    if (isFailedSend) {
+        const newAttempts = (row.sequence_step_attempts ?? 0) + 1;
+        const httpStatus = (result as Record<string, unknown>).status;
+        if (newAttempts < MAX_AUTO_SEND_ATTEMPTS) {
+            // Retry on next tick — short re-park (15 min) so we don't wait
+            // out the full step waitHours window (which could be days).
+            await supabase.from("outreach_pipeline").update({
+                sequence_step_attempts: newAttempts,
+                sequence_parked_until: addHours(now, 0.25).toISOString(),
+                error: `auto_send retry ${newAttempts}/${MAX_AUTO_SEND_ATTEMPTS}: HTTP ${httpStatus}`,
+            }).eq("sendpilot_lead_id", row.sendpilot_lead_id);
+            return 1;
+        }
+        // Out of retries — advance with the failure recorded so we don't
+        // burn tokens on an irrecoverable step.
+        await supabase.from("outreach_pipeline").update({
+            error: `auto_send max retries (${newAttempts}) exceeded: HTTP ${httpStatus}`,
+            sequence_step_attempts: 0,
+        }).eq("sendpilot_lead_id", row.sendpilot_lead_id);
+        await advanceStep(row.sendpilot_lead_id, seq, stepIdx, now);
+        return 1;
+    }
+
+    // Success / non-fail path: reset attempts (in case prior tick failed)
+    // and advance the sequence to the next step.
+    if ((row.sequence_step_attempts ?? 0) > 0) {
+        await supabase.from("outreach_pipeline").update({
+            sequence_step_attempts: 0,
+        }).eq("sendpilot_lead_id", row.sendpilot_lead_id);
+    }
     await advanceStep(row.sendpilot_lead_id, seq, stepIdx, now);
     return 1;
 }
@@ -339,6 +389,7 @@ async function advanceStep(
             sequence_step: nextIdx,
             sequence_completed_at: now.toISOString(),
             sequence_parked_until: null,
+            sequence_step_attempts: 0,
         }).eq("sendpilot_lead_id", sendpilotLeadId);
         return;
     }
@@ -346,6 +397,7 @@ async function advanceStep(
         sequence_step: nextIdx,
         sequence_step_entered_at: now.toISOString(),
         sequence_parked_until: addHours(now, next.waitHours).toISOString(),
+        sequence_step_attempts: 0,
     }).eq("sendpilot_lead_id", sendpilotLeadId);
 }
 
