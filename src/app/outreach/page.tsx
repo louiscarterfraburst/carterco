@@ -22,6 +22,7 @@ const VAPID_PUBLIC_KEY =
 type Status =
   | "invited"
   | "accepted"
+  | "pending_pre_render"
   | "rendering"
   | "rendered"
   | "pending_approval"
@@ -326,7 +327,7 @@ export default function OutreachPage() {
     };
     for (const r of rows) {
       if (r.status === "invited") c.invited++;
-      else if (r.status === "accepted") c.accepted++;
+      else if (r.status === "accepted" || r.status === "pending_pre_render") c.accepted++;
       else if (r.status === "rendering" || r.status === "rendered") c.rendering++;
       else if (r.status === "pending_approval") c.pending++;
       else if (r.status === "sent") c.sent++;
@@ -354,10 +355,8 @@ export default function OutreachPage() {
     [rows],
   );
 
-  // Accepted-but-no-approved-video: leads we know accepted, that are stuck
-  // somewhere before the Afventer queue (rendering/failed/no video at all).
-  // Used to recover leads when the SendSpark webhook never fired or when the
-  // poll only just discovered them via DONE status.
+  // Accepted-but-no-approved-video: leads we know accepted, including the
+  // pre-render review queue plus failed/stuck renders that need attention.
   const accepted = useMemo(() => {
     return rows
       .filter((r) => {
@@ -483,6 +482,7 @@ export default function OutreachPage() {
             rows={accepted}
             busyLead={busyLead}
             onRender={(id) => void renderLead(id)}
+            onReject={(r) => void singleDecide(r, "reject")}
           />
         ) : tab === "replies" ? (
           <RepliesTab replies={replies} onMarkHandled={(id) => void markReplyHandled(id)} />
@@ -807,23 +807,25 @@ function PendingTab(props: {
   );
 }
 
-function AcceptedTab({ rows, busyLead, onRender }: {
+function AcceptedTab({ rows, busyLead, onRender, onReject }: {
   rows: PipelineRow[];
   busyLead: string | null;
   onRender: (leadId: string) => void;
+  onReject: (row: PipelineRow) => void;
 }) {
   if (rows.length === 0) {
     return (
       <p className="mt-4 text-sm text-[var(--ink)]/45">
         Ingen accepterede leads venter på en video. Når en lead på SendPilot accepterer
-        connection-requesten kommer de automatisk i “Afventer” så snart videoen er klar.
+        connection-requesten lander de her, så du kan godkende video-render før SendSpark bruger credits.
       </p>
     );
   }
   return (
     <ul className="mt-4 flex flex-col gap-3">
       {rows.map((r) => {
-        const stuck = r.status === "failed" || r.status === "invited" || r.status === "accepted";
+        const canRender = r.status === "pending_pre_render" || r.status === "failed" || r.status === "invited" || r.status === "accepted";
+        const renderLabel = r.status === "failed" ? "Retry render" : "Godkend render";
         return (
           <li key={r.sendpilot_lead_id}
             className="rounded-sm border border-[var(--ink)]/12 bg-[var(--cream)]/40 p-4 sm:p-5">
@@ -848,12 +850,19 @@ function AcceptedTab({ rows, busyLead, onRender }: {
               </div>
               <div className="flex flex-shrink-0 items-center gap-2">
                 <StatusPill status={r.status} />
-                {stuck ? (
-                  <button type="button" disabled={busyLead === r.sendpilot_lead_id}
-                    onClick={() => onRender(r.sendpilot_lead_id)}
-                    className="focus-orange tabular rounded-sm bg-[var(--forest)] px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-[var(--cream)] hover:bg-[#2f5e4e] disabled:opacity-50">
-                    {busyLead === r.sendpilot_lead_id ? "Sender…" : "Render video"}
-                  </button>
+                {canRender ? (
+                  <>
+                    <button type="button" disabled={busyLead === r.sendpilot_lead_id}
+                      onClick={() => onReject(r)}
+                      className="focus-cream tabular rounded-sm border border-[var(--clay)]/40 px-4 py-2 text-[11px] uppercase tracking-[0.22em] text-[var(--clay)] hover:bg-[var(--clay)]/5 disabled:opacity-40">
+                      Afvis
+                    </button>
+                    <button type="button" disabled={busyLead === r.sendpilot_lead_id}
+                      onClick={() => onRender(r.sendpilot_lead_id)}
+                      className="focus-orange tabular rounded-sm bg-[var(--forest)] px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-[var(--cream)] hover:bg-[#2f5e4e] disabled:opacity-50">
+                      {busyLead === r.sendpilot_lead_id ? "Renderer…" : renderLabel}
+                    </button>
+                  </>
                 ) : (
                   <span className="tabular text-[11px] text-[var(--ink)]/45">Render i gang…</span>
                 )}
@@ -1018,6 +1027,7 @@ function StatusPill({ status }: { status: Status }) {
   const map: Record<Status, { label: string; bg: string; fg: string }> = {
     invited: { label: "Inviteret", bg: "rgb(0 0 0 / .06)", fg: "rgb(0 0 0 / .55)" },
     accepted: { label: "Accept", bg: "rgb(0 0 0 / .06)", fg: "rgb(0 0 0 / .55)" },
+    pending_pre_render: { label: "Review", bg: "rgba(185,112,65,0.14)", fg: "var(--clay)" },
     rendering: { label: "Render", bg: "rgb(0 0 0 / .06)", fg: "rgb(0 0 0 / .55)" },
     rendered: { label: "Klar", bg: "rgb(0 0 0 / .06)", fg: "rgb(0 0 0 / .55)" },
     pending_approval: { label: "Afventer", bg: "rgba(185,112,65,0.14)", fg: "var(--clay)" },

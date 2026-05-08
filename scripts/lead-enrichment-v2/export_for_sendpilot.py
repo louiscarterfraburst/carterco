@@ -27,6 +27,7 @@ import csv
 import hashlib
 import re
 import sys
+import urllib.parse
 from typing import Any
 
 from _supabase import select, upsert
@@ -58,6 +59,23 @@ def synth_email(linkedin_url: str) -> str:
     return f"carterco+li-{s}-{h}@carterco.dk"
 
 
+def clean_website(url: str | None) -> str:
+    """Export only the site origin, dropping paths, tracking params, fragments."""
+    raw = (url or "").strip()
+    if not raw:
+        return ""
+    candidate = raw if "://" in raw else "https://" + raw
+    try:
+        parsed = urllib.parse.urlparse(candidate)
+    except Exception:
+        return raw
+    if not parsed.netloc:
+        return raw
+    host = parsed.netloc.lower()
+    scheme = parsed.scheme.lower() if parsed.scheme else "https"
+    return f"{scheme}://{host}"
+
+
 def fetch_all_enriched() -> list[dict[str, Any]]:
     """Paginated fetch of every leads_to_enrich row with a website."""
     rows: list[dict[str, Any]] = []
@@ -79,6 +97,19 @@ def fetch_all_enriched() -> list[dict[str, Any]]:
     return rows
 
 
+def dedupe_by_linkedin_url(leads: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Keep one export row per LinkedIn URL, preserving import order."""
+    seen: set[str] = set()
+    out: list[dict[str, Any]] = []
+    for lead in leads:
+        url = (lead.get("linkedin_url") or "").strip()
+        if not url or url in seen:
+            continue
+        seen.add(url)
+        out.append(lead)
+    return out
+
+
 def build_csv_row(lead: dict[str, Any]) -> dict[str, str]:
     """Map our enriched-lead schema to the SendPilot CSV columns the user's
     previous v1 imports used (matched by sample CSVs in
@@ -95,7 +126,7 @@ def build_csv_row(lead: dict[str, Any]) -> dict[str, str]:
         "title":           lead.get("title") or "",
         "location":        location,
         "country":         country,
-        "website":         lead.get("website") or "",
+        "website":         clean_website(lead.get("website")),
         "website_source":  lead.get("website_pass") or "",
         "miss_reason":     "",
     }
@@ -111,9 +142,16 @@ def main() -> int:
 
     print("Fetching enriched leads…", file=sys.stderr)
     leads = fetch_all_enriched()
+    raw_count = len(leads)
+    leads = dedupe_by_linkedin_url(leads)
     if args.limit:
         leads = leads[: args.limit]
-    print(f"  {len(leads)} leads with website", file=sys.stderr)
+    skipped_dupes = raw_count - len(leads)
+    print(
+        f"  {len(leads)} leads with website"
+        + (f" ({skipped_dupes} duplicate linkedin_url rows skipped)" if skipped_dupes else ""),
+        file=sys.stderr,
+    )
 
     # 1. Write the CSV
     fields = [
@@ -146,7 +184,7 @@ def main() -> int:
             "full_name":     lead.get("full_name"),
             "company":       lead.get("company"),
             "title":         lead.get("title"),
-            "website":       lead.get("website"),
+            "website":       clean_website(lead.get("website")),
             "contact_email": synth_email(url),
             "workspace_id":  WORKSPACE_ID,
             # `slug` is set by the public.outreach_leads_set_slug trigger.

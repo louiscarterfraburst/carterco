@@ -154,8 +154,8 @@ async function WorklistTab() {
   return (
     <div className="space-y-3">
       <p className="text-[12px] text-[var(--cream)]/55">
-        Pull a row, paste the <code className="rounded bg-[var(--cream)]/8 px-1">ref_code</code> into
-        the company&apos;s contact form message body, click <strong>Submitted</strong>.
+        Pull a row, use the tagged persona email for this <code className="rounded bg-[var(--cream)]/8 px-1">ref_code</code>,
+        submit the company&apos;s contact form, then click <strong>Submitted</strong>.
       </p>
       <div className="overflow-hidden rounded-2xl border border-[var(--cream)]/10">
         {subs.map((s) => (
@@ -306,7 +306,7 @@ async function AmbiguousTab() {
   const { data, error } = await sb
     .from("test_submissions")
     .select("id, ref_code, company, website, domain, industry, city, status, submitted_at, first_response_at, notes")
-    .eq("status", "failed")
+    .eq("status", "submitted")
     .like("notes", "%no clear success signal%")
     .order("updated_at", { ascending: false })
     .limit(200);
@@ -319,9 +319,8 @@ async function AmbiguousTab() {
     <div className="space-y-3">
       <p className="text-[12px] text-[var(--cream)]/55">
         Auto-submit filled the form and clicked submit, but couldn&apos;t confirm a thank-you signal.
-        Likely went through — verify by checking if any of these companies reply (calls, SMS, or emails will appear in
-        Submitted/Unmatched tabs once attributed). Click <strong>Mark as submitted</strong> only after you&apos;ve
-        manually confirmed the submission landed (e.g. by checking your inbox).
+        These are already treated as submitted so replies can be attributed; use this list for review alongside
+        screenshots, calls, SMS, and inbox replies.
       </p>
       <div className="overflow-hidden rounded-2xl border border-[var(--cream)]/10">
         {subs.map((s) => (
@@ -352,20 +351,11 @@ async function AmbiguousTab() {
               </div>
               {s.notes && <div className="mt-1 text-[11px] text-[var(--cream)]/40">{s.notes}</div>}
             </div>
-            <form action={markSubmitted} className="flex shrink-0 items-center gap-2">
-              <input type="hidden" name="id" value={s.id} />
-              <input
-                name="submitted_by"
-                placeholder="who confirmed?"
-                className="w-32 rounded-md border border-[var(--cream)]/15 bg-transparent px-3 py-2 text-[12px] placeholder:text-[var(--cream)]/35 focus:border-[#ff6b2c] focus:outline-none"
-              />
-              <button
-                type="submit"
-                className="rounded-full bg-[var(--forest)] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#fff8ea] hover:opacity-90"
-              >
-                Mark submitted
-              </button>
-            </form>
+            {s.submitted_at && (
+              <div className="shrink-0 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--cream)]/45">
+                Soft submitted
+              </div>
+            )}
           </div>
         ))}
       </div>

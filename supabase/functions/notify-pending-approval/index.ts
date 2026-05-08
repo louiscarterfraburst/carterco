@@ -1,5 +1,5 @@
 // Receives a Supabase Database Webhook on outreach_pipeline INSERT/UPDATE.
-// When status transitions into 'pending_approval', fan out a web-push to every
+// When status transitions into 'pending_pre_render' or 'pending_approval', fan out a web-push to every
 // row in push_subscriptions so the approver sees it on their phone instantly.
 // Mirrors the notify-new-lead pattern (same VAPID + push_subscriptions table).
 import { createClient } from "npm:@supabase/supabase-js@2.103.3";
@@ -60,14 +60,14 @@ Deno.serve(async (request) => {
     return json({ error: "Missing record" }, 400);
   }
 
-  // Only fire on transitions INTO pending_approval — skip subsequent updates
-  // and the noisy non-pending statuses.
+  // Only fire on transitions INTO a human-review status — skip subsequent
+  // updates and the noisy non-pending statuses.
   const newStatus = body.record.status;
   const oldStatus = body.old_record?.status ?? null;
-  if (newStatus !== "pending_approval") {
+  if (newStatus !== "pending_pre_render" && newStatus !== "pending_approval") {
     return json({ ok: true, ignored: `status=${newStatus}` });
   }
-  if (body.type === "UPDATE" && oldStatus === "pending_approval") {
+  if (body.type === "UPDATE" && oldStatus === newStatus) {
     return json({ ok: true, ignored: "already pending" });
   }
 
@@ -87,7 +87,9 @@ Deno.serve(async (request) => {
 
   const firstName = (lead?.first_name ?? "").trim() || "(?)";
   const company = (lead?.company ?? "").trim();
-  const title = `Outreach venter: ${firstName}`;
+  const title = newStatus === "pending_pre_render"
+    ? `Video-review: ${firstName}`
+    : `Outreach venter: ${firstName}`;
   const bodyLine = company ? `${firstName} @ ${company}` : firstName;
 
   webpush.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey);

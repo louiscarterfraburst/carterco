@@ -1,7 +1,7 @@
 // Hourly cron poll against Sendpilot's API to backfill leads where the
 // connection.accepted webhook never landed. Mirrors the relevant branch of
 // sendpilot-webhook so a polled lead ends up in the same state as one that
-// arrived via webhook — pipeline row + sendspark render kicked off.
+// arrived via webhook — pipeline row parked for pre-render review.
 //
 // Trigger:
 //   - pg_cron: every hour at :00 (configured in supabase/outreach.sql)
@@ -10,13 +10,12 @@
 // Env:
 //   SENDPILOT_API_KEY        — required
 //   SENDPILOT_CAMPAIGN_IDS   — comma-separated campaign IDs to poll
-//   SENDSPARK_API_KEY/SECRET/WORKSPACE/DYNAMIC — to render videos
 //
 // The function is idempotent: leads already in outreach_pipeline (matched by
 // sendpilot_lead_id OR linkedin_url) are skipped, so re-runs don't re-render.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.103.3";
-import { normalizeCompanyName, normalizeWebsiteUrl, urlOrigin } from "../_shared/text.ts";
+import { normalizeWebsiteUrl } from "../_shared/text.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -35,11 +34,6 @@ const SP_CAMPAIGN_IDS = (Deno.env.get("SENDPILOT_CAMPAIGN_IDS") ?? "")
   .map((s) => s.trim())
   .filter(Boolean);
 
-const SS_API_KEY = Deno.env.get("SENDSPARK_API_KEY") ?? "";
-const SS_API_SECRET = Deno.env.get("SENDSPARK_API_SECRET") ?? "";
-const SS_WORKSPACE = Deno.env.get("SENDSPARK_WORKSPACE") ?? "";
-const SS_DYNAMIC = Deno.env.get("SENDSPARK_DYNAMIC") ?? "";
-
 type SendPilotLead = {
   id: string;
   linkedinUrl: string;
@@ -57,6 +51,7 @@ type SendPilotLead = {
 
 type ProcessResult =
   | "skipped"
+  | "pending_pre_render"
   | "rendering"
   | "invited"
   | "failed_no_email"
@@ -93,6 +88,7 @@ Deno.serve(async (req) => {
     sent_skipped: 0,
     accepted_fetched: 0,
     accepted_skipped_already_in_pipeline: 0,
+    accepted_backfilled_pending_pre_render: 0,
     accepted_backfilled_rendering: 0,
     accepted_backfilled_failed: 0,
     accepted_not_in_outreach_leads: 0,
@@ -121,10 +117,10 @@ Deno.serve(async (req) => {
       summary.errors.push(`campaign ${campaignId} (sent): ${(e as Error).message}`);
     }
 
-    // CONNECTION_ACCEPTED + DONE — full webhook-equivalent flow with sendspark
-    // render. SendPilot moves leads from CONNECTION_ACCEPTED to DONE once their
+    // CONNECTION_ACCEPTED + DONE — full webhook-equivalent flow that parks
+    // the lead for human pre-render review. SendPilot moves leads from CONNECTION_ACCEPTED to DONE once their
     // sequence completes; we treat DONE the same so accepted leads we missed
-    // (webhook downtime, between-poll status flip) still get a video.
+    // (webhook downtime, between-poll status flip) still reach the review queue.
     try {
       const acceptedLeads = await fetchLeadsByStatus(campaignId, "CONNECTION_ACCEPTED");
       const doneLeads = await fetchLeadsByStatus(campaignId, "DONE");
@@ -135,6 +131,7 @@ Deno.serve(async (req) => {
           const result = await processAcceptedLead(lead);
           switch (result) {
             case "skipped": summary.accepted_skipped_already_in_pipeline++; break;
+            case "pending_pre_render": summary.accepted_backfilled_pending_pre_render++; break;
             case "rendering": summary.accepted_backfilled_rendering++; break;
             case "failed_no_email": summary.accepted_backfilled_failed++; break;
             case "no_outreach_lead": summary.accepted_not_in_outreach_leads++; break;
@@ -307,22 +304,14 @@ async function processAcceptedLead(spLead: SendPilotLead): Promise<ProcessResult
     linkedin_url: linkedinUrl,
     contact_email: lead.contact_email,
     is_cold: true,
-    status: "rendering",
+    status: "pending_pre_render",
     accepted_at: now,
     workspace_id: workspaceId,
     campaign_id: campaignId || null,
     sendpilot_sender_id: senderId || null,
   }, { onConflict: "sendpilot_lead_id" });
 
-  const renderRes = await sendsparkRender(lead, campaignId);
-  if (!renderRes.ok) {
-    await supabase.from("outreach_pipeline").update({
-      status: "failed",
-      error: `sendspark render failed (poll): HTTP ${renderRes.status} — ${renderRes.errorBody}`,
-    }).eq("sendpilot_lead_id", leadId);
-    return "sendspark_fail";
-  }
-  return "rendering";
+  return "pending_pre_render";
 }
 
 async function lookupLead(sendpilotLeadId: string, linkedinUrl: string) {
@@ -360,52 +349,11 @@ function linkedinSlug(url: string): string {
   }
 }
 
-// Per-campaign SendSpark dynamic override. Set SS_DYNAMIC_<sendpilotCampaignId>
-// to point a specific SendPilot campaign at a different SendSpark dynamic;
-// falls back to SENDSPARK_DYNAMIC. Mirrors the pickDynamic helper in
-// sendpilot-webhook so both code paths agree.
-function pickDynamic(campaignId: string): string {
-  const id = (campaignId ?? "").trim();
-  if (id) {
-    const perCampaign = Deno.env.get(`SS_DYNAMIC_${id}`);
-    if (perCampaign) return perCampaign;
-  }
-  return SS_DYNAMIC;
-}
-
 // Kill switch for SendSpark renders. Mirrors sendpilot-webhook's helper.
 function isCampaignPaused(campaignId: string): boolean {
   const list = Deno.env.get("SENDSPARK_PAUSED_CAMPAIGNS") ?? "";
   if (!list || !campaignId) return false;
   return list.split(",").map((s) => s.trim()).includes(campaignId);
-}
-
-async function sendsparkRender(lead: Record<string, unknown>, campaignId: string = "") {
-  const payload = {
-    processAndAuthorizeCharge: true,
-    prospect: {
-      contactName: ((lead.first_name as string) ?? "").trim() || "there",
-      contactEmail: lead.contact_email as string,
-      company: normalizeCompanyName(lead.company as string).slice(0, 80),
-      jobTitle: ((lead.title as string) ?? "").slice(0, 100),
-      backgroundUrl: urlOrigin(lead.website as string),
-    },
-  };
-  const dynamicId = pickDynamic(campaignId);
-  const url =
-    `https://api-gw.sendspark.com/v1/workspaces/${SS_WORKSPACE}/dynamics/${dynamicId}/prospect`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      "x-api-key": SS_API_KEY,
-      "x-api-secret": SS_API_SECRET,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  });
-  if (res.ok) return { ok: true, status: res.status, errorBody: "" };
-  const errorBody = await res.text().catch(() => "");
-  return { ok: false, status: res.status, errorBody: errorBody.slice(0, 400) };
 }
 
 function json(obj: unknown, status = 200) {

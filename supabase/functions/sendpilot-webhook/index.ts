@@ -4,7 +4,7 @@
 // in the svix-signature header.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.103.3";
-import { normalizeCompanyName, normalizeWebsiteUrl, urlOrigin } from "../_shared/text.ts";
+import { normalizeWebsiteUrl } from "../_shared/text.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -32,10 +32,6 @@ const supabase = createClient(
 );
 
 const SP_WEBHOOK_SECRET = Deno.env.get("SENDPILOT_WEBHOOK_SECRET") ?? "";
-const SS_API_KEY = Deno.env.get("SENDSPARK_API_KEY") ?? "";
-const SS_API_SECRET = Deno.env.get("SENDSPARK_API_SECRET") ?? "";
-const SS_WORKSPACE = Deno.env.get("SENDSPARK_WORKSPACE") ?? "";
-const SS_DYNAMIC = Deno.env.get("SENDSPARK_DYNAMIC") ?? "";
 
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -182,22 +178,14 @@ Deno.serve(async (request) => {
       linkedin_url: linkedinUrl,
       contact_email: lead.contact_email,
       is_cold: true,
-      status: "rendering",
+      status: "pending_pre_render",
       accepted_at: now,
       workspace_id: workspaceId,
       campaign_id: campaignId || null,
       sendpilot_sender_id: senderId || null,
     }, { onConflict: "sendpilot_lead_id" });
 
-    const renderRes = await sendsparkRender(lead, campaignId);
-    if (!renderRes.ok) {
-      await supabase.from("outreach_pipeline").update({
-        status: "failed",
-        error: `sendspark render failed: HTTP ${renderRes.status}`,
-      }).eq("sendpilot_lead_id", leadId);
-      return json({ ok: false, error: "sendspark render failed", status: renderRes.status });
-    }
-    return json({ ok: true, recorded: "accepted_rendering", cold: true });
+    return json({ ok: true, recorded: "accepted_pending_pre_render", cold: true });
   }
 
   if (isReplyReceived) {
@@ -324,19 +312,6 @@ function linkedinSlug(url: string): string {
   } catch { return ""; }
 }
 
-// Pick the SendSpark dynamic to render against. Per-campaign override:
-// set SS_DYNAMIC_<sendpilotCampaignId> in the function env to point a
-// specific SendPilot campaign at a different SendSpark dynamic (e.g. for
-// a parallel "form-followup" angle). Falls back to SENDSPARK_DYNAMIC.
-function pickDynamic(campaignId: string): string {
-  const id = (campaignId ?? "").trim();
-  if (id) {
-    const perCampaign = Deno.env.get(`SS_DYNAMIC_${id}`);
-    if (perCampaign) return perCampaign;
-  }
-  return SS_DYNAMIC;
-}
-
 // Kill switch for SendSpark renders by SendPilot campaignId. Set
 // SENDSPARK_PAUSED_CAMPAIGNS=<id1>,<id2> in env to suppress all video
 // renders for those campaigns. Used to avoid burning SendSpark credits
@@ -346,31 +321,6 @@ function isCampaignPaused(campaignId: string): boolean {
   const list = Deno.env.get("SENDSPARK_PAUSED_CAMPAIGNS") ?? "";
   if (!list || !campaignId) return false;
   return list.split(",").map((s) => s.trim()).includes(campaignId);
-}
-
-async function sendsparkRender(lead: Record<string, unknown>, campaignId: string = "") {
-  const payload = {
-    processAndAuthorizeCharge: true,
-    prospect: {
-      contactName: ((lead.first_name as string) ?? "").trim() || "there",
-      contactEmail: lead.contact_email as string,
-      company: normalizeCompanyName(lead.company as string).slice(0, 80),
-      jobTitle: ((lead.title as string) ?? "").slice(0, 100),
-      backgroundUrl: urlOrigin(lead.website as string),
-    },
-  };
-  const dynamicId = pickDynamic(campaignId);
-  const url = `https://api-gw.sendspark.com/v1/workspaces/${SS_WORKSPACE}/dynamics/${dynamicId}/prospect`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      "x-api-key": SS_API_KEY,
-      "x-api-secret": SS_API_SECRET,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  });
-  return { ok: res.ok, status: res.status };
 }
 
 async function verifySvix(headers: Headers, rawBody: string, secret: string): Promise<boolean> {

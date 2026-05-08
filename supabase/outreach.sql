@@ -58,6 +58,7 @@ do $$ begin
     create type public.outreach_status as enum (
         'invited',          -- connection.sent observed
         'accepted',         -- connection.accepted observed
+        'pending_pre_render', -- accepted, awaiting human approval before SendSpark render
         'rendering',        -- POSTed to SendSpark, awaiting callback
         'rendered',         -- video ready, ready to send
         'pending_approval', -- queued in cockpit, awaiting human approve
@@ -70,6 +71,7 @@ exception when duplicate_object then null; end $$;
 
 -- Idempotent enum extension for already-deployed databases.
 alter type public.outreach_status add value if not exists 'pre_connected';
+alter type public.outreach_status add value if not exists 'pending_pre_render';
 
 create table if not exists public.outreach_pipeline (
     sendpilot_lead_id   text primary key,
@@ -183,9 +185,9 @@ create policy push_subscriptions_workspace_all on public.push_subscriptions
     using (workspace_id in (select public.auth_workspace_ids()))
     with check (workspace_id in (select public.auth_workspace_ids()));
 
--- 6. Pending-approval notification trigger ----------------------------------
+-- 6. Pending-review notification trigger ----------------------------------
 -- Fires notify-pending-approval edge function on transitions into
--- pending_approval. Equivalent to a Supabase Database Webhook configured
+-- pending_pre_render or pending_approval. Equivalent to a Supabase Database Webhook configured
 -- in the dashboard, but defined as code so it ships with the migration.
 create or replace function public.outreach_notify_pending()
 returns trigger
@@ -196,8 +198,11 @@ as $$
 declare
     transitioned boolean;
 begin
-    transitioned := new.status = 'pending_approval'
-        and (tg_op = 'INSERT' or coalesce(old.status::text, '') <> 'pending_approval');
+    transitioned := new.status::text in ('pending_pre_render', 'pending_approval')
+        and (
+            tg_op = 'INSERT'
+            or coalesce(old.status::text, '') <> new.status::text
+        );
     if not transitioned then
         return new;
     end if;

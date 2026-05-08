@@ -68,7 +68,7 @@ CREATE TABLE IF NOT EXISTS public.test_responses (
 
   -- Attribution provenance
   matched_via     text        CHECK (matched_via IS NULL
-                              OR matched_via IN ('domain','ref_code','manual')),
+                              OR matched_via IN ('email_tag','domain','ref_code','manual')),
   match_confidence numeric,
 
   inserted_at     timestamptz DEFAULT now()
@@ -80,6 +80,14 @@ CREATE INDEX IF NOT EXISTS test_responses_unassigned_idx
   ON public.test_responses (received_at) WHERE submission_id IS NULL;
 CREATE INDEX IF NOT EXISTS test_responses_received_idx
   ON public.test_responses (received_at);
+
+ALTER TABLE public.test_responses
+  DROP CONSTRAINT IF EXISTS test_responses_matched_via_check;
+
+ALTER TABLE public.test_responses
+  ADD CONSTRAINT test_responses_matched_via_check
+  CHECK (matched_via IS NULL
+         OR matched_via IN ('email_tag','domain','ref_code','manual'));
 
 -- ─── First-response trigger ────────────────────────────────────────────
 -- When a response lands and is attributed, update the parent submission's

@@ -178,6 +178,10 @@ async function handleRenderReady(evt: SendSparkEvent, email: string, videoLink: 
     if (pipe.status === "sent" || pipe.status === "rejected") {
         return json({ ok: true, recorded: "render_after_terminal" });
     }
+    if (pipe.status === "pending_pre_render") {
+        console.warn("video_generated_dv arrived before pre-render approval", { email, videoLink });
+        return json({ ok: true, recorded: "render_before_pre_render_approval" });
+    }
 
     const { data: lead } = await supabase
         .from("outreach_leads")
@@ -231,7 +235,7 @@ async function handleEngagement(kind: EventKind, email: string) {
 
     const { data: pipe } = await supabase
         .from("outreach_pipeline")
-        .select(`sendpilot_lead_id, status, ${column}`)
+        .select(`sendpilot_lead_id, status, sent_at, ${column}`)
         .eq("contact_email", email)
         .maybeSingle();
 
@@ -240,14 +244,34 @@ async function handleEngagement(kind: EventKind, email: string) {
         return json({ ok: true, recorded: `${kind}_no_pipeline` });
     }
 
-    // Skip if column is already set — engagement events fire idempotently.
-    // deno-lint-ignore no-explicit-any
-    if ((pipe as any)[column]) {
-        return json({ ok: true, recorded: `${kind}_already_set` });
+    const now = new Date();
+    if (kind !== "render_failed") {
+        const sentAtRaw = (pipe as { sent_at?: string | null }).sent_at;
+        const sentAt = sentAtRaw ? new Date(sentAtRaw) : null;
+        const internalPreviewBufferMs = 5 * 60 * 1000;
+        if (!sentAt || now.getTime() <= sentAt.getTime() + internalPreviewBufferMs) {
+            return json({ ok: true, recorded: `${kind}_ignored_internal_preview` });
+        }
+
+        // Skip only if the existing engagement is already a valid post-send
+        // prospect signal. Older pre-send/internal previews may be overwritten
+        // by a later real engagement.
+        const existingRaw = (pipe as Record<string, string | null | undefined>)[column];
+        if (existingRaw) {
+            const existing = new Date(existingRaw);
+            if (existing.getTime() > sentAt.getTime() + internalPreviewBufferMs) {
+                return json({ ok: true, recorded: `${kind}_already_set` });
+            }
+        }
+    } else {
+        // Skip if column is already set — render_failed events fire idempotently.
+        const existingRaw = (pipe as Record<string, string | null | undefined>)[column];
+        if (existingRaw) {
+            return json({ ok: true, recorded: `${kind}_already_set` });
+        }
     }
 
-    const now = new Date().toISOString();
-    const update: Record<string, unknown> = { [column]: now };
+    const update: Record<string, unknown> = { [column]: now.toISOString() };
     if (kind === "render_failed") {
         update.status = "failed";
         update.error = "sendspark video_failed_to_generate";

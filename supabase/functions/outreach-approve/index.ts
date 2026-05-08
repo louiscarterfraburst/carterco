@@ -2,9 +2,8 @@
 // (louis@carterco.dk or rm@tresyv.dk) acts on a pipeline lead:
 //   approve → POST /v1/inbox/send → status='sent'
 //   reject  → status='rejected'
-//   render  → POST /v1/dynamics/.../prospect → kicks a fresh SendSpark render
-//             for any accepted lead (used by the Accepteret tab to recover
-//             leads that never got a video).
+//   render  → POST /v1/dynamics/.../prospect → kicks a SendSpark render
+//             for any accepted/pre-render/failed lead.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.103.3";
 import { normalizeCompanyName, urlOrigin } from "../_shared/text.ts";
@@ -64,7 +63,7 @@ Deno.serve(async (request) => {
   // Fetch the pipeline row.
   const { data: pipe, error: fetchErr } = await admin
     .from("outreach_pipeline")
-    .select("sendpilot_lead_id, contact_email, linkedin_url, status, rendered_message, video_link, accepted_at, workspace_id, sendpilot_sender_id")
+    .select("sendpilot_lead_id, contact_email, linkedin_url, status, rendered_message, video_link, accepted_at, workspace_id, sendpilot_sender_id, campaign_id")
     .eq("sendpilot_lead_id", leadId)
     .maybeSingle();
   if (fetchErr) return json({ error: "db fetch", details: fetchErr.message }, 500);
@@ -81,7 +80,7 @@ Deno.serve(async (request) => {
       .maybeSingle();
     if (!lead) return json({ error: "outreach_leads row missing for this contact_email" }, 404);
 
-    const renderRes = await sendsparkRender(lead);
+    const renderRes = await sendsparkRender(lead, pipe.campaign_id ?? "");
     await admin.from("outreach_pipeline").update({
       status: renderRes.ok ? "rendering" : "failed",
       accepted_at: pipe.accepted_at ?? now,
@@ -92,17 +91,20 @@ Deno.serve(async (request) => {
     return json({ ok: renderRes.ok, decision: "render", status: renderRes.status });
   }
 
-  if (pipe.status !== "pending_approval") {
-    return json({ error: `lead is in status '${pipe.status}', not pending_approval` }, 409);
-  }
-
   if (decision === "reject") {
+    if (pipe.status === "sent") {
+      return json({ error: "lead is already sent" }, 409);
+    }
     await admin.from("outreach_pipeline").update({
       status: "rejected",
       decided_at: now,
       decided_by: email,
     }).eq("sendpilot_lead_id", leadId);
     return json({ ok: true, decision: "rejected" });
+  }
+
+  if (pipe.status !== "pending_approval") {
+    return json({ error: `lead is in status '${pipe.status}', not pending_approval` }, 409);
   }
 
   // Approve → POST /inbox/send.
@@ -188,7 +190,18 @@ Deno.serve(async (request) => {
   return json({ ok: success, decision: "sent", status: send.status, response: respBody });
 });
 
-async function sendsparkRender(lead: Record<string, unknown>) {
+// Per-campaign SendSpark dynamic override. Mirrors sendpilot-webhook and
+// sendpilot-poll so manual pre-render approval uses the correct dynamic.
+function pickDynamic(campaignId: string): string {
+  const id = (campaignId ?? "").trim();
+  if (id) {
+    const perCampaign = Deno.env.get(`SS_DYNAMIC_${id}`);
+    if (perCampaign) return perCampaign;
+  }
+  return SS_DYNAMIC;
+}
+
+async function sendsparkRender(lead: Record<string, unknown>, campaignId = "") {
   const payload = {
     processAndAuthorizeCharge: true,
     prospect: {
@@ -199,8 +212,9 @@ async function sendsparkRender(lead: Record<string, unknown>) {
       backgroundUrl: urlOrigin(lead.website as string),
     },
   };
+  const dynamicId = pickDynamic(campaignId);
   const url =
-    `https://api-gw.sendspark.com/v1/workspaces/${SS_WORKSPACE}/dynamics/${SS_DYNAMIC}/prospect`;
+    `https://api-gw.sendspark.com/v1/workspaces/${SS_WORKSPACE}/dynamics/${dynamicId}/prospect`;
   const res = await fetch(url, {
     method: "POST",
     headers: {

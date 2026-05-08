@@ -11,14 +11,14 @@ leads_to_enrich (already populated)
 test_submissions  ─── one row per company we'll test, with ref_code + domain
         │
         ▼  YOU manually fill out their contact form using:
-                · the persona email
-                · ref_code in the message body (e.g. "Looking for X · ref RX-7K3J")
+                · the tagged persona email (local+RX-XXXXXX@gmail.com)
+                · the normal persona message body
                 · then click "Submitted" in /test-leads admin UI
         │
         ▼  Salesperson replies → persona Gmail
         │
         ▼  poll_inbox.py (runs continuously)
-test_responses   ─── attributed via domain match → ref_code → manual queue
+test_responses   ─── attributed via email tag → legacy ref_code → domain match → manual queue
         │
         ▼  Admin UI shows time-to-respond per company; warmth pill (≤5m / ≤1h / >1h)
 ```
@@ -69,24 +69,25 @@ python3 auto_submit.py --limit 50            # fire 50 real submissions
 python3 auto_submit.py --only-ref RX-7K3JM2  # debug one specific company
 
 # 3b. MANUAL submission via the admin UI at http://localhost:3000/test-leads:
-#     - Worklist tab → pull a row, paste the ref_code into their contact form
+#     - Worklist tab → pull a row, use the tagged persona email for that ref_code
 #     - Click "Submitted" to stamp submitted_at
 ```
 
 ## Auto-submit details
 
-`auto_submit.py` opens each pending company's website in a real Chromium (not headless by default — anti-bot detection is much higher in headless), tries common contact paths (`/kontakt`, `/contact`, etc.), and falls back to scanning nav links for "Kontakt"/"Contact" anchors. Once it lands on a page with a form, it screenshots + asks Claude Sonnet to map the form fields to CSS selectors, fills them with persona data + ref code, clicks submit, and watches for a success indicator.
+`auto_submit.py` opens each pending company's website in a real Chromium (not headless by default — anti-bot detection is much higher in headless), tries common contact paths (`/kontakt`, `/contact`, etc.), and falls back to scanning nav links for "Kontakt"/"Contact" anchors. Once it lands on a page with a form, it screenshots + asks Claude Sonnet to map the form fields to CSS selectors, fills them with persona data using a tagged reply email, clicks submit, and watches for a success indicator.
 
 - Each attempt drops `data/screenshots/<refcode>.png` (before submit) and `<refcode>_after.png` (after) for audit.
-- Failures are recorded with `status='failed'` and `notes` explaining why (cookie banner blocked, no form found, captcha, submit gave no signal, etc.).
+- Failures are recorded with `status='failed'` and `notes` explaining why (cookie banner blocked, no form found, captcha, etc.). If the submit click fired but no thank-you signal appeared, the row is soft-submitted so replies can still be attributed.
 - Expect ~30–60% success rate. Forms vary wildly; modern anti-bot (Cloudflare, hCaptcha, reCAPTCHA invisible) blocks a chunk silently.
 - Run with `--dry-run` first on 3-5 companies to spot-check the field mapping before unleashing on hundreds.
 
 ## Attribution (in order)
 
-1. **Ref code** — the `RX-XXXXXX` in your form message survives in quoted replies. Most specific, wins on conflict.
-2. **Sender domain** — if the reply comes from `@<submission.domain>`, attribute. Skips `gmail.com`/`hotmail.com`/etc.
-3. **Unmatched** — `submission_id IS NULL`. Surfaced in the admin UI for manual assign.
+1. **Email tag** — the persona email uses `+RX-XXXXXX`, and Gmail preserves that tag in reply headers. Most specific, wins on conflict.
+2. **Legacy ref code** — old submissions may still include `RX-XXXXXX` in subject/body.
+3. **Sender domain** — if the reply comes from `@<submission.domain>`, attribute. Skips `gmail.com`/`hotmail.com`/etc.
+4. **Unmatched** — `submission_id IS NULL`. Surfaced in the admin UI for manual assign.
 
 ## Warmth definitions
 

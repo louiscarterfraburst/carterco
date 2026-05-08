@@ -8,6 +8,7 @@
 // LinkedIn section can show several people.
 
 import { createAdminClient } from "@/utils/supabase/admin";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 
 export const dynamic = "force-dynamic";
@@ -87,7 +88,7 @@ export default async function ProspectTimelinePage({
     const enriched = (enrichedRows ?? []).filter((r) => r.linkedin_url);
     const liUrls = enriched.map((r) => r.linkedin_url as string);
 
-    let pipelineByUrl: Record<string, Record<string, string | null>> = {};
+    const pipelineByUrl: Record<string, Record<string, string | null>> = {};
     if (liUrls.length > 0) {
       const { data: pipelineRows } = await sb
         .from("outreach_pipeline")
@@ -171,12 +172,12 @@ export default async function ProspectTimelinePage({
     <div className="min-h-screen bg-[#0f0d0a] text-[var(--cream)]">
       <header className="border-b border-[var(--cream)]/10 px-8 py-6">
         <div className="mx-auto max-w-4xl">
-          <a
+          <Link
             href="/test-leads"
             className="text-[10px] font-bold uppercase tracking-[0.3em] text-[#ff6b2c]/80 hover:text-[#ff6b2c]"
           >
             ← back to test-leads
-          </a>
+          </Link>
           <div className="mt-3 flex flex-wrap items-baseline gap-3">
             <h1 className="font-display text-2xl">{sub.company || sub.domain || "—"}</h1>
             <span className="font-mono text-[11px] uppercase tracking-[0.2em] text-[#ff6b2c]/80">
