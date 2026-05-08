@@ -8,6 +8,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.103.3";
 import { normalizeCompanyName, urlOrigin } from "../_shared/text.ts";
+import { checkLeadReplied } from "../_shared/sendpilot-client.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -118,6 +119,35 @@ Deno.serve(async (request) => {
   }
   if (!pipe.linkedin_url) {
     return json({ error: "lead has no linkedin_url" }, 400);
+  }
+
+  // LIVE SAFETY CHECK: ask SendPilot directly whether this lead has replied
+  // before sending. Stateless — doesn't depend on webhooks arriving, our DB
+  // being current, or async classification succeeding. Fail-safe: if we
+  // can't verify, we treat as replied and abort the send (better to miss a
+  // follow-up than to fire on someone who already responded).
+  const replyCheck = await checkLeadReplied({
+    apiKey: SP_API_KEY,
+    senderAccountId: pipe.sendpilot_sender_id,
+    recipientLinkedinUrl: pipe.linkedin_url,
+  });
+  if (replyCheck.replied) {
+    const lastReplyAt = "lastReplyAt" in replyCheck ? replyCheck.lastReplyAt : now;
+    const reason = "reason" in replyCheck ? replyCheck.reason : "live API confirmed prior reply";
+    await admin.from("outreach_pipeline").update({
+      status: "rejected",
+      decided_at: now,
+      decided_by: email,
+      last_reply_at: lastReplyAt,
+      error: `approve aborted: ${replyCheck.source} — ${reason}`,
+    }).eq("sendpilot_lead_id", leadId);
+    return json({
+      ok: false,
+      decision: "blocked_by_live_reply_check",
+      source: replyCheck.source,
+      reason,
+      last_reply_at: lastReplyAt,
+    }, 409);
   }
 
   const send = await fetch("https://api.sendpilot.ai/v1/inbox/send", {

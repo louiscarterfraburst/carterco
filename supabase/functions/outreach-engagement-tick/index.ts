@@ -29,6 +29,7 @@ import {
     type Sequence,
     type SequenceBranch,
 } from "../_shared/sequences.ts";
+import { checkLeadReplied } from "../_shared/sendpilot-client.ts";
 
 const corsHeaders = {
     "Access-Control-Allow-Origin": "*",
@@ -413,14 +414,41 @@ async function executeAction(
         }).eq("sendpilot_lead_id", row.sendpilot_lead_id);
         return { dispatched: "auto_send_skipped", reason: "missing sender_id or linkedin_url" };
     }
-    // Defense-in-depth reply check. last_reply_at on the row is the
-    // primary signal (set synchronously by sendpilot-webhook on reply
-    // receipt), but if for any reason that propagation failed, also
-    // scan outreach_events for ANY reply event for this leadId.
-    // This catches: webhook outages, renamed event types, async
-    // classification failures, manual data inconsistency. Erik Mygind
-    // Nielsen replied "På ingen måde!" and we still fired a follow-up
-    // because his reply never made it to last_reply_at — never again.
+    // Defense-in-depth reply checks, in order of authority:
+    //
+    // (1) LIVE SendPilot API check — ask their server right now whether
+    //     the prospect has replied. Stateless, doesn't depend on webhooks
+    //     arriving, our DB being current, async classification, anything.
+    //     Fail-safe: if SendPilot is unreachable we treat as replied and
+    //     ABORT the send. Cost: ~1 HTTP call per fire, ~200-400ms.
+    //
+    // (2) outreach_events fallback — if we somehow skip (1), also scan
+    //     our raw event log for any reply event we received. Catches:
+    //     webhook outages with later catch-up, renamed event types,
+    //     classification failures.
+    //
+    // (1) is authoritative; (2) is belt-and-suspenders for cases where (1)
+    // fails open and we still want to halt.
+    const liveCheck = await checkLeadReplied({
+        apiKey: SP_API_KEY,
+        senderAccountId: row.sendpilot_sender_id,
+        recipientLinkedinUrl: row.linkedin_url,
+    });
+    if (liveCheck.replied) {
+        const lastReplyAt = "lastReplyAt" in liveCheck ? liveCheck.lastReplyAt : new Date().toISOString();
+        const reason = "reason" in liveCheck ? liveCheck.reason : "live SendPilot API confirmed reply";
+        await supabase.from("outreach_pipeline").update({
+            last_reply_at: lastReplyAt,
+            error: `auto_send aborted: ${liveCheck.source} — ${reason}`,
+        }).eq("sendpilot_lead_id", row.sendpilot_lead_id);
+        return {
+            dispatched: "auto_send_aborted",
+            reason: `live reply check: ${liveCheck.source}`,
+            details: reason,
+            last_reply_at: lastReplyAt,
+        };
+    }
+
     const { data: replyEvents } = await supabase
         .from("outreach_events")
         .select("event_id,received_at")
