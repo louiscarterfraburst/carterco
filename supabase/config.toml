@@ -394,6 +394,14 @@ verify_jwt = false
 [functions.outreach-engagement-tick]
 verify_jwt = false
 
+# Cron polls SendPilot without a user JWT.
+[functions.sendpilot-poll]
+verify_jwt = false
+
+# DB trigger fans out push notifications without a user JWT.
+[functions.notify-pending-approval]
+verify_jwt = false
+
 # One-shot recovery for the May 2026 webhook-401 incident. Manual invoke only.
 [functions.recover-stuck-renders]
 verify_jwt = false
