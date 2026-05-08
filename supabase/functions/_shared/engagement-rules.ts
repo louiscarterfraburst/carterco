@@ -44,17 +44,30 @@ export type LeadSignals = Partial<Record<Signal, Date>>;
 // Build the Signal → timestamp map from an outreach_pipeline row.
 //
 // IMPORTANT: engagement signals (viewed/played/watched_end/cta_clicked/liked)
-// only count if they happen AFTER the initial DM was actually sent. Without
-// this guard, an internal preview (Louis or Rasmus opening the video while
-// reviewing in /outreach) registers as `played` and arms the watched_followup
-// sequence. The engine then fires nysgerrig the moment the DM lands —
-// prospect gets two messages back-to-back. Confirmed in production: Erik
-// Mygind Nielsen got nysgerrig 109ms after his initial DM because the video
-// had been previewed 30 min earlier.
+// only count if they happen STRICTLY AFTER the initial DM was sent AND a
+// short post-send buffer has elapsed. SendSpark webhook payloads contain
+// no viewer-identifying data (no user-agent, no IP, no viewerEmail), so
+// when Louis or Rasmus previews a video in /outreach, the event is
+// indistinguishable from a real prospect play. Two heuristic guards
+// protect against treating internal previews as engagement:
+//
+//   1. played_at <= sent_at  → preview (impossible for prospect to engage
+//      before DM was delivered). Confirmed: Erik Mygind Nielsen got
+//      nysgerrig 109ms after his initial DM because the video had been
+//      previewed 30 min EARLIER, and the engine treated that 30-min-old
+//      "play" as 30-min-old engagement → fired immediately.
+//
+//   2. sent_at < played_at < sent_at + INTERNAL_PREVIEW_BUFFER_MS → likely
+//      preview (real B2B prospects rarely open a LinkedIn DM and watch a
+//      personalised video within minutes of receipt). Trade-off: we'll
+//      miss the occasional truly-instant prospect engagement, but block
+//      the much-more-common false positive of post-approval review.
 //
 // `replied` and `render_failed` are NOT gated — they're terminal/branch
 // signals where false positives are safe (they only ever STOP further
 // sends, never trigger them).
+const INTERNAL_PREVIEW_BUFFER_MS = 5 * 60 * 1000; // 5 minutes
+
 export function signalsForLead(row: {
     sent_at?: string | null;
     viewed_at?: string | null;
@@ -72,7 +85,11 @@ export function signalsForLead(row: {
         if (!ts) return null;
         if (!sentAt) return null; // no DM dispatched yet → any engagement is noise
         const d = new Date(ts);
-        return d > sentAt ? d : null;
+        // Require: (a) strictly after sent, and (b) outside the
+        // internal-preview window after sent. Prevents both pre-send
+        // previews AND fast post-approval reviews from arming sequences.
+        if (d.getTime() <= sentAt.getTime() + INTERNAL_PREVIEW_BUFFER_MS) return null;
+        return d;
     }
 
     if (row.sent_at)          out.sent          = new Date(row.sent_at);
