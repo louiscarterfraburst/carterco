@@ -398,6 +398,11 @@ verify_jwt = false
 [functions.recover-stuck-renders]
 verify_jwt = false
 
+# Hourly health check — detects when SendPilot webhook delivery has gone
+# silent and writes to outreach_health_alerts. Cron-callable.
+[functions.outreach-webhook-health]
+verify_jwt = false
+
 [analytics]
 enabled = true
 port = 54327
