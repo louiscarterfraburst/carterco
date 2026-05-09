@@ -13,7 +13,7 @@ import {
 import Link from "next/link";
 import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/utils/supabase/client";
-import { useWorkspace } from "@/utils/workspace";
+import { useWorkspace, type Workspace } from "@/utils/workspace";
 
 const VAPID_PUBLIC_KEY =
   process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ??
@@ -100,7 +100,10 @@ export default function OutreachPage() {
   const [user, setUser] = useState<User | null>(null);
   const [email, setEmail] = useState("");
   const [token, setToken] = useState("");
-  const { workspace, loading: workspaceLoading } = useWorkspace(supabase, user);
+  const { workspace, workspaces, loading: workspaceLoading } = useWorkspace(supabase, user);
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string>(() =>
+    typeof window === "undefined" ? "" : window.localStorage.getItem("outreach_workspace_id") ?? "",
+  );
   const [rows, setRows] = useState<PipelineRow[]>([]);
   const [replies, setReplies] = useState<Reply[]>([]);
   const [loading, setLoading] = useState(true);
@@ -120,6 +123,18 @@ export default function OutreachPage() {
   const [pushStatus, setPushStatus] = useState<string>("…");
 
   const reloadTimer = useRef<number | null>(null);
+  const activeWorkspace = useMemo(() => {
+    if (!workspaces.length) return null;
+    return workspaces.find((w) => w.id === selectedWorkspaceId) ?? workspace ?? workspaces[0];
+  }, [selectedWorkspaceId, workspace, workspaces]);
+  const activeWorkspaceId = activeWorkspace?.id ?? "";
+
+  function chooseWorkspace(id: string) {
+    setSelectedWorkspaceId(id);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("outreach_workspace_id", id);
+    }
+  }
 
   // ---------- auth ----------
   useEffect(() => {
@@ -138,9 +153,11 @@ export default function OutreachPage() {
   // ---------- data load ----------
   const load = useCallback(async () => {
     setErr(null);
+    if (!activeWorkspaceId) return;
     const { data: pipe, error: pipeErr } = await supabase
       .from("outreach_pipeline")
       .select("*")
+      .eq("workspace_id", activeWorkspaceId)
       .order("updated_at", { ascending: false })
       .limit(1000);
     if (pipeErr) { setErr(pipeErr.message); return; }
@@ -148,6 +165,7 @@ export default function OutreachPage() {
     const { data: leads } = await supabase
       .from("outreach_leads")
       .select("contact_email, first_name, last_name, company, title, website")
+      .eq("workspace_id", activeWorkspaceId)
       .in("contact_email", emails.length ? emails : [""]);
     const leadMap = new Map((leads ?? []).map((l) => [l.contact_email, l as LeadEnrich]));
     setRows(((pipe ?? []) as PipelineRow[]).map((r) => ({ ...r, lead: leadMap.get(r.contact_email) })));
@@ -155,6 +173,7 @@ export default function OutreachPage() {
     const { data: replyRows } = await supabase
       .from("outreach_replies")
       .select("*")
+      .eq("workspace_id", activeWorkspaceId)
       .order("received_at", { ascending: false })
       .limit(200);
     const replyLeadIds = Array.from(new Set((replyRows ?? []).map((r) => r.sendpilot_lead_id)));
@@ -162,6 +181,7 @@ export default function OutreachPage() {
       ? await supabase
           .from("outreach_pipeline")
           .select("sendpilot_lead_id, contact_email")
+          .eq("workspace_id", activeWorkspaceId)
           .in("sendpilot_lead_id", replyLeadIds)
       : { data: [] as { sendpilot_lead_id: string; contact_email: string }[] };
     const replyEmailById = new Map((replyLeads ?? []).map((r) => [r.sendpilot_lead_id, r.contact_email]));
@@ -169,7 +189,7 @@ export default function OutreachPage() {
       ...r,
       lead: leadMap.get(replyEmailById.get(r.sendpilot_lead_id) ?? ""),
     })));
-  }, [supabase]);
+  }, [activeWorkspaceId, supabase]);
 
   const scheduleReload = useCallback(() => {
     if (reloadTimer.current) window.clearTimeout(reloadTimer.current);
@@ -177,20 +197,20 @@ export default function OutreachPage() {
   }, [load]);
 
   useEffect(() => {
-    if (user) void Promise.resolve().then(load);
-  }, [user, load]);
+    if (user && activeWorkspaceId) void Promise.resolve().then(load);
+  }, [user, activeWorkspaceId, load]);
 
   // ---------- realtime ----------
   useEffect(() => {
-    if (!user || !workspace?.id) return;
-    const filter = `workspace_id=eq.${workspace.id}`;
+    if (!user || !activeWorkspaceId) return;
+    const filter = `workspace_id=eq.${activeWorkspaceId}`;
     const ch = supabase
-      .channel(`outreach-live-${workspace.id}`)
+      .channel(`outreach-live-${activeWorkspaceId}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "outreach_pipeline", filter }, () => scheduleReload())
       .on("postgres_changes", { event: "*", schema: "public", table: "outreach_replies",  filter }, () => scheduleReload())
       .subscribe();
     return () => { void supabase.removeChannel(ch); };
-  }, [user, workspace?.id, supabase, scheduleReload]);
+  }, [user, activeWorkspaceId, supabase, scheduleReload]);
 
   // ---------- push ----------
   useEffect(() => { if (user) void refreshPushStatus(); }, [user]); // eslint-disable-line
@@ -237,7 +257,7 @@ export default function OutreachPage() {
         p256dh: json.keys?.p256dh,
         auth: json.keys?.auth,
         user_agent: navigator.userAgent,
-        workspace_id: workspace?.id,
+        workspace_id: activeWorkspace?.id,
       }, { onConflict: "endpoint" });
       if (error) throw error;
       setPushStatus("Aktiv");
@@ -402,7 +422,7 @@ export default function OutreachPage() {
     />;
   }
 
-  if (!workspaceLoading && !workspace) {
+  if (!workspaceLoading && !activeWorkspace) {
     return (
       <main className="safe-screen safe-pad-top safe-pad-bottom safe-px relative min-h-screen overflow-hidden bg-[var(--sand)] text-[var(--ink)]">
         <div className="grain-overlay" />
@@ -429,6 +449,9 @@ export default function OutreachPage() {
       <Header
         pushStatus={pushStatus} onEnablePush={enableNotifications}
         onReload={load} onSignOut={signOut}
+        workspaces={workspaces}
+        activeWorkspace={activeWorkspace}
+        onWorkspaceChange={chooseWorkspace}
       />
 
       <section className="mx-auto w-full max-w-[1400px] px-4 pt-10 pb-6 sm:px-8 sm:pt-14 lg:px-12">
@@ -498,16 +521,33 @@ export default function OutreachPage() {
 
 // ============================== sub-components ==============================
 
-function Header({ pushStatus, onEnablePush, onReload, onSignOut }: {
+function Header({ pushStatus, onEnablePush, onReload, onSignOut, workspaces, activeWorkspace, onWorkspaceChange }: {
   pushStatus: string; onEnablePush: () => Promise<void>;
   onReload: () => Promise<void>; onSignOut: () => Promise<void>;
+  workspaces: Workspace[];
+  activeWorkspace: Workspace | null;
+  onWorkspaceChange: (id: string) => void;
 }) {
   return (
     <div className="safe-pad-top sticky top-0 z-20 border-b border-[var(--ink)]/[0.10] bg-[var(--sand)]/85 backdrop-blur-xl">
       <div className="mx-auto flex w-full max-w-[1400px] items-center justify-between gap-3 px-4 py-3 sm:gap-4 sm:px-8 lg:px-12">
-        <Link href="/" className="tabular truncate text-[10px] uppercase tracking-[0.24em] text-[var(--ink)]/50 hover:text-[var(--ink)]/80 sm:tracking-[0.35em]">
-          CarterCo<span className="mx-2 text-[var(--ink)]/25">/</span><span className="text-[var(--ink)]/75">Outreach</span>
-        </Link>
+        <div className="flex min-w-0 items-center gap-3">
+          <Link href="/" className="tabular truncate text-[10px] uppercase tracking-[0.24em] text-[var(--ink)]/50 hover:text-[var(--ink)]/80 sm:tracking-[0.35em]">
+            CarterCo<span className="mx-2 text-[var(--ink)]/25">/</span><span className="text-[var(--ink)]/75">Outreach</span>
+          </Link>
+          {workspaces.length > 1 ? (
+            <select
+              value={activeWorkspace?.id ?? ""}
+              onChange={(e) => onWorkspaceChange(e.target.value)}
+              className="focus-cream tabular rounded-sm border border-[var(--ink)]/15 bg-transparent px-2 py-1.5 text-[10px] uppercase tracking-[0.18em] text-[var(--ink)]/65 outline-none hover:border-[var(--ink)]/35 focus:border-[var(--ink)]/35"
+              title="Dashboard"
+            >
+              {workspaces.map((w) => (
+                <option key={w.id} value={w.id}>{w.name}</option>
+              ))}
+            </select>
+          ) : null}
+        </div>
         <div className="flex shrink-0 items-center gap-2">
           <button type="button" onClick={() => void onEnablePush()}
             className="focus-cream tabular rounded-sm border border-[var(--ink)]/15 px-3 py-1.5 text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/65 hover:border-[var(--ink)]/35 hover:text-[var(--ink)]"

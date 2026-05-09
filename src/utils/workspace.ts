@@ -3,16 +3,16 @@ import { useEffect, useState } from "react";
 
 export type Workspace = { id: string; name: string };
 
-// Returns the first workspace the authenticated user is a member of. RLS
-// filters the query to only workspaces where the current JWT email is a member.
+// Returns the workspaces the authenticated user is a member of. RLS filters the
+// query to only workspaces where the current JWT email is a member.
 export function useWorkspace(
   supabase: SupabaseClient,
   user: User | null,
-): { workspace: Workspace | null; loading: boolean } {
+): { workspace: Workspace | null; workspaces: Workspace[]; loading: boolean } {
   const [state, setState] = useState<{
     userId: string | null;
-    workspace: Workspace | null;
-  }>({ userId: null, workspace: null });
+    workspaces: Workspace[];
+  }>({ userId: null, workspaces: [] });
 
   useEffect(() => {
     let cancelled = false;
@@ -22,13 +22,11 @@ export function useWorkspace(
       .from("workspaces")
       .select("id, name")
       .order("name", { ascending: true })
-      .limit(1)
-      .maybeSingle()
       .then(({ data }) => {
         if (cancelled) return;
         setState({
           userId: user.id,
-          workspace: data ? { id: data.id, name: data.name } : null,
+          workspaces: (data ?? []).map((w) => ({ id: w.id, name: w.name })),
         });
       });
     return () => {
@@ -36,10 +34,13 @@ export function useWorkspace(
     };
   }, [supabase, user]);
 
-  if (!user) return { workspace: null, loading: false };
+  if (!user) return { workspace: null, workspaces: [], loading: false };
+
+  const workspaces = state.userId === user.id ? state.workspaces : [];
 
   return {
-    workspace: state.userId === user.id ? state.workspace : null,
+    workspace: workspaces[0] ?? null,
+    workspaces,
     loading: state.userId !== user.id,
   };
 }
