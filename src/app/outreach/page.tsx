@@ -117,7 +117,7 @@ type Reply = {
   lead?: LeadEnrich;
 };
 
-type Tab = "pending" | "accepted" | "replies" | "sent" | "all" | "icp_rejected" | "alt_review" | "icp";
+type Tab = "inbox" | "replies" | "sent" | "all" | "icp_rejected" | "icp";
 type SortKey = "queued_oldest" | "queued_newest" | "name";
 type ColdFilter = "all" | "cold" | "warm";
 
@@ -140,7 +140,7 @@ export default function OutreachPage() {
   const [info, setInfo] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
-  const [tab, setTab] = useState<Tab>("pending");
+  const [tab, setTab] = useState<Tab>("inbox");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [filterCompany, setFilterCompany] = useState("");
   const [filterRole, setFilterRole] = useState("");
@@ -577,19 +577,20 @@ export default function OutreachPage() {
       {bulkProgress ? <Banner kind="info">Behandler {bulkProgress.done}/{bulkProgress.total}…</Banner> : null}
 
       <Tabs tab={tab} setTab={setTab} counts={{
-        pending: stats.pending,
-        accepted: accepted.length,
+        inbox: stats.pending + accepted.length + altReview.length,
         replies: unhandledReplies.length,
         sent: stats.sent,
         all: stats.total,
         icp_rejected: icpRejected.length,
-        alt_review: altReview.length,
       }} />
 
       <section className="mx-auto w-full max-w-[1400px] px-4 pb-12 sm:px-8 lg:px-12">
-        {tab === "pending" ? (
-          <PendingTab
-            rows={pending}
+        {tab === "inbox" ? (
+          <InboxTab
+            pendingRows={pending}
+            acceptedRows={accepted}
+            altReviewRows={altReview}
+            altsByLead={altByLead}
             selected={selected}
             setSelected={setSelected}
             filters={{ company: filterCompany, role: filterRole, cold: filterCold }}
@@ -604,13 +605,9 @@ export default function OutreachPage() {
             onRejectOne={(r) => void singleDecide(r, "reject")}
             onBulkApprove={() => void bulkDecide("approve")}
             onBulkReject={() => void bulkDecide("reject")}
-          />
-        ) : tab === "accepted" ? (
-          <AcceptedTab
-            rows={accepted}
-            busyLead={busyLead}
             onRender={(id) => void renderLead(id)}
-            onReject={(r) => void singleDecide(r, "reject")}
+            onUseOriginal={(id) => void useOriginal(id)}
+            onInviteAlt={(altId, leadId) => void inviteAlt(altId, leadId)}
           />
         ) : tab === "replies" ? (
           <RepliesTab replies={replies} onMarkHandled={(id) => void markReplyHandled(id)} />
@@ -619,10 +616,6 @@ export default function OutreachPage() {
         ) : tab === "icp_rejected" ? (
           <IcpRejectedTab rows={icpRejected} busyLead={busyLead}
             onOverride={(id) => void overrideIcpRejection(id)} />
-        ) : tab === "alt_review" ? (
-          <AltReviewTab rows={altReview} altsByLead={altByLead} busyLead={busyLead}
-            onUseOriginal={(id) => void useOriginal(id)}
-            onInviteAlt={(altId, leadId) => void inviteAlt(altId, leadId)} />
         ) : tab === "icp" ? (
           <IcpOverviewTab />
         ) : (
@@ -742,14 +735,11 @@ function Sparkline({ data }: { data: { day: string; count: number }[] }) {
 
 function Tabs({ tab, setTab, counts }: {
   tab: Tab; setTab: (t: Tab) => void; counts: {
-    pending: number; accepted: number; replies: number; sent: number; all: number;
-    icp_rejected: number; alt_review: number;
+    inbox: number; replies: number; sent: number; all: number; icp_rejected: number;
   };
 }) {
   const items: { id: Tab; label: string; count: number; accent?: boolean }[] = [
-    { id: "pending", label: "Afventer", count: counts.pending, accent: counts.pending > 0 },
-    { id: "accepted", label: "Accepteret", count: counts.accepted, accent: counts.accepted > 0 },
-    { id: "alt_review", label: "Rigtig person?", count: counts.alt_review, accent: counts.alt_review > 0 },
+    { id: "inbox", label: "Indbakke", count: counts.inbox, accent: counts.inbox > 0 },
     { id: "replies", label: "Svar", count: counts.replies, accent: counts.replies > 0 },
     { id: "sent", label: "Sendt", count: counts.sent },
     { id: "icp_rejected", label: "ICP-afvist", count: counts.icp_rejected },
@@ -1328,6 +1318,112 @@ function arrayBuffersEqual(left: ArrayBuffer | null | undefined, right: Uint8Arr
   if (!left || left.byteLength !== right.byteLength) return false;
   const lb = new Uint8Array(left);
   return lb.every((b, i) => b === right[i]);
+}
+
+// ===================== Inbox (consolidated to-do) =====================
+
+function InboxTab(props: {
+  pendingRows: PipelineRow[];
+  acceptedRows: PipelineRow[];
+  altReviewRows: PipelineRow[];
+  altsByLead: Map<string, AltContact[]>;
+  selected: Set<string>; setSelected: (s: Set<string>) => void;
+  filters: { company: string; role: string; cold: ColdFilter };
+  setFilters: { setCompany: (v: string) => void; setRole: (v: string) => void; setCold: (v: ColdFilter) => void };
+  sortKey: SortKey; setSortKey: (s: SortKey) => void;
+  playing: Set<string>; setPlaying: (s: Set<string>) => void;
+  editing: { leadId: string; message: string } | null;
+  setEditing: (e: { leadId: string; message: string } | null) => void;
+  busyLead: string | null;
+  onApproveOne: (r: PipelineRow) => void;
+  onRejectOne: (r: PipelineRow) => void;
+  onBulkApprove: () => void; onBulkReject: () => void;
+  onRender: (id: string) => void;
+  onUseOriginal: (id: string) => void;
+  onInviteAlt: (altId: string, leadId: string) => void;
+}) {
+  const { pendingRows, acceptedRows, altReviewRows, altsByLead, ...rest } = props;
+  const total = pendingRows.length + acceptedRows.length + altReviewRows.length;
+
+  if (total === 0) {
+    return (
+      <p className="tabular py-12 text-center text-[11px] uppercase tracking-[0.22em] text-[var(--ink)]/35">
+        Indbakken er tom — intet kræver din opmærksomhed lige nu.
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-12">
+      {pendingRows.length > 0 ? (
+        <InboxSection
+          label="Godkend videoer"
+          hint="Rendered videoer afventer godkendelse — godkend for at sende beskeden."
+          count={pendingRows.length}
+        >
+          <PendingTab
+            rows={pendingRows}
+            selected={rest.selected} setSelected={rest.setSelected}
+            filters={rest.filters} setFilters={rest.setFilters}
+            sortKey={rest.sortKey} setSortKey={rest.setSortKey}
+            playing={rest.playing} setPlaying={rest.setPlaying}
+            editing={rest.editing} setEditing={rest.setEditing}
+            busyLead={rest.busyLead}
+            onApproveOne={rest.onApproveOne} onRejectOne={rest.onRejectOne}
+            onBulkApprove={rest.onBulkApprove} onBulkReject={rest.onBulkReject}
+          />
+        </InboxSection>
+      ) : null}
+
+      {acceptedRows.length > 0 ? (
+        <InboxSection
+          label="Klar til render"
+          hint="Nye accepter — bekræft ICP-score og start render når du er klar."
+          count={acceptedRows.length}
+        >
+          <AcceptedTab
+            rows={acceptedRows}
+            busyLead={rest.busyLead}
+            onRender={rest.onRender}
+            onReject={rest.onRejectOne}
+          />
+        </InboxSection>
+      ) : null}
+
+      {altReviewRows.length > 0 ? (
+        <InboxSection
+          label="Vælg rigtig person"
+          hint="Den accepterede person scorede lavt — vælg en alternativ kontakt eller brug originalen."
+          count={altReviewRows.length}
+        >
+          <AltReviewTab
+            rows={altReviewRows}
+            altsByLead={altsByLead}
+            busyLead={rest.busyLead}
+            onUseOriginal={rest.onUseOriginal}
+            onInviteAlt={rest.onInviteAlt}
+          />
+        </InboxSection>
+      ) : null}
+    </div>
+  );
+}
+
+function InboxSection({ label, hint, count, children }: {
+  label: string; hint: string; count: number; children: ReactNode;
+}) {
+  return (
+    <section>
+      <div className="mb-4 border-b border-[var(--ink)]/[0.10] pb-2">
+        <div className="flex items-baseline gap-3">
+          <h2 className="font-display text-xl italic tracking-tight text-[var(--ink)]">{label}</h2>
+          <span className="tabular text-[11px] uppercase tracking-[0.22em] text-[var(--clay)]">{count}</span>
+        </div>
+        <p className="tabular mt-1 text-[11px] uppercase tracking-[0.16em] text-[var(--ink)]/50">{hint}</p>
+      </div>
+      {children}
+    </section>
+  );
 }
 
 // ===================== ICP tabs =====================
