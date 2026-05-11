@@ -12,6 +12,10 @@ import { createClient } from "npm:@supabase/supabase-js@2.103.3";
 import { CARTERCO_WORKSPACE_ID } from "../_shared/icp.ts";
 import { loadActiveIcp, type ResolvedIcp } from "../_shared/icp-loader.ts";
 
+// Default workspace if caller omits workspace_id in the request. Keeps the
+// existing UI "Generate proposal" button working without UI changes for
+// CarterCo users; Tresyv users pass their workspace_id in the body.
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -85,13 +89,18 @@ Deno.serve(async (request) => {
   const email = (user.email ?? "").toLowerCase();
   if (!ALLOWED.has(email)) return json({ error: "forbidden" }, 403);
 
-  // Load active ICP version + outcomes for CarterCo.
-  const icp = await loadActiveIcp(supabase, CARTERCO_WORKSPACE_ID);
+  // Resolve target workspace. Body param wins; otherwise defaults to CarterCo
+  // so existing button calls keep working without UI changes.
+  let body: { workspace_id?: string } = {};
+  try { body = await request.json(); } catch { /* GET-like or empty body */ }
+  const workspaceId = (body.workspace_id ?? CARTERCO_WORKSPACE_ID).trim();
+
+  const icp = await loadActiveIcp(supabase, workspaceId);
 
   const { data: pipeRows, error: pErr } = await supabase
     .from("outreach_pipeline")
     .select("sendpilot_lead_id, icp_company_score, icp_person_score, icp_rationale, outcome, outcome_note, outcome_at, contact_email")
-    .eq("workspace_id", CARTERCO_WORKSPACE_ID)
+    .eq("workspace_id", workspaceId)
     .not("outcome", "is", null)
     .not("icp_company_score", "is", null);
   if (pErr) return json({ error: pErr.message }, 500);
@@ -154,7 +163,7 @@ Deno.serve(async (request) => {
   const { data: inserted, error: insErr } = await supabase
     .from("icp_tuning_proposals")
     .insert({
-      workspace_id: CARTERCO_WORKSPACE_ID,
+      workspace_id: workspaceId,
       current_version_id: icp.versionId,
       contradictions_count: contradictions.length,
       contradictions: contradictions,

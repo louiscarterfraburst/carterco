@@ -9,7 +9,7 @@
 // hardcoded _shared/icp.ts remains the factory-default fallback.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.103.3";
-import { CARTERCO_WORKSPACE_ID, type IcpScores } from "../_shared/icp.ts";
+import { type IcpScores } from "../_shared/icp.ts";
 import { loadActiveIcp, type ResolvedIcp } from "../_shared/icp-loader.ts";
 
 const corsHeaders = {
@@ -48,36 +48,49 @@ Deno.serve(async (request) => {
   if (request.method === "GET") return json({ ok: true, name: "score-accepted-lead" });
   if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
-  // Load active ICP version once per run. All rows scored in this batch use
-  // the same prompt — consistent within a tick even if someone applies a
-  // new version mid-flight (next tick picks up the new one).
-  const icp = await loadActiveIcp(supabase, CARTERCO_WORKSPACE_ID);
-
-  const { data: rows, error } = await supabase
-    .from("outreach_pipeline")
-    .select("sendpilot_lead_id, contact_email, workspace_id, icp_attempts")
-    .eq("workspace_id", CARTERCO_WORKSPACE_ID)
-    .eq("status", "pending_pre_render")
-    .is("icp_scored_at", null)
-    .lt("icp_attempts", 3)
-    .order("accepted_at", { ascending: true })
-    .limit(BATCH_LIMIT);
-  if (error) return json({ error: error.message }, 500);
-  if (!rows || rows.length === 0) {
-    return json({ ok: true, scored: 0, icp_source: icp.source, icp_version: icp.version });
+  // Discover every workspace with an active ICP version, then process each
+  // workspace's pending leads against its OWN ICP. Workspaces without an
+  // active row are skipped (Tresyv was this until they seeded one). Per-
+  // workspace batch limit keeps one workspace from starving the others.
+  const { data: activeRows, error: actErr } = await supabase
+    .from("icp_versions")
+    .select("workspace_id")
+    .eq("is_active", true);
+  if (actErr) return json({ error: actErr.message }, 500);
+  const workspaceIds = Array.from(new Set((activeRows ?? []).map((r) => r.workspace_id as string)));
+  if (workspaceIds.length === 0) {
+    return json({ ok: true, scored: 0, note: "no active ICP versions" });
   }
 
-  const summary: Array<Record<string, unknown>> = [];
-  for (const row of rows as PipelineRow[]) {
-    summary.push(await scoreOne(row, icp));
+  const perWorkspace: Array<Record<string, unknown>> = [];
+  let totalScored = 0;
+  for (const wsId of workspaceIds) {
+    const icp = await loadActiveIcp(supabase, wsId);
+    const { data: rows, error } = await supabase
+      .from("outreach_pipeline")
+      .select("sendpilot_lead_id, contact_email, workspace_id, icp_attempts")
+      .eq("workspace_id", wsId)
+      .eq("status", "pending_pre_render")
+      .is("icp_scored_at", null)
+      .lt("icp_attempts", 3)
+      .order("accepted_at", { ascending: true })
+      .limit(BATCH_LIMIT);
+    if (error) {
+      perWorkspace.push({ workspace: wsId, error: error.message });
+      continue;
+    }
+    if (!rows || rows.length === 0) {
+      perWorkspace.push({ workspace: wsId, scored: 0, icp_version: icp.version });
+      continue;
+    }
+    const summary: Array<Record<string, unknown>> = [];
+    for (const row of rows as PipelineRow[]) {
+      summary.push(await scoreOne(row, icp));
+    }
+    totalScored += summary.length;
+    perWorkspace.push({ workspace: wsId, scored: summary.length, icp_source: icp.source, icp_version: icp.version, summary });
   }
-  return json({
-    ok: true,
-    scored: summary.length,
-    icp_source: icp.source,
-    icp_version: icp.version,
-    summary,
-  });
+  return json({ ok: true, scored: totalScored, per_workspace: perWorkspace });
 });
 
 async function scoreOne(row: PipelineRow, icp: ResolvedIcp): Promise<Record<string, unknown>> {
@@ -145,7 +158,9 @@ async function scoreOne(row: PipelineRow, icp: ResolvedIcp): Promise<Record<stri
 }
 
 function buildSystemPrompt(icp: ResolvedIcp): string {
-  return `You score a B2B outreach lead against an ICP for Carter & Co.
+  return `You score a B2B outreach lead against the following ICP. The
+ICP description itself names the company we're scoring for; do not assume
+otherwise from prior context.
 
 ${icp.companyFit}
 
@@ -215,7 +230,7 @@ async function fireAltSearch(companyName: string, icp: ResolvedIcp): Promise<{ i
     method: "POST",
     headers: { "X-API-Key": SP_API_KEY, "Content-Type": "application/json" },
     body: JSON.stringify({
-      name: `carterco-alt-${Date.now()}`,
+      name: `alt-${Date.now()}`,
       limit: 5,
       filters: {
         companies: [name],

@@ -14,7 +14,6 @@ import Link from "next/link";
 import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/utils/supabase/client";
 import { useWorkspace, type Workspace } from "@/utils/workspace";
-import { CARTERCO_WORKSPACE_ID } from "@/lib/icp";
 
 const VAPID_PUBLIC_KEY =
   process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ??
@@ -212,7 +211,6 @@ export default function OutreachPage() {
     return workspaces.find((w) => w.id === selectedWorkspaceId) ?? workspace ?? workspaces[0];
   }, [selectedWorkspaceId, workspace, workspaces]);
   const activeWorkspaceId = activeWorkspace?.id ?? "";
-  const isCarterCo = activeWorkspaceId === CARTERCO_WORKSPACE_ID;
 
   function chooseWorkspace(id: string) {
     setSelectedWorkspaceId(id);
@@ -305,13 +303,14 @@ export default function OutreachPage() {
     if (user && activeWorkspaceId) void Promise.resolve().then(load);
   }, [user, activeWorkspaceId, load]);
 
-  // If user switches to a non-CarterCo workspace while parked on an ICP-only
-  // tab, snap back to inbox so they don't see an empty/missing tab.
+  // Workspaces without an active ICP version don't have ICP tabs. Snap back
+  // to inbox if the user switches to such a workspace while parked on one.
+  const hasActiveIcp = !!activeIcp;
   useEffect(() => {
-    if (!isCarterCo && (tab === "icp_rejected" || tab === "icp")) {
+    if (!hasActiveIcp && (tab === "icp_rejected" || tab === "icp")) {
       setTab("inbox");
     }
-  }, [isCarterCo, tab]);
+  }, [hasActiveIcp, tab]);
 
   // ---------- realtime ----------
   useEffect(() => {
@@ -720,7 +719,7 @@ export default function OutreachPage() {
       {err ? <Banner kind="error">{err}</Banner> : null}
       {bulkProgress ? <Banner kind="info">Behandler {bulkProgress.done}/{bulkProgress.total}…</Banner> : null}
 
-      <Tabs tab={tab} setTab={setTab} showIcpTabs={isCarterCo} counts={{
+      <Tabs tab={tab} setTab={setTab} showIcpTabs={hasActiveIcp} counts={{
         inbox: stats.pending + accepted.length + altReview.length,
         replies: unhandledReplies.length,
         sent: stats.sent,
