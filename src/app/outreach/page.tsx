@@ -493,8 +493,16 @@ export default function OutreachPage() {
     return rows
       .filter((r) => {
         if (!r.accepted_at) return false;
-        if (r.status === "pending_approval" || r.status === "sent" || r.status === "rejected") return false;
-        return true;
+        // Terminal or already-actioned statuses do NOT belong in "Klar til render":
+        // they have their own surfaces (Sendt, ICP-afvist, Vælg rigtig person)
+        // or are stale (failed). To re-render an ICP-rejected lead, use the
+        // override button on the ICP-afvist tab, which flips back to
+        // pending_pre_render and lands the row here.
+        const off: PipelineRow["status"][] = [
+          "pending_approval", "sent", "rejected",
+          "rejected_by_icp", "pending_alt_review", "failed",
+        ];
+        return !off.includes(r.status);
       })
       .sort((a, b) => (b.accepted_at ?? "").localeCompare(a.accepted_at ?? ""));
   }, [rows]);
