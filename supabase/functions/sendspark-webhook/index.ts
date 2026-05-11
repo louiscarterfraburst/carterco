@@ -53,6 +53,16 @@ const DEFAULT_TEMPLATE = [
 
 const FALLBACK_TEMPLATE = Deno.env.get("OUTREACH_MESSAGE_TEMPLATE") || DEFAULT_TEMPLATE;
 
+// Follow-up template used when the recipient came in via a reply_referral
+// alt_contact (referred_from_pipeline_lead_id is set on the pipeline row).
+// Substitutions: {firstName} (recipient), {referrerFirstName}, {videoLink}.
+// Tunable via OUTREACH_REFERRAL_TEMPLATE env var.
+const REFERRAL_TEMPLATE_DEFAULT = [
+    "Hej {firstName}, tak for connectet — som lovet, her er videoen {referrerFirstName} så:",
+    "",
+    "{videoLink}",
+].join("\n");
+
 // Per-campaign template lookup. Set OUTREACH_TEMPLATE_<sendsparkCampaignId>
 // in the function's env vars to override the message body for one campaign
 // (e.g. the form-followup angle) while keeping the legacy default for others.
@@ -166,7 +176,7 @@ async function handleRenderReady(evt: SendSparkEvent, email: string, videoLink: 
 
     const { data: pipe } = await supabase
         .from("outreach_pipeline")
-        .select("sendpilot_lead_id, contact_email, status, campaign_id")
+        .select("sendpilot_lead_id, contact_email, status, campaign_id, referred_from_pipeline_lead_id")
         .eq("contact_email", email)
         .maybeSingle();
 
@@ -192,11 +202,39 @@ async function handleRenderReady(evt: SendSparkEvent, email: string, videoLink: 
     const firstName = firstNameForGreeting(lead?.first_name) || "der";
     const company = normalizeCompanyName(lead?.company);
     const website = normalizeWebsiteUrl(lead?.website);
-    // Use the SendPilot campaign_id we stored on the pipeline row, not
-    // SendSpark's own campaignId — keeps env-var keys consistent with the
-    // sequence-template overrides in outreach-engagement-tick.
-    const message = pickTemplate(pipe.campaign_id ?? undefined)
+
+    // Referral path: when this lead came in via a reply_referral alt_contact,
+    // swap the cold opener for a referral-aware template that thanks them for
+    // connecting and presents the (freshly rendered, name-personalised) video
+    // as the artifact the referrer pointed them to. We look up the referrer's
+    // first name from their pipeline row.
+    let template: string;
+    let referrerFirstName = "vores fælles kontakt";
+    if (pipe.referred_from_pipeline_lead_id) {
+        const { data: refPipe } = await supabase
+            .from("outreach_pipeline")
+            .select("contact_email")
+            .eq("sendpilot_lead_id", pipe.referred_from_pipeline_lead_id)
+            .maybeSingle();
+        if (refPipe?.contact_email) {
+            const { data: refLead } = await supabase
+                .from("outreach_leads")
+                .select("first_name")
+                .eq("contact_email", refPipe.contact_email)
+                .maybeSingle();
+            referrerFirstName = firstNameForGreeting(refLead?.first_name) || referrerFirstName;
+        }
+        template = Deno.env.get("OUTREACH_REFERRAL_TEMPLATE") || REFERRAL_TEMPLATE_DEFAULT;
+    } else {
+        // Use the SendPilot campaign_id we stored on the pipeline row, not
+        // SendSpark's own campaignId — keeps env-var keys consistent with the
+        // sequence-template overrides in outreach-engagement-tick.
+        template = pickTemplate(pipe.campaign_id ?? undefined);
+    }
+
+    const message = template
         .replaceAll("{firstName}", firstName)
+        .replaceAll("{referrerFirstName}", referrerFirstName)
         .replaceAll("{company}", company)
         .replaceAll("{website}", website)
         .replaceAll("{videoLink}", videoLink);
