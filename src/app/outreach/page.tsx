@@ -14,7 +14,7 @@ import Link from "next/link";
 import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/utils/supabase/client";
 import { useWorkspace, type Workspace } from "@/utils/workspace";
-import { ICP, CARTERCO_WORKSPACE_ID } from "@/lib/icp";
+import { CARTERCO_WORKSPACE_ID } from "@/lib/icp";
 
 const VAPID_PUBLIC_KEY =
   process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ??
@@ -142,6 +142,37 @@ type Reply = {
 };
 
 type Tab = "inbox" | "replies" | "sent" | "all" | "icp_rejected" | "icp";
+
+type IcpVersion = {
+  id: string;
+  version: number;
+  company_fit: string;
+  person_fit: string;
+  alternate_search_titles: string[];
+  alternate_search_locations: string[];
+  min_company_score: number;
+  min_person_score: number;
+  is_active: boolean;
+  created_at: string;
+  created_by: string | null;
+  rationale: string | null;
+};
+
+type IcpProposal = {
+  id: string;
+  generated_at: string;
+  contradictions_count: number;
+  contradictions: unknown;
+  proposed_company_fit: string | null;
+  proposed_person_fit: string | null;
+  proposed_min_company_score: number | null;
+  proposed_min_person_score: number | null;
+  rationale: string;
+  status: "open" | "applied" | "rejected";
+  decided_at: string | null;
+  decided_by: string | null;
+  becomes_version_id: string | null;
+};
 type SortKey = "queued_oldest" | "queued_newest" | "name";
 type ColdFilter = "all" | "cold" | "warm";
 
@@ -157,6 +188,8 @@ export default function OutreachPage() {
   const [rows, setRows] = useState<PipelineRow[]>([]);
   const [replies, setReplies] = useState<Reply[]>([]);
   const [altContacts, setAltContacts] = useState<AltContact[]>([]);
+  const [activeIcp, setActiveIcp] = useState<IcpVersion | null>(null);
+  const [icpProposals, setIcpProposals] = useState<IcpProposal[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyLead, setBusyLead] = useState<string | null>(null);
   const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null);
@@ -250,6 +283,17 @@ export default function OutreachPage() {
       .order("surfaced_at", { ascending: false })
       .limit(500);
     setAltContacts((alts ?? []) as AltContact[]);
+
+    // Active ICP version + recent proposals (last 20) — drives the Læring tab.
+    const [{ data: ver }, { data: props }] = await Promise.all([
+      supabase.from("icp_versions").select("*")
+        .eq("workspace_id", activeWorkspaceId).eq("is_active", true).maybeSingle(),
+      supabase.from("icp_tuning_proposals").select("*")
+        .eq("workspace_id", activeWorkspaceId)
+        .order("generated_at", { ascending: false }).limit(20),
+    ]);
+    setActiveIcp((ver as IcpVersion | null) ?? null);
+    setIcpProposals((props ?? []) as IcpProposal[]);
   }, [activeWorkspaceId, supabase]);
 
   const scheduleReload = useCallback(() => {
@@ -374,6 +418,36 @@ export default function OutreachPage() {
       setEditing(null);
       await load();
     }
+  }
+
+  async function generateProposal() {
+    setBusyLead("__icp__"); setErr(null); setInfo(null);
+    const { data, error } = await supabase.functions.invoke("generate-icp-tuning-proposal", { body: {} });
+    setBusyLead(null);
+    if (error) { setErr(error.message ?? String(error)); return; }
+    if (data?.error) { setErr(String(data.error)); return; }
+    if (data?.action === "skipped_insufficient_data") {
+      setInfo(`For lidt data — ${data.contradictions_count}/${data.required} modsigelser. Tag flere resultater.`);
+    } else if (data?.action === "proposal_generated") {
+      setInfo(`Forslag genereret fra ${data.contradictions_count} modsigelser.`);
+    } else {
+      setInfo("Færdig.");
+    }
+    await load();
+  }
+
+  async function decideProposal(proposalId: string, decision: "apply" | "reject") {
+    setBusyLead("__icp__"); setErr(null); setInfo(null);
+    const { data, error } = await supabase.functions.invoke("apply-icp-tuning-proposal", {
+      body: { proposalId, decision },
+    });
+    setBusyLead(null);
+    if (error) { setErr(error.message ?? String(error)); return; }
+    if (data?.error) { setErr(String(data.error)); return; }
+    setInfo(decision === "apply"
+      ? `Anvendt — ny version ${data?.new_version_number ?? "?"} aktiv.`
+      : "Afvist.");
+    await load();
   }
 
   async function setOutcome(leadId: string, outcome: Outcome | null) {
@@ -652,6 +726,7 @@ export default function OutreachPage() {
         sent: stats.sent,
         all: stats.total,
         icp_rejected: icpRejected.length,
+        icp_open_proposals: icpProposals.filter((p) => p.status === "open").length,
       }} />
 
       <section className="mx-auto w-full max-w-[1400px] px-4 pb-12 sm:px-8 lg:px-12">
@@ -697,7 +772,14 @@ export default function OutreachPage() {
           <IcpRejectedTab rows={icpRejected} busyLead={busyLead}
             onOverride={(id) => void overrideIcpRejection(id)} />
         ) : tab === "icp" ? (
-          <IcpOverviewTab />
+          <LaeringTab
+            activeIcp={activeIcp}
+            proposals={icpProposals}
+            outcomes={rows}
+            busy={busyLead === "__icp__"}
+            onGenerateProposal={() => void generateProposal()}
+            onDecide={(id, d) => void decideProposal(id, d)}
+          />
         ) : (
           <AllTab rows={allRecent} />
         )}
@@ -817,7 +899,8 @@ function Tabs({ tab, setTab, showIcpTabs, counts }: {
   tab: Tab; setTab: (t: Tab) => void;
   showIcpTabs: boolean;
   counts: {
-    inbox: number; replies: number; sent: number; all: number; icp_rejected: number;
+    inbox: number; replies: number; sent: number; all: number;
+    icp_rejected: number; icp_open_proposals: number;
   };
 }) {
   const all: { id: Tab; label: string; count: number; accent?: boolean; icpOnly?: boolean }[] = [
@@ -826,7 +909,7 @@ function Tabs({ tab, setTab, showIcpTabs, counts }: {
     { id: "sent", label: "Sendt", count: counts.sent },
     { id: "icp_rejected", label: "ICP-afvist", count: counts.icp_rejected, icpOnly: true },
     { id: "all", label: "Alle", count: counts.all },
-    { id: "icp", label: "ICP", count: 0, icpOnly: true },
+    { id: "icp", label: "Læring", count: counts.icp_open_proposals, accent: counts.icp_open_proposals > 0, icpOnly: true },
   ];
   const items = all.filter((it) => !it.icpOnly || showIcpTabs);
   return (
@@ -1722,44 +1805,142 @@ function AltReviewTab({ rows, altsByLead, busyLead, onUseOriginal, onInviteAlt }
   );
 }
 
-function IcpOverviewTab() {
-  const titles = ICP.alternateSearchTitles.join(" · ");
+function LaeringTab({ activeIcp, proposals, outcomes, busy, onGenerateProposal, onDecide }: {
+  activeIcp: IcpVersion | null;
+  proposals: IcpProposal[];
+  outcomes: PipelineRow[];
+  busy: boolean;
+  onGenerateProposal: () => void;
+  onDecide: (id: string, decision: "apply" | "reject") => void;
+}) {
+  const taggedRows = outcomes.filter((r) => r.outcome != null);
+  const byOutcome = new Map<string, number>();
+  for (const r of taggedRows) {
+    if (!r.outcome) continue;
+    byOutcome.set(r.outcome, (byOutcome.get(r.outcome) ?? 0) + 1);
+  }
+  const openProposal = proposals.find((p) => p.status === "open") ?? null;
+  const history = proposals.filter((p) => p.status !== "open").slice(0, 10);
+
   return (
     <div className="mx-auto max-w-3xl py-4 text-[14px] leading-relaxed text-[var(--ink)]/80">
-      <p className="tabular text-[10px] uppercase tracking-[0.32em] text-[var(--ink)]/40">Hvad vi scorer mod</p>
-      <h2 className="font-display mt-2 text-3xl italic text-[var(--ink)]">ICP</h2>
+      <p className="tabular text-[10px] uppercase tracking-[0.32em] text-[var(--ink)]/40">Self-improvement loop</p>
+      <h2 className="font-display mt-2 text-3xl italic text-[var(--ink)]">Læring</h2>
 
-      <section className="mt-6">
-        <h3 className="tabular text-[11px] uppercase tracking-[0.22em] text-[var(--ink)]/65">Firma-fit</h3>
-        <pre className="mt-2 whitespace-pre-wrap font-sans text-[14px] text-[var(--ink)]/75">{ICP.companyFit}</pre>
+      <section className="mt-6 rounded-sm border border-[var(--ink)]/15 p-4">
+        <div className="flex flex-wrap items-baseline justify-between gap-3">
+          <div>
+            <p className="tabular text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/45">Aktiv ICP-version</p>
+            <p className="font-display text-2xl italic text-[var(--ink)]">
+              v{activeIcp?.version ?? "—"}
+            </p>
+          </div>
+          <p className="tabular text-[11px] text-[var(--ink)]/45">
+            {activeIcp ? `Aktiveret ${fmtRelative(activeIcp.created_at)} af ${activeIcp.created_by ?? "—"}` : "Bruger fallback (factory default)"}
+          </p>
+        </div>
+        {activeIcp?.rationale ? (
+          <p className="mt-3 text-[13px] italic text-[var(--ink)]/60">{activeIcp.rationale}</p>
+        ) : null}
       </section>
 
       <section className="mt-6">
-        <h3 className="tabular text-[11px] uppercase tracking-[0.22em] text-[var(--ink)]/65">Person-fit</h3>
-        <pre className="mt-2 whitespace-pre-wrap font-sans text-[14px] text-[var(--ink)]/75">{ICP.personFit}</pre>
+        <h3 className="tabular text-[11px] uppercase tracking-[0.22em] text-[var(--ink)]/65">
+          Tagged outcomes ({taggedRows.length}/{outcomes.length})
+        </h3>
+        {taggedRows.length === 0 ? (
+          <p className="mt-2 text-[13px] text-[var(--ink)]/55">
+            Endnu ingen — tag resultater i Sendt-tabben for at fodre læringsloopet.
+          </p>
+        ) : (
+          <ul className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-[13px] text-[var(--ink)]/75">
+            {OUTCOME_OPTIONS.map((o) => (
+              <li key={o.value}>
+                <span className="tabular text-[10px] uppercase tracking-[0.18em] text-[var(--ink)]/45">{o.label}</span>{" "}
+                <span className="font-medium text-[var(--ink)]">{byOutcome.get(o.value) ?? 0}</span>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
 
       <section className="mt-6">
-        <h3 className="tabular text-[11px] uppercase tracking-[0.22em] text-[var(--ink)]/65">Søg-titler (alternativer)</h3>
-        <p className="mt-2 text-[14px] text-[var(--ink)]/75">{titles}</p>
+        <div className="flex flex-wrap items-baseline justify-between gap-3">
+          <h3 className="tabular text-[11px] uppercase tracking-[0.22em] text-[var(--ink)]/65">Genereret forslag</h3>
+          <button onClick={onGenerateProposal} disabled={busy}
+            className="focus-cream tabular rounded-sm border border-[var(--ink)]/15 px-3 py-1.5 text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/65 hover:border-[var(--ink)]/35 hover:text-[var(--ink)] disabled:opacity-50">
+            {busy ? "Genererer…" : "Foreslå tuning"}
+          </button>
+        </div>
+
+        {openProposal ? (
+          <article className="mt-3 rounded-sm border border-[var(--clay)]/40 bg-[var(--clay)]/5 p-4">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <span className="tabular text-[10px] uppercase tracking-[0.22em] text-[var(--clay)]">
+                Genereret {fmtRelative(openProposal.generated_at)} · {openProposal.contradictions_count} modsigelser
+              </span>
+            </div>
+            <p className="mt-2 text-[13px] leading-relaxed text-[var(--ink)]/85">{openProposal.rationale}</p>
+
+            {openProposal.proposed_company_fit && activeIcp ? (
+              <details className="mt-3">
+                <summary className="cursor-pointer tabular text-[11px] uppercase tracking-[0.18em] text-[var(--ink)]/60 hover:text-[var(--ink)]">Vis forslag til firma-fit</summary>
+                <pre className="mt-2 whitespace-pre-wrap rounded-sm bg-[var(--ink)]/[0.04] p-3 font-sans text-[12px] text-[var(--ink)]/80">{openProposal.proposed_company_fit}</pre>
+              </details>
+            ) : null}
+            {openProposal.proposed_person_fit && activeIcp ? (
+              <details className="mt-2">
+                <summary className="cursor-pointer tabular text-[11px] uppercase tracking-[0.18em] text-[var(--ink)]/60 hover:text-[var(--ink)]">Vis forslag til person-fit</summary>
+                <pre className="mt-2 whitespace-pre-wrap rounded-sm bg-[var(--ink)]/[0.04] p-3 font-sans text-[12px] text-[var(--ink)]/80">{openProposal.proposed_person_fit}</pre>
+              </details>
+            ) : null}
+            {openProposal.proposed_min_company_score != null || openProposal.proposed_min_person_score != null ? (
+              <p className="mt-2 tabular text-[11px] text-[var(--ink)]/60">
+                Tærskel-forslag:{" "}
+                {openProposal.proposed_min_company_score != null ? `min company score = ${openProposal.proposed_min_company_score}` : ""}
+                {openProposal.proposed_min_company_score != null && openProposal.proposed_min_person_score != null ? " · " : ""}
+                {openProposal.proposed_min_person_score != null ? `min person score = ${openProposal.proposed_min_person_score}` : ""}
+              </p>
+            ) : null}
+
+            <div className="mt-4 flex flex-wrap gap-3">
+              <button onClick={() => onDecide(openProposal.id, "apply")} disabled={busy}
+                className="focus-orange tabular rounded-sm bg-[var(--forest)] px-4 py-2 text-[11px] uppercase tracking-[0.22em] text-[var(--cream)] hover:bg-[#2f5e4e] disabled:opacity-50">
+                Anvend → ny version
+              </button>
+              <button onClick={() => onDecide(openProposal.id, "reject")} disabled={busy}
+                className="focus-cream tabular rounded-sm border border-[var(--ink)]/15 px-4 py-2 text-[11px] uppercase tracking-[0.22em] text-[var(--ink)]/65 hover:border-[var(--ink)]/35 disabled:opacity-50">
+                Afvis
+              </button>
+            </div>
+          </article>
+        ) : (
+          <p className="mt-3 text-[13px] text-[var(--ink)]/55">
+            Intet åbent forslag. Tag flere resultater på Sendt, og klik "Foreslå tuning" — Sonnet læser modsigelserne og foreslår prompt-edits.
+          </p>
+        )}
       </section>
 
-      <section className="mt-6">
-        <h3 className="tabular text-[11px] uppercase tracking-[0.22em] text-[var(--ink)]/65">Lokationer</h3>
-        <p className="mt-2 text-[14px] text-[var(--ink)]/75">{ICP.alternateSearchLocations.join(", ")}</p>
-      </section>
-
-      <section className="mt-6">
-        <h3 className="tabular text-[11px] uppercase tracking-[0.22em] text-[var(--ink)]/65">Tærskler (1–5)</h3>
-        <ul className="mt-2 text-[14px] text-[var(--ink)]/75">
-          <li>Firma-score &lt; {ICP.thresholds.minCompanyScore} → afvist</li>
-          <li>Person-score &lt; {ICP.thresholds.minPersonScore} → søg efter alternativ</li>
-        </ul>
-      </section>
-
-      <p className="mt-8 tabular text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/35">
-        Sidst opdateret: {ICP.lastUpdated} · supabase/functions/_shared/icp.ts
-      </p>
+      {history.length > 0 ? (
+        <section className="mt-8">
+          <h3 className="tabular text-[11px] uppercase tracking-[0.22em] text-[var(--ink)]/65">Historik</h3>
+          <ul className="mt-2 divide-y divide-[var(--ink)]/[0.08]">
+            {history.map((p) => (
+              <li key={p.id} className="py-3 text-[12px]">
+                <div className="flex flex-wrap items-baseline gap-x-3">
+                  <span className={`tabular uppercase tracking-[0.18em] ${p.status === "applied" ? "text-[var(--forest)]" : "text-[var(--ink)]/45"}`}>
+                    {p.status === "applied" ? "Anvendt" : "Afvist"}
+                  </span>
+                  <span className="tabular text-[11px] text-[var(--ink)]/45">
+                    {fmtRelative(p.decided_at ?? p.generated_at)} · {p.contradictions_count} modsigelser
+                  </span>
+                </div>
+                <p className="mt-1 text-[12px] italic text-[var(--ink)]/65">{p.rationale}</p>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
     </div>
   );
 }

@@ -1,18 +1,16 @@
 // Cron-triggered every 5 min. For each pending_pre_render row with
 // icp_scored_at IS NULL:
 //   1. Load enrichment from outreach_leads.
-//   2. Haiku scores (company 1-5, person 1-5) against ICP.
-//   3. Branch:
-//        company_score < min            → status='rejected_by_icp'
-//        person_score  < min            → fire SendPilot lead-database search
-//                                          → status='pending_alt_review'
-//        otherwise                      → leave status='pending_pre_render'
-//                                          (existing render flow proceeds)
+//   2. Haiku scores (company 1-5, person 1-5) against active ICP version.
+//   3. Branch by score vs thresholds.
 //
-// All branches stamp icp_scored_at + scores + rationale.
+// The active ICP is read from icp_versions (DB) — not hardcoded — so the
+// self-improvement loop can tune the prompt without redeploying. The
+// hardcoded _shared/icp.ts remains the factory-default fallback.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.103.3";
-import { ICP, CARTERCO_WORKSPACE_ID, type IcpScores } from "../_shared/icp.ts";
+import { CARTERCO_WORKSPACE_ID, type IcpScores } from "../_shared/icp.ts";
+import { loadActiveIcp, type ResolvedIcp } from "../_shared/icp-loader.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -50,10 +48,11 @@ Deno.serve(async (request) => {
   if (request.method === "GET") return json({ ok: true, name: "score-accepted-lead" });
   if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
-  // CarterCo-only. Tresyv (and other workspaces) run different outreach for
-  // different companies — their pending_pre_render rows must not be scored
-  // against CarterCo's ICP. If we ever add per-workspace ICPs, this filter
-  // becomes "workspaces with an ICP defined".
+  // Load active ICP version once per run. All rows scored in this batch use
+  // the same prompt — consistent within a tick even if someone applies a
+  // new version mid-flight (next tick picks up the new one).
+  const icp = await loadActiveIcp(supabase, CARTERCO_WORKSPACE_ID);
+
   const { data: rows, error } = await supabase
     .from("outreach_pipeline")
     .select("sendpilot_lead_id, contact_email, workspace_id, icp_attempts")
@@ -64,16 +63,24 @@ Deno.serve(async (request) => {
     .order("accepted_at", { ascending: true })
     .limit(BATCH_LIMIT);
   if (error) return json({ error: error.message }, 500);
-  if (!rows || rows.length === 0) return json({ ok: true, scored: 0 });
+  if (!rows || rows.length === 0) {
+    return json({ ok: true, scored: 0, icp_source: icp.source, icp_version: icp.version });
+  }
 
   const summary: Array<Record<string, unknown>> = [];
   for (const row of rows as PipelineRow[]) {
-    summary.push(await scoreOne(row));
+    summary.push(await scoreOne(row, icp));
   }
-  return json({ ok: true, scored: summary.length, summary });
+  return json({
+    ok: true,
+    scored: summary.length,
+    icp_source: icp.source,
+    icp_version: icp.version,
+    summary,
+  });
 });
 
-async function scoreOne(row: PipelineRow): Promise<Record<string, unknown>> {
+async function scoreOne(row: PipelineRow, icp: ResolvedIcp): Promise<Record<string, unknown>> {
   const { data: lead } = await supabase
     .from("outreach_leads")
     .select("first_name, last_name, company, title, website")
@@ -85,12 +92,10 @@ async function scoreOne(row: PipelineRow): Promise<Record<string, unknown>> {
 
   let scores: IcpScores;
   try {
-    scores = await haikuScore(enrich);
+    scores = await haikuScore(enrich, icp);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    // Do NOT stamp icp_scored_at on transient failure — cron will retry on
-    // the next tick. Bump icp_attempts so we cap at 3 (filtered in the
-    // select query) and don't loop on permanently-broken rows.
+    // Do NOT stamp icp_scored_at on transient failure — cron retries next tick.
     const attempts = (row.icp_attempts ?? 0) + 1;
     await supabase.from("outreach_pipeline").update({
       icp_attempts: attempts,
@@ -99,10 +104,8 @@ async function scoreOne(row: PipelineRow): Promise<Record<string, unknown>> {
     return { lead: row.sendpilot_lead_id, error: msg.slice(0, 200), attempts };
   }
 
-  const { minCompanyScore, minPersonScore } = ICP.thresholds;
-
   // Branch 1: company is not a fit at all.
-  if (scores.companyScore < minCompanyScore) {
+  if (scores.companyScore < icp.minCompanyScore) {
     await supabase.from("outreach_pipeline").update({
       status: "rejected_by_icp",
       icp_scored_at: now,
@@ -111,17 +114,12 @@ async function scoreOne(row: PipelineRow): Promise<Record<string, unknown>> {
       icp_rationale: scores.rationale,
       icp_last_error: null,
     }).eq("sendpilot_lead_id", row.sendpilot_lead_id);
-    return {
-      lead: row.sendpilot_lead_id,
-      decision: "rejected_by_icp",
-      company: enrich.company,
-      scores,
-    };
+    return { lead: row.sendpilot_lead_id, decision: "rejected_by_icp", company: enrich.company, scores };
   }
 
-  // Branch 2: company OK but the accepted person isn't a buyer at this company.
-  if (scores.personScore < minPersonScore) {
-    const searchOut = await fireAltSearch(enrich.company ?? "");
+  // Branch 2: company OK but the accepted person isn't a buyer.
+  if (scores.personScore < icp.minPersonScore) {
+    const searchOut = await fireAltSearch(enrich.company ?? "", icp);
     await supabase.from("outreach_pipeline").update({
       status: "pending_alt_review",
       icp_scored_at: now,
@@ -132,13 +130,7 @@ async function scoreOne(row: PipelineRow): Promise<Record<string, unknown>> {
       alt_search_id: searchOut.id,
       alt_search_status: searchOut.id ? "pending" : "failed",
     }).eq("sendpilot_lead_id", row.sendpilot_lead_id);
-    return {
-      lead: row.sendpilot_lead_id,
-      decision: "alt_search_started",
-      company: enrich.company,
-      scores,
-      alt_search: searchOut,
-    };
+    return { lead: row.sendpilot_lead_id, decision: "alt_search_started", company: enrich.company, scores, alt_search: searchOut };
   }
 
   // Branch 3: both pass — render flow proceeds untouched.
@@ -149,19 +141,15 @@ async function scoreOne(row: PipelineRow): Promise<Record<string, unknown>> {
     icp_rationale: scores.rationale,
     icp_last_error: null,
   }).eq("sendpilot_lead_id", row.sendpilot_lead_id);
-  return {
-    lead: row.sendpilot_lead_id,
-    decision: "icp_passed",
-    company: enrich.company,
-    scores,
-  };
+  return { lead: row.sendpilot_lead_id, decision: "icp_passed", company: enrich.company, scores };
 }
 
-const HAIKU_SYSTEM = `You score a B2B outreach lead against an ICP for Carter & Co.
+function buildSystemPrompt(icp: ResolvedIcp): string {
+  return `You score a B2B outreach lead against an ICP for Carter & Co.
 
-${ICP.companyFit}
+${icp.companyFit}
 
-${ICP.personFit}
+${icp.personFit}
 
 Return ONLY a JSON object, no markdown fences, no commentary:
 {"company_score": int 1-5, "person_score": int 1-5, "rationale": "one short sentence covering both"}
@@ -169,8 +157,9 @@ Return ONLY a JSON object, no markdown fences, no commentary:
 company_score = how well the company fits the ICP (5 = perfect, 1 = obvious no).
 person_score  = how likely this person is the buyer/influencer at that company (5 = clearly a buyer, 1 = clearly wrong person).
 rationale     = explain the lower of the two scores in one terse sentence (no preamble).`;
+}
 
-async function haikuScore(lead: LeadEnrich): Promise<IcpScores> {
+async function haikuScore(lead: LeadEnrich, icp: ResolvedIcp): Promise<IcpScores> {
   if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not set");
   const userBlock = [
     `Name: ${(lead.first_name ?? "") + " " + (lead.last_name ?? "")}`.trim(),
@@ -189,7 +178,7 @@ async function haikuScore(lead: LeadEnrich): Promise<IcpScores> {
     body: JSON.stringify({
       model: "claude-haiku-4-5-20251001",
       max_tokens: 400,
-      system: HAIKU_SYSTEM,
+      system: buildSystemPrompt(icp),
       messages: [{ role: "user", content: userBlock }],
     }),
   });
@@ -217,7 +206,7 @@ async function haikuScore(lead: LeadEnrich): Promise<IcpScores> {
   };
 }
 
-async function fireAltSearch(companyName: string): Promise<{ id: string | null; error?: string }> {
+async function fireAltSearch(companyName: string, icp: ResolvedIcp): Promise<{ id: string | null; error?: string }> {
   if (!SP_API_KEY) return { id: null, error: "SENDPILOT_API_KEY not set" };
   const name = companyName.trim();
   if (!name) return { id: null, error: "no company name" };
@@ -230,8 +219,8 @@ async function fireAltSearch(companyName: string): Promise<{ id: string | null; 
       limit: 5,
       filters: {
         companies: [name],
-        jobTitles: ICP.alternateSearchTitles,
-        locations: ICP.alternateSearchLocations,
+        jobTitles: icp.alternateSearchTitles,
+        locations: icp.alternateSearchLocations,
       },
     }),
   });

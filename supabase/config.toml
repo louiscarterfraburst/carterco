@@ -423,6 +423,10 @@ verify_jwt = false
 [functions.poll-alt-searches]
 verify_jwt = false
 
+# User-triggered ICP tuning loop. Generates a proposal from outcomes;
+# apply promotes a proposal to a new active icp_version.
+# verify_jwt=true (default) — both validate the bearer manually inside.
+
 [analytics]
 enabled = true
 port = 54327
