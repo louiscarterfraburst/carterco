@@ -273,11 +273,14 @@ export default function OutreachPage() {
       lead: leadMap.get(replyEmailById.get(r.sendpilot_lead_id) ?? ""),
     })));
 
+    // Include actioned alts too — they're shown with an "Inviteret ✓" badge
+    // so the user keeps context on what's already been pushed into outreach.
+    // Without this, e.g. Ole Cramer-Bach vanishes from Marc's row the moment
+    // he's invited, even though he's the relevant action.
     const { data: alts } = await supabase
       .from("outreach_alt_contacts")
       .select("*")
       .eq("workspace_id", activeWorkspaceId)
-      .is("acted_on_at", null)
       .order("surfaced_at", { ascending: false })
       .limit(500);
     setAltContacts((alts ?? []) as AltContact[]);
@@ -1789,7 +1792,7 @@ function AltReviewTab({ rows, altsByLead, busyLead, onUseOriginal, onInviteAlt }
               ) : (
                 <ul className="space-y-3">
                   {alts.map((a) => (
-                    <li key={a.id} className="rounded-sm border border-[var(--ink)]/15 p-3">
+                    <li key={a.id} className={`rounded-sm border p-3 ${a.acted_on_at ? "border-[var(--forest)]/20 bg-[var(--forest)]/5" : "border-[var(--ink)]/15"}`}>
                       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
                         <div className="min-w-0">
                           <div className="font-medium text-[var(--ink)]">{a.name}</div>
@@ -1798,14 +1801,22 @@ function AltReviewTab({ rows, altsByLead, busyLead, onUseOriginal, onInviteAlt }
                           </div>
                         </div>
                         <div className="flex shrink-0 gap-3">
-                          <a href={a.linkedin_url} target="_blank" rel="noopener noreferrer"
-                            className="tabular text-[11px] uppercase tracking-[0.2em] text-[var(--forest)] underline-offset-[6px] hover:underline">
-                            LinkedIn →
-                          </a>
-                          <button onClick={() => onInviteAlt(a.id, r.sendpilot_lead_id)} disabled={busyLead === r.sendpilot_lead_id}
-                            className="tabular text-[11px] uppercase tracking-[0.2em] text-[var(--clay)] underline-offset-[6px] hover:underline disabled:opacity-50">
-                            Inviter →
-                          </button>
+                          {a.linkedin_url ? (
+                            <a href={a.linkedin_url} target="_blank" rel="noopener noreferrer"
+                              className="tabular text-[11px] uppercase tracking-[0.2em] text-[var(--forest)] underline-offset-[6px] hover:underline">
+                              LinkedIn →
+                            </a>
+                          ) : null}
+                          {a.acted_on_at ? (
+                            <span className="tabular text-[11px] uppercase tracking-[0.2em] text-[var(--forest)]" title={`Inviteret ${fmtRelative(a.acted_on_at)}`}>
+                              Inviteret ✓
+                            </span>
+                          ) : (
+                            <button onClick={() => onInviteAlt(a.id, r.sendpilot_lead_id)} disabled={busyLead === r.sendpilot_lead_id}
+                              className="tabular text-[11px] uppercase tracking-[0.2em] text-[var(--clay)] underline-offset-[6px] hover:underline disabled:opacity-50">
+                              Inviter →
+                            </button>
+                          )}
                         </div>
                       </div>
                     </li>
