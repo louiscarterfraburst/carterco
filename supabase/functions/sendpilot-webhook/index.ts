@@ -229,15 +229,17 @@ Deno.serve(async (request) => {
     // Previously this update lived inside classifyReplyAsync — meaning if
     // the classify call failed or was slow, last_reply_at never got set
     // and engagement-tick happily fired follow-ups on a lead who had
-    // already replied. This was the Erik Mygind Nielsen incident:
-    // reply landed, classification path was broken (renamed event types,
-    // webhook outage etc.), last_reply_at stayed null, follow-up went out.
+    // already replied. This was the Erik Mygind Nielsen incident.
     //
-    // The `replied` signal must be authoritative the moment a reply is
-    // recorded. Intent classification is a nice-to-have that can be
-    // backfilled later; the safety guard cannot.
+    // Also close any active sequence: the engagement-tick reply-guard
+    // would block the actual send, but the row would stay in the UI's
+    // "queued" view (sequence_completed_at IS NULL + sequence_parked_until
+    // in the future). Closing here keeps UI in sync with reality and stops
+    // the cron from even evaluating this row again.
     await supabase.from("outreach_pipeline").update({
       last_reply_at: now,
+      sequence_completed_at: now,
+      sequence_parked_until: null,
     }).eq("sendpilot_lead_id", leadId);
 
     // Fire intent classification (best effort, async, only enriches data).
@@ -294,6 +296,8 @@ async function classifyReplyAsync(
       await supabase.from("outreach_pipeline").update({
         last_reply_at: now,
         last_reply_intent: j.intent,
+        sequence_completed_at: now,
+        sequence_parked_until: null,
       }).eq("sendpilot_lead_id", leadId);
 
       // Referral pivot: when the prospect points us at someone else, plant a
