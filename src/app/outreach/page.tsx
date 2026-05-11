@@ -1076,10 +1076,21 @@ function RepliesTab({ replies, referralsByLead, busyLead, onMarkHandled, onInvit
   if (replies.length === 0) {
     return <p className="mt-4 text-sm text-[var(--ink)]/45">Ingen svar endnu.</p>;
   }
+  // Pin the referral block to ONE reply per lead — the most recent one in
+  // the list, which is the row a user is most likely scanning. Without this
+  // the same Morten Otto card repeats under every reply Justyna sent in the
+  // same conversation, which reads as duplicated content not multi-turn.
+  const referralAnchor = new Map<string, string>();
+  for (const r of replies) {
+    if (referralsByLead.has(r.sendpilot_lead_id) && !referralAnchor.has(r.sendpilot_lead_id)) {
+      referralAnchor.set(r.sendpilot_lead_id, r.id);
+    }
+  }
   return (
     <ul className="mt-2 flex flex-col gap-3">
       {replies.map((r) => {
-        const referrals = referralsByLead.get(r.sendpilot_lead_id) ?? [];
+        const showReferrals = referralAnchor.get(r.sendpilot_lead_id) === r.id;
+        const referrals = showReferrals ? (referralsByLead.get(r.sendpilot_lead_id) ?? []) : [];
         return (
           <li key={r.id}
             className={`rounded-sm border p-4 sm:p-5 transition ${
