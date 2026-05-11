@@ -27,6 +27,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.103.3";
 import { normalizeCompanyName, normalizeWebsiteUrl, urlOrigin } from "../_shared/text.ts";
+import { sendsparkCredsFor } from "../_shared/sendspark-config.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -39,9 +40,6 @@ const supabase = createClient(
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
 );
 
-const SS_API_KEY = Deno.env.get("SENDSPARK_API_KEY") ?? "";
-const SS_API_SECRET = Deno.env.get("SENDSPARK_API_SECRET") ?? "";
-const SS_WORKSPACE = Deno.env.get("SENDSPARK_WORKSPACE") ?? "";
 const SS_DYNAMIC_DEFAULT = Deno.env.get("SENDSPARK_DYNAMIC") ?? "";
 
 const RECONCILE_TAG = "reconcile_attempt_";
@@ -86,7 +84,6 @@ Deno.serve(async (req) => {
   const hardFailHrs = body.hard_fail_after_hours ?? 24;
 
   if (body.diagnose === true) return await diagnose(limit);
-  if (!SS_WORKSPACE || !SS_API_KEY) return json({ error: "SendSpark env missing" }, 500);
 
   const cutoffIso = new Date(Date.now() - minAgeMin * 60_000).toISOString();
   const hardFailIso = new Date(Date.now() - hardFailHrs * 3600_000).toISOString();
@@ -98,7 +95,7 @@ Deno.serve(async (req) => {
   // pending_pre_render for >24h the moment its render starts.
   const { data: candidates, error: stuckErr } = await supabase
     .from("outreach_pipeline")
-    .select("sendpilot_lead_id, contact_email, accepted_at, decided_at, campaign_id, error")
+    .select("sendpilot_lead_id, contact_email, accepted_at, decided_at, campaign_id, workspace_id, error")
     .eq("status", "rendering")
     .not("contact_email", "eq", "")
     .order("accepted_at", { ascending: true })
@@ -170,13 +167,18 @@ Deno.serve(async (req) => {
     }
 
     const dynamicId = pickDynamic(row.campaign_id as string | null);
+    const creds = sendsparkCredsFor(row.workspace_id as string | null);
+    if (creds.source === "missing") {
+      skipped.push({ sendpilot_lead_id: row.sendpilot_lead_id, reason: `no_sendspark_creds_for_workspace_${row.workspace_id}` });
+      continue;
+    }
     const ssRes = await fetch(
-      `https://api-gw.sendspark.com/v1/workspaces/${SS_WORKSPACE}/dynamics/${dynamicId}/prospect`,
+      `https://api-gw.sendspark.com/v1/workspaces/${creds.workspace}/dynamics/${dynamicId}/prospect`,
       {
         method: "POST",
         headers: {
-          "x-api-key": SS_API_KEY,
-          "x-api-secret": SS_API_SECRET,
+          "x-api-key": creds.apiKey,
+          "x-api-secret": creds.apiSecret,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
@@ -233,33 +235,43 @@ Deno.serve(async (req) => {
 async function diagnose(limit: number) {
   const { data: stuck } = await supabase
     .from("outreach_pipeline")
-    .select("sendpilot_lead_id, contact_email, accepted_at, decided_at, campaign_id")
+    .select("sendpilot_lead_id, contact_email, accepted_at, decided_at, campaign_id, workspace_id")
     .eq("status", "rendering")
     .not("contact_email", "eq", "")
     .order("accepted_at", { ascending: true })
     .limit(limit);
   if (!stuck || stuck.length === 0) return json({ ok: true, note: "nothing stuck" });
 
-  const byDyn = new Map<string, string>();
+  // Group by (workspace_id, dynamic_id): each combo hits a different SendSpark
+  // account + a different dynamic within that account, so each needs its own
+  // probe call.
+  const byKey = new Map<string, { workspaceId: string | null; dynamicId: string; probeEmail: string }>();
   for (const r of stuck) {
     const dyn = pickDynamic(r.campaign_id as string | null);
-    if (!byDyn.has(dyn)) byDyn.set(dyn, r.contact_email as string);
+    const ws = (r.workspace_id as string | null) ?? null;
+    const key = `${ws ?? "null"}::${dyn}`;
+    if (!byKey.has(key)) byKey.set(key, { workspaceId: ws, dynamicId: dyn, probeEmail: r.contact_email as string });
   }
 
-  const out: Record<string, unknown> = { dynamics: {} };
-  for (const [dynamicId, probeEmail] of byDyn) {
+  const out: Record<string, unknown> = { groups: {} };
+  for (const [key, { workspaceId, dynamicId, probeEmail }] of byKey) {
+    const creds = sendsparkCredsFor(workspaceId);
+    if (creds.source === "missing") {
+      (out.groups as Record<string, unknown>)[key] = { error: `no SendSpark creds for workspace ${workspaceId}` };
+      continue;
+    }
     const { data: probeLead } = await supabase
       .from("outreach_leads")
       .select("first_name, company, title, website")
       .eq("contact_email", probeEmail)
       .maybeSingle();
     const ssRes = await fetch(
-      `https://api-gw.sendspark.com/v1/workspaces/${SS_WORKSPACE}/dynamics/${dynamicId}/prospect`,
+      `https://api-gw.sendspark.com/v1/workspaces/${creds.workspace}/dynamics/${dynamicId}/prospect`,
       {
         method: "POST",
         headers: {
-          "x-api-key": SS_API_KEY,
-          "x-api-secret": SS_API_SECRET,
+          "x-api-key": creds.apiKey,
+          "x-api-secret": creds.apiSecret,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
@@ -275,14 +287,18 @@ async function diagnose(limit: number) {
       },
     );
     if (!ssRes.ok) {
-      (out.dynamics as Record<string, unknown>)[dynamicId] = { error: `HTTP ${ssRes.status}` };
+      (out.groups as Record<string, unknown>)[key] = { error: `HTTP ${ssRes.status}`, creds_source: creds.source };
       continue;
     }
     const j = await ssRes.json() as { prospectList?: Array<Record<string, unknown>> };
     const list = j.prospectList ?? [];
     const stuckEmails = new Set(stuck.map((r) => (r.contact_email as string).toLowerCase()));
     const ours = list.filter((p) => stuckEmails.has(String(p.contactEmail ?? "").toLowerCase()));
-    (out.dynamics as Record<string, unknown>)[dynamicId] = {
+    (out.groups as Record<string, unknown>)[key] = {
+      workspace_id: workspaceId,
+      sendspark_workspace: creds.workspace,
+      dynamic_id: dynamicId,
+      creds_source: creds.source,
       total_in_dynamic: list.length,
       our_stuck_in_dynamic: ours.length,
       compact: ours.map((p) => ({

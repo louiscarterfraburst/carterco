@@ -8,6 +8,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.103.3";
 import { normalizeCompanyName, urlOrigin } from "../_shared/text.ts";
 import { checkLeadReplied } from "../_shared/sendpilot-client.ts";
+import { sendsparkCredsFor } from "../_shared/sendspark-config.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -17,9 +18,6 @@ const corsHeaders = {
 
 const ALLOWED = new Set(["louis@carterco.dk", "rm@tresyv.dk", "haugefrom@haugefrom.com"]);
 const SP_API_KEY = Deno.env.get("SENDPILOT_API_KEY") ?? "";
-const SS_API_KEY = Deno.env.get("SENDSPARK_API_KEY") ?? "";
-const SS_API_SECRET = Deno.env.get("SENDSPARK_API_SECRET") ?? "";
-const SS_WORKSPACE = Deno.env.get("SENDSPARK_WORKSPACE") ?? "";
 const SS_DYNAMIC = Deno.env.get("SENDSPARK_DYNAMIC") ?? "";
 
 Deno.serve(async (request) => {
@@ -80,7 +78,7 @@ Deno.serve(async (request) => {
       .maybeSingle();
     if (!lead) return json({ error: "outreach_leads row missing for this contact_email" }, 404);
 
-    const renderRes = await sendsparkRender(lead, pipe.campaign_id ?? "");
+    const renderRes = await sendsparkRender(lead, pipe.campaign_id ?? "", pipe.workspace_id ?? null);
     await admin.from("outreach_pipeline").update({
       status: renderRes.ok ? "rendering" : "failed",
       accepted_at: pipe.accepted_at ?? now,
@@ -201,7 +199,11 @@ function pickDynamic(campaignId: string): string {
   return SS_DYNAMIC;
 }
 
-async function sendsparkRender(lead: Record<string, unknown>, campaignId = "") {
+async function sendsparkRender(lead: Record<string, unknown>, campaignId = "", workspaceId: string | null = null) {
+  const creds = sendsparkCredsFor(workspaceId);
+  if (creds.source === "missing") {
+    return { ok: false, status: 0, errorBody: `no SendSpark creds for workspace ${workspaceId ?? "(null)"}` };
+  }
   const payload = {
     processAndAuthorizeCharge: true,
     prospect: {
@@ -214,12 +216,12 @@ async function sendsparkRender(lead: Record<string, unknown>, campaignId = "") {
   };
   const dynamicId = pickDynamic(campaignId);
   const url =
-    `https://api-gw.sendspark.com/v1/workspaces/${SS_WORKSPACE}/dynamics/${dynamicId}/prospect`;
+    `https://api-gw.sendspark.com/v1/workspaces/${creds.workspace}/dynamics/${dynamicId}/prospect`;
   const res = await fetch(url, {
     method: "POST",
     headers: {
-      "x-api-key": SS_API_KEY,
-      "x-api-secret": SS_API_SECRET,
+      "x-api-key": creds.apiKey,
+      "x-api-secret": creds.apiSecret,
       "Content-Type": "application/json",
     },
     body: JSON.stringify(payload),
