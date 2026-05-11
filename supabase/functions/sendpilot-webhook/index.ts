@@ -198,8 +198,13 @@ Deno.serve(async (request) => {
   }
 
   if (isReplyReceived) {
+    // SendPilot renamed the field at some point: data.message → data.reply.
+    // Accept all three forms so we don't silently drop the body and stamp
+    // recorded:'reply_empty' (which is exactly how we missed Michael Bjørn's
+    // reply on 2026-05-11 — the message text was in data.reply).
     const replyText = String(
-      (data as Record<string, unknown>)["message"]
+      (data as Record<string, unknown>)["reply"]
+        ?? (data as Record<string, unknown>)["message"]
         ?? (data as Record<string, unknown>)["messagePreview"]
         ?? "",
     ).trim();
