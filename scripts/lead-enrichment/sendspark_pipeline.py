@@ -68,7 +68,7 @@ def ss_post_prospect(lead):
     payload = {
         "processAndAuthorizeCharge": True,
         "prospect": {
-            "contactName": (lead.get("firstName") or "").strip(),
+            "contactName": ((lead.get("firstName") or "").strip().split() or [""])[0],
             "contactEmail": synth_email(lead["linkedinUrl"]),
             "company": lead["company"][:80],
             "jobTitle": (lead.get("title") or "")[:120],

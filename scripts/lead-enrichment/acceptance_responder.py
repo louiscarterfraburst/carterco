@@ -101,7 +101,7 @@ def render_prospect(lead):
     payload = {
         "processAndAuthorizeCharge": True,
         "prospect": {
-            "contactName": (lead.get("firstName") or "").strip(),
+            "contactName": ((lead.get("firstName") or "").strip().split() or [""])[0],
             "contactEmail": email,
             "company": (lead.get("company") or "")[:80],
             "jobTitle": (lead.get("title") or "")[:120],
