@@ -25,7 +25,13 @@ const ALLOWED_USERS = new Set([
 const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY") ?? "";
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
-type ReplyIntent = "interested" | "question" | "decline" | "ooo" | "other";
+type ReplyIntent = "interested" | "question" | "decline" | "ooo" | "referral" | "other";
+
+type ReferralTarget = {
+  name?: string;
+  title?: string;
+  company?: string;
+};
 
 // Deployed with verify_jwt=false because we have two valid caller types:
 // - the service-role bearer (sendpilot-webhook calling internally), which
@@ -78,7 +84,7 @@ Deno.serve(async (req) => {
 async function classifyReply(
   text: string,
   lead: { firstName?: string; company?: string },
-): Promise<{ intent: ReplyIntent; confidence: number; reasoning: string } | null> {
+): Promise<{ intent: ReplyIntent; confidence: number; reasoning: string; referralTarget?: ReferralTarget } | null> {
   const prompt = [
     "Classify a LinkedIn reply to a cold outreach message.",
     "",
@@ -87,12 +93,20 @@ async function classifyReply(
     "- question: asks a clarifying question about the offer or sender, no clear yes/no yet.",
     "- decline: not interested, says no, asks to be removed, currently happy with provider.",
     "- ooo: out-of-office auto-reply or temporary unavailability.",
+    "- referral: says you should talk to someone else (a colleague, the owner, another department).",
+    "            Examples: 'wrong person — try our owner', 'tal med min kollega Bjarne', 'reach out to marketing'.",
     "- other: small talk, thanks-only, off-topic, unclassifiable.",
     "",
-    "Output ONLY valid JSON, no preamble:",
-    `{"intent":"<enum>", "confidence":<0..1>, "reasoning":"<10 words max>"}`,
+    "If intent=referral, ALSO extract whatever target info is in the reply:",
+    "- name:    the referred person's name if mentioned, else null. Use the form they wrote it (don't invent surnames).",
+    "- title:   the referred person's role/title if mentioned (e.g. 'owner', 'CMO', 'marketing manager'), else null.",
+    "- company: only if they referred us to a different company than theirs; usually null.",
+    "Leave fields null when unknown rather than guessing. If intent != referral, omit referralTarget entirely.",
     "",
-    "Lead context:",
+    "Output ONLY valid JSON, no preamble:",
+    `{"intent":"<enum>", "confidence":<0..1>, "reasoning":"<10 words max>", "referralTarget":{"name":"<or null>","title":"<or null>","company":"<or null>"}}`,
+    "",
+    "Lead context (the original recipient of our message):",
     `  firstName: ${lead.firstName ?? "?"}`,
     `  company:   ${lead.company ?? "?"}`,
     "",
@@ -124,10 +138,25 @@ async function classifyReply(
   try {
     const parsed = JSON.parse(m[0]);
     const intent = String(parsed.intent ?? "").toLowerCase() as ReplyIntent;
-    if (!["interested","question","decline","ooo","other"].includes(intent)) return null;
+    if (!["interested","question","decline","ooo","referral","other"].includes(intent)) return null;
     const confidence = Math.max(0, Math.min(1, Number(parsed.confidence ?? 0.5)));
     const reasoning = String(parsed.reasoning ?? "").slice(0, 200);
-    return { intent, confidence, reasoning };
+    const out: { intent: ReplyIntent; confidence: number; reasoning: string; referralTarget?: ReferralTarget } = {
+      intent, confidence, reasoning,
+    };
+    if (intent === "referral" && parsed.referralTarget && typeof parsed.referralTarget === "object") {
+      const rt = parsed.referralTarget as Record<string, unknown>;
+      const clean = (v: unknown): string | undefined => {
+        const s = (typeof v === "string" ? v : "").trim();
+        return s && s.toLowerCase() !== "null" ? s.slice(0, 120) : undefined;
+      };
+      out.referralTarget = {
+        name:    clean(rt.name),
+        title:   clean(rt.title),
+        company: clean(rt.company),
+      };
+    }
+    return out;
   } catch {
     return null;
   }

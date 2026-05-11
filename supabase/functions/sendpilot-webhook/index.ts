@@ -278,18 +278,53 @@ async function classifyReplyAsync(
         intent: string;
         confidence: number;
         reasoning: string;
+        referralTarget?: { name?: string; title?: string; company?: string };
       };
       const now = new Date().toISOString();
+      const isReferral = j.intent === "referral";
       await supabase.from("outreach_replies").update({
         intent: j.intent,
         confidence: j.confidence,
         reasoning: j.reasoning,
         classified_at: now,
+        referral_target_name:    isReferral ? (j.referralTarget?.name ?? null) : null,
+        referral_target_title:   isReferral ? (j.referralTarget?.title ?? null) : null,
+        referral_target_company: isReferral ? (j.referralTarget?.company ?? null) : null,
       }).eq("id", replyId);
       await supabase.from("outreach_pipeline").update({
         last_reply_at: now,
         last_reply_intent: j.intent,
       }).eq("sendpilot_lead_id", leadId);
+
+      // Referral pivot: when the prospect points us at someone else, spawn an
+      // outreach_alt_contacts row so the existing alt-review UI surfaces the
+      // pivot for one-click action. linkedin_url is empty initially — the UI
+      // can offer a SendPilot lead-database search by name+company to fill it,
+      // or fall back to manual entry. We only spawn when Claude actually
+      // extracted a name; "you should talk to someone else" with no name is
+      // useless without manual follow-up.
+      if (isReferral && j.referralTarget?.name) {
+        const { data: pipe } = await supabase
+          .from("outreach_pipeline")
+          .select("workspace_id, contact_email")
+          .eq("sendpilot_lead_id", leadId)
+          .maybeSingle();
+        const { data: origLead } = await supabase
+          .from("outreach_leads")
+          .select("company")
+          .eq("contact_email", pipe?.contact_email ?? "")
+          .maybeSingle();
+        await supabase.from("outreach_alt_contacts").insert({
+          pipeline_lead_id: leadId,
+          workspace_id: pipe?.workspace_id ?? null,
+          name: j.referralTarget.name,
+          title: j.referralTarget.title ?? null,
+          company: j.referralTarget.company ?? origLead?.company ?? null,
+          linkedin_url: null,
+          source: "reply_referral",
+          surfaced_at: now,
+        });
+      }
   } catch (e) {
     console.error("classifyReplyAsync error", e);
   }
