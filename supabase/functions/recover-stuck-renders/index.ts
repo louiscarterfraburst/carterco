@@ -91,16 +91,26 @@ Deno.serve(async (req) => {
   const cutoffIso = new Date(Date.now() - minAgeMin * 60_000).toISOString();
   const hardFailIso = new Date(Date.now() - hardFailHrs * 3600_000).toISOString();
 
-  const { data: stuck, error: stuckErr } = await supabase
+  // Age gates use `decided_at` (when the render was actually kicked off via
+  // outreach-approve), falling back to `accepted_at` for legacy rows that
+  // pre-date the pending_pre_render gate and went straight from accept to
+  // rendering. Using accepted_at alone would hard-fail any lead that sat in
+  // pending_pre_render for >24h the moment its render starts.
+  const { data: candidates, error: stuckErr } = await supabase
     .from("outreach_pipeline")
-    .select("sendpilot_lead_id, contact_email, accepted_at, campaign_id, error")
+    .select("sendpilot_lead_id, contact_email, accepted_at, decided_at, campaign_id, error")
     .eq("status", "rendering")
     .not("contact_email", "eq", "")
-    .lt("accepted_at", cutoffIso)
     .order("accepted_at", { ascending: true })
-    .limit(limit);
+    .limit(limit * 4);
   if (stuckErr) return json({ error: "DB select failed", details: stuckErr.message }, 500);
-  if (!stuck || stuck.length === 0) return json({ ok: true, reconciled: 0, note: "nothing stuck" });
+  const stuck = (candidates ?? [])
+    .filter((r) => {
+      const renderStarted = (r.decided_at as string | null) ?? (r.accepted_at as string | null);
+      return renderStarted !== null && renderStarted < cutoffIso;
+    })
+    .slice(0, limit);
+  if (stuck.length === 0) return json({ ok: true, reconciled: 0, note: "nothing stuck" });
 
   const reconciled: Array<{ sendpilot_lead_id: string; attempt: number }> = [];
   const skipped: Array<{ sendpilot_lead_id: string; reason: string }> = [];
@@ -108,9 +118,10 @@ Deno.serve(async (req) => {
 
   for (const row of stuck) {
     const errMsg = row.error as string | null;
+    const renderStarted = (row.decided_at as string | null) ?? (row.accepted_at as string | null);
 
     // Hard fail: too old, give up.
-    if (row.accepted_at && (row.accepted_at as string) < hardFailIso) {
+    if (renderStarted && renderStarted < hardFailIso) {
       if (!dryRun) {
         await supabase.from("outreach_pipeline").update({
           status: "failed",
@@ -222,7 +233,7 @@ Deno.serve(async (req) => {
 async function diagnose(limit: number) {
   const { data: stuck } = await supabase
     .from("outreach_pipeline")
-    .select("sendpilot_lead_id, contact_email, accepted_at, campaign_id")
+    .select("sendpilot_lead_id, contact_email, accepted_at, decided_at, campaign_id")
     .eq("status", "rendering")
     .not("contact_email", "eq", "")
     .order("accepted_at", { ascending: true })
