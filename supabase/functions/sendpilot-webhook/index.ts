@@ -4,7 +4,18 @@
 // in the svix-signature header.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.103.3";
-import { normalizeWebsiteUrl } from "../_shared/text.ts";
+import { firstNameForGreeting, normalizeWebsiteUrl } from "../_shared/text.ts";
+
+// Default follow-up message sent to a referral recipient (Morten) the moment
+// they accept the connection request. We inherit the referrer's (Justyna's)
+// SendSpark video so Morten sees exactly the artifact she forwarded him to —
+// no fresh render, no credit burned. Tunable via OUTREACH_REFERRAL_TEMPLATE.
+// Substitutions: {firstName} (recipient), {referrerFirstName}, {videoLink}.
+const REFERRAL_TEMPLATE_DEFAULT = [
+  "Hej {firstName}, tak for connectet — som lovet, her er videoen {referrerFirstName} så:",
+  "",
+  "{videoLink}",
+].join("\n");
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -161,6 +172,55 @@ Deno.serve(async (request) => {
     // outreach_events (already inserted above).
     if (isCampaignPaused(campaignId)) {
       return json({ ok: true, recorded: "render_paused", campaignId });
+    }
+
+    // Referral fast-path: if this LinkedIn URL is the recipient of a prior
+    // reply_referral alt_contact, inherit the referrer's video instead of
+    // firing a fresh SendSpark render. Skips the pending_pre_render gate
+    // entirely — user just needs to approve the send.
+    const { data: refAlt } = await supabase
+      .from("outreach_alt_contacts")
+      .select("pipeline_lead_id, name")
+      .eq("source", "reply_referral")
+      .eq("linkedin_url", linkedinUrl)
+      .maybeSingle();
+    if (refAlt) {
+      const { data: refPipe } = await supabase
+        .from("outreach_pipeline")
+        .select("video_link, embed_link, thumbnail_url, contact_email")
+        .eq("sendpilot_lead_id", refAlt.pipeline_lead_id)
+        .maybeSingle();
+      if (refPipe?.video_link) {
+        const { data: refLead } = await supabase
+          .from("outreach_leads")
+          .select("first_name")
+          .eq("contact_email", refPipe.contact_email ?? "")
+          .maybeSingle();
+        const template = Deno.env.get("OUTREACH_REFERRAL_TEMPLATE") || REFERRAL_TEMPLATE_DEFAULT;
+        const message = template
+          .replaceAll("{firstName}", firstNameForGreeting(lead.first_name) || "der")
+          .replaceAll("{referrerFirstName}", firstNameForGreeting(refLead?.first_name) || "vores fælles kontakt")
+          .replaceAll("{videoLink}", refPipe.video_link);
+        await supabase.from("outreach_pipeline").upsert({
+          sendpilot_lead_id: leadId,
+          linkedin_url: linkedinUrl,
+          contact_email: lead.contact_email,
+          is_cold: true,
+          status: "pending_approval",
+          accepted_at: now,
+          queued_at: now,
+          rendered_at: now,
+          video_link: refPipe.video_link,
+          embed_link: refPipe.embed_link,
+          thumbnail_url: refPipe.thumbnail_url,
+          rendered_message: message,
+          workspace_id: workspaceId,
+          campaign_id: campaignId || null,
+          sendpilot_sender_id: senderId || null,
+          referred_from_pipeline_lead_id: refAlt.pipeline_lead_id,
+        }, { onConflict: "sendpilot_lead_id" });
+        return json({ ok: true, recorded: "accepted_referral_inherited", referred_from: refAlt.pipeline_lead_id });
+      }
     }
 
     // Gate: a missing website turns the SendSpark render into a video shot

@@ -12,6 +12,14 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.103.3";
 import { createHash } from "node:crypto";
+import { firstNameForGreeting } from "../_shared/text.ts";
+
+// Default connect-note template for reply_referral alt_contacts. Tunable
+// via OUTREACH_REFERRAL_CONNECT_NOTE env var; substitutions: {firstName}
+// (recipient), {referrerFirstName} (original prospect who pointed us to
+// them). Kept compact for LinkedIn's 300-char note limit.
+const REFERRAL_CONNECT_NOTE_DEFAULT =
+  "Hej {firstName}, {referrerFirstName} sagde jeg skulle prikke til dig — har en kort video til dig";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -73,11 +81,12 @@ Deno.serve(async (request) => {
 
   const { data: origLead } = await admin
     .from("outreach_leads")
-    .select("company, website")
+    .select("first_name, company, website")
     .eq("contact_email", orig.contact_email ?? "")
     .maybeSingle();
 
   const now = new Date().toISOString();
+  const isReplyReferral = alt.source === "reply_referral";
 
   // Plant an outreach_leads row for the alternate so the future accept
   // webhook can look them up by linkedin_url and the SendSpark render uses
@@ -100,14 +109,26 @@ Deno.serve(async (request) => {
     campaign_id: orig.campaign_id ?? null,
   }, { onConflict: "linkedin_url" });
 
-  // Send the connection request via SendPilot.
+  // Connect-note: if the caller supplied one, use it verbatim. Otherwise
+  // for reply_referral alts, default to a referral-aware note so Morten sees
+  // "Justyna sagde jeg skulle prikke til dig" instead of a bare connect.
+  // For sendpilot/team_page alts we still send bare (higher accept rate on
+  // cold connects).
+  let connectMessage = body.messageOverride?.trim() ?? "";
+  if (!connectMessage && isReplyReferral) {
+    const template = Deno.env.get("OUTREACH_REFERRAL_CONNECT_NOTE") || REFERRAL_CONNECT_NOTE_DEFAULT;
+    connectMessage = template
+      .replaceAll("{firstName}", altFirst || "der")
+      .replaceAll("{referrerFirstName}", firstNameForGreeting(origLead?.first_name) || "vores fælles kontakt");
+  }
+
   const connectRes = await fetch("https://api.sendpilot.ai/v1/inbox/connect", {
     method: "POST",
     headers: { "X-API-Key": SP_API_KEY, "Content-Type": "application/json" },
     body: JSON.stringify({
       senderId: orig.sendpilot_sender_id,
       recipientLinkedinUrl: alt.linkedin_url,
-      ...(body.messageOverride?.trim() ? { message: body.messageOverride.trim() } : {}),
+      ...(connectMessage ? { message: connectMessage } : {}),
     }),
   });
   let connectBody: unknown = null;
@@ -122,15 +143,22 @@ Deno.serve(async (request) => {
   }).eq("id", altContactId);
 
   if (success) {
-    // Mark the original row's alt_decided + flip status so the row leaves
-    // the "pending_alt_review" bucket. We use 'rejected_by_icp' since the
-    // original person was the wrong fit — the alternate is now the live
-    // CarterCo connection request.
-    await admin.from("outreach_pipeline").update({
+    // For ICP-rejected pivots: flip orig status to 'rejected_by_icp' so it
+    // leaves the pending_alt_review bucket. For reply_referrals: the orig
+    // prospect actually replied (politely pointed us to someone else), so
+    // we keep their pipeline as-is (last_reply_at already gates follow-ups).
+    const origUpdate: Record<string, unknown> = {
       alt_decided_at: now,
       alt_decided_by: email,
-      status: "rejected_by_icp",
-    }).eq("sendpilot_lead_id", alt.pipeline_lead_id);
+    };
+    if (!isReplyReferral) origUpdate.status = "rejected_by_icp";
+    await admin.from("outreach_pipeline").update(origUpdate).eq("sendpilot_lead_id", alt.pipeline_lead_id);
+
+    // For reply_referrals: sendpilot-webhook resolves the referrer at
+    // connection.accepted time by looking up outreach_alt_contacts on the
+    // recipient's linkedin_url (alt.pipeline_lead_id then points back to
+    // the referrer's pipeline row). Avoids racing the SendPilot-assigned
+    // leadId, which is unknown at invite time.
   }
 
   return json({
