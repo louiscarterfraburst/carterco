@@ -36,6 +36,27 @@ type Status =
 
 type Intent = "interested" | "question" | "decline" | "ooo" | "other" | "referral";
 
+// Outcome = final result of a lead's journey. Logged manually by Louis from
+// the Sendt or Svar surfaces. Foundation for the weekly self-improvement
+// loop: outcomes labelled against ICP scores tell us where the prompt is
+// over- or under-scoring.
+type Outcome =
+  | "won"                    // became customer / signed
+  | "meeting_booked"         // booked a meeting (intent confirmed)
+  | "interested"             // engaged but not yet a meeting
+  | "not_interested"         // explicit no
+  | "wrong_person_confirmed" // they verified they're not the buyer
+  | "ghosted";               // no response after enough time
+
+const OUTCOME_OPTIONS: { value: Outcome; label: string }[] = [
+  { value: "won",                    label: "Vundet" },
+  { value: "meeting_booked",         label: "Møde booket" },
+  { value: "interested",             label: "Interesseret" },
+  { value: "not_interested",         label: "Nej tak" },
+  { value: "wrong_person_confirmed", label: "Forkert person" },
+  { value: "ghosted",                label: "Ghosted" },
+];
+
 type LeadEnrich = {
   first_name: string | null;
   last_name: string | null;
@@ -84,6 +105,9 @@ type PipelineRow = {
   alt_search_status: "pending" | "completed" | "empty" | "failed" | null;
   alt_decided_at: string | null;
   alt_decided_by: string | null;
+  outcome: Outcome | null;
+  outcome_at: string | null;
+  outcome_note: string | null;
   lead?: LeadEnrich;
 };
 
@@ -350,6 +374,20 @@ export default function OutreachPage() {
       setEditing(null);
       await load();
     }
+  }
+
+  async function setOutcome(leadId: string, outcome: Outcome | null) {
+    setBusyLead(leadId); setErr(null);
+    const patch = outcome
+      ? { outcome, outcome_at: new Date().toISOString() }
+      : { outcome: null, outcome_at: null };
+    const { error } = await supabase
+      .from("outreach_pipeline")
+      .update(patch)
+      .eq("sendpilot_lead_id", leadId);
+    setBusyLead(null);
+    if (error) setErr(error.message);
+    else await load();
   }
 
   async function markReplyHandled(replyId: string) {
@@ -650,7 +688,11 @@ export default function OutreachPage() {
             onInviteAlt={(altId, leadId) => void inviteAlt(altId, leadId)}
           />
         ) : tab === "sent" ? (
-          <SentTab rows={sent} />
+          <SentTab
+            rows={sent}
+            busyLead={busyLead}
+            onSetOutcome={(id, o) => void setOutcome(id, o)}
+          />
         ) : tab === "icp_rejected" ? (
           <IcpRejectedTab rows={icpRejected} busyLead={busyLead}
             onOverride={(id) => void overrideIcpRejection(id)} />
@@ -1169,7 +1211,11 @@ function RepliesTab({ replies, referralsByLead, busyLead, onMarkHandled, onInvit
   );
 }
 
-function SentTab({ rows }: { rows: PipelineRow[] }) {
+function SentTab({ rows, busyLead, onSetOutcome }: {
+  rows: PipelineRow[];
+  busyLead: string | null;
+  onSetOutcome: (leadId: string, outcome: Outcome | null) => void;
+}) {
   if (rows.length === 0) return <p className="mt-4 text-sm text-[var(--ink)]/45">Endnu intet sendt.</p>;
   return (
     <ul className="mt-4 flex flex-col divide-y divide-[var(--ink)]/8 border-y border-[var(--ink)]/8">
@@ -1177,15 +1223,40 @@ function SentTab({ rows }: { rows: PipelineRow[] }) {
         <li key={r.sendpilot_lead_id} className="grid grid-cols-12 gap-3 py-3 text-sm">
           <span className="col-span-3 sm:col-span-2 tabular text-[12px] text-[var(--ink)]/55">{fmtShort(r.sent_at ?? r.updated_at)}</span>
           <span className="col-span-9 sm:col-span-3 truncate text-[var(--ink)]/80">{r.lead?.first_name} {r.lead?.last_name}</span>
-          <span className="hidden sm:block sm:col-span-3 truncate text-[var(--ink)]/60">{r.lead?.company}</span>
-          <span className="col-span-12 sm:col-span-2 truncate text-[12px] text-[var(--ink)]/45">{r.decided_by ?? ""}</span>
+          <span className="hidden sm:block sm:col-span-2 truncate text-[var(--ink)]/60">{r.lead?.company}</span>
           <span className="col-span-12 sm:col-span-2 flex flex-wrap items-center gap-1">
             {r.last_reply_intent ? <IntentPill intent={r.last_reply_intent} confidence={null} /> : null}
             <SequencePill row={r} />
           </span>
+          <span className="col-span-12 sm:col-span-3 flex items-center justify-end">
+            <OutcomePicker
+              outcome={r.outcome}
+              busy={busyLead === r.sendpilot_lead_id}
+              onChange={(o) => onSetOutcome(r.sendpilot_lead_id, o)}
+            />
+          </span>
         </li>
       ))}
     </ul>
+  );
+}
+
+function OutcomePicker({ outcome, busy, onChange }: {
+  outcome: Outcome | null;
+  busy: boolean;
+  onChange: (o: Outcome | null) => void;
+}) {
+  return (
+    <select
+      value={outcome ?? ""}
+      onChange={(e) => onChange((e.target.value as Outcome) || null)}
+      disabled={busy}
+      className="focus-cream tabular rounded-sm border border-[var(--ink)]/15 bg-transparent px-2 py-1 text-[10px] uppercase tracking-[0.18em] text-[var(--ink)]/65 hover:border-[var(--ink)]/35 disabled:opacity-50"
+      title="Tag resultat — bruges til at tune ICP-scoring over tid"
+    >
+      <option value="">— Tag resultat —</option>
+      {OUTCOME_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+    </select>
   );
 }
 
