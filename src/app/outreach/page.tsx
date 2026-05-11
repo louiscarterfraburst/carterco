@@ -472,14 +472,41 @@ export default function OutreachPage() {
   }
 
   async function overrideIcpRejection(leadId: string) {
-    if (!confirm("Send personen til render-køen alligevel?")) return;
+    // If the row has unactioned alts surfaced from a prior alt-search, send
+    // it BACK to "Vælg rigtig person" instead of pending_pre_render — that
+    // way the alt context (existing candidates, "Use original" escape hatch)
+    // doesn't vanish behind the row landing as a fresh-looking lead in
+    // Klar-til-render. If there are no alts, fall back to the original
+    // pending_pre_render behaviour.
+    const altsForLead = altByLead.get(leadId) ?? [];
+    const hasUnactionedAlts = altsForLead.some((a) => !a.acted_on_at);
+
+    const target: Status = hasUnactionedAlts ? "pending_alt_review" : "pending_pre_render";
+    const promptMsg = hasUnactionedAlts
+      ? `Denne lead har ${altsForLead.length} alternativer surfaced. Send tilbage til "Vælg rigtig person" så du kan se dem?`
+      : "Send personen til render-køen alligevel?";
+
+    if (!confirm(promptMsg)) return;
     setBusyLead(leadId); setErr(null); setInfo(null);
+    const patch: Partial<PipelineRow> = { status: target };
+    if (hasUnactionedAlts) {
+      // Reopen alt_search_status if it had been marked completed — alts are
+      // still pending decision from a UX point of view.
+      patch.alt_search_status = "completed";
+    }
     const { error } = await supabase
       .from("outreach_pipeline")
-      .update({ status: "pending_pre_render" })
+      .update(patch)
       .eq("sendpilot_lead_id", leadId);
     setBusyLead(null);
-    if (error) setErr(error.message); else { setInfo("Override – sendt tilbage til afventer."); await load(); }
+    if (error) {
+      setErr(error.message);
+    } else {
+      setInfo(hasUnactionedAlts
+        ? "Sendt tilbage til Vælg rigtig person."
+        : "Override – sendt tilbage til afventer.");
+      await load();
+    }
   }
 
   async function useOriginal(leadId: string) {
