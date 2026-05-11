@@ -1,5 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2.103.3";
 import webpush from "npm:web-push@3.6.7";
+import { workspaceLabel } from "../_shared/workspaces.ts";
 
 type Lead = {
   id?: string;
@@ -102,16 +103,17 @@ Deno.serve(async (request) => {
   }
 
   const displayName = lead.name ?? lead.email ?? lead.phone ?? "lead";
-  let title: string;
+  let baseTitle: string;
   if (actionType === "retry") {
-    title = `Prøv igen: ${displayName}`;
+    baseTitle = `Prøv igen: ${displayName}`;
   } else if (actionType === "callback") {
-    title = `Ring tilbage nu: ${displayName}`;
+    baseTitle = `Ring tilbage nu: ${displayName}`;
   } else if (actionType === "follow_up") {
-    title = `Follow-up: ${displayName}`;
+    baseTitle = `Follow-up: ${displayName}`;
   } else {
-    title = `${sourceLabelFor(lead.source)}: ${displayName}`;
+    baseTitle = `${sourceLabelFor(lead.source)}: ${displayName}`;
   }
+  const title = `${workspaceLabel(workspaceId)} /leads · ${baseTitle}`;
   const bodyLine = [lead.company, lead.phone ?? lead.email]
     .filter(Boolean)
     .join(" — ");

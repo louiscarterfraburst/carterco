@@ -14,6 +14,7 @@ import Link from "next/link";
 import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/utils/supabase/client";
 import { useWorkspace, type Workspace } from "@/utils/workspace";
+import { ICP } from "@/lib/icp";
 
 const VAPID_PUBLIC_KEY =
   process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ??
@@ -28,6 +29,8 @@ type Status =
   | "pending_approval"
   | "sent"
   | "rejected"
+  | "rejected_by_icp"
+  | "pending_alt_review"
   | "failed"
   | "pre_connected";
 
@@ -73,7 +76,30 @@ type PipelineRow = {
   sequence_completed_at: string | null;
   error: string | null;
   updated_at: string;
+  icp_company_score: number | null;
+  icp_person_score: number | null;
+  icp_rationale: string | null;
+  icp_scored_at: string | null;
+  alt_search_id: string | null;
+  alt_search_status: "pending" | "completed" | "empty" | "failed" | null;
+  alt_decided_at: string | null;
+  alt_decided_by: string | null;
   lead?: LeadEnrich;
+};
+
+type AltContact = {
+  id: string;
+  pipeline_lead_id: string;
+  name: string;
+  linkedin_url: string;
+  title: string | null;
+  seniority: string | null;
+  employees: string | null;
+  company: string | null;
+  source: "sendpilot" | "team_page";
+  surfaced_at: string;
+  acted_on_at: string | null;
+  error: string | null;
 };
 
 type Reply = {
@@ -91,7 +117,7 @@ type Reply = {
   lead?: LeadEnrich;
 };
 
-type Tab = "pending" | "accepted" | "replies" | "sent" | "all";
+type Tab = "pending" | "accepted" | "replies" | "sent" | "all" | "icp_rejected" | "alt_review" | "icp";
 type SortKey = "queued_oldest" | "queued_newest" | "name";
 type ColdFilter = "all" | "cold" | "warm";
 
@@ -106,6 +132,7 @@ export default function OutreachPage() {
   );
   const [rows, setRows] = useState<PipelineRow[]>([]);
   const [replies, setReplies] = useState<Reply[]>([]);
+  const [altContacts, setAltContacts] = useState<AltContact[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyLead, setBusyLead] = useState<string | null>(null);
   const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null);
@@ -189,6 +216,15 @@ export default function OutreachPage() {
       ...r,
       lead: leadMap.get(replyEmailById.get(r.sendpilot_lead_id) ?? ""),
     })));
+
+    const { data: alts } = await supabase
+      .from("outreach_alt_contacts")
+      .select("*")
+      .eq("workspace_id", activeWorkspaceId)
+      .is("acted_on_at", null)
+      .order("surfaced_at", { ascending: false })
+      .limit(500);
+    setAltContacts((alts ?? []) as AltContact[]);
   }, [activeWorkspaceId, supabase]);
 
   const scheduleReload = useCallback(() => {
@@ -208,6 +244,7 @@ export default function OutreachPage() {
       .channel(`outreach-live-${activeWorkspaceId}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "outreach_pipeline", filter }, () => scheduleReload())
       .on("postgres_changes", { event: "*", schema: "public", table: "outreach_replies",  filter }, () => scheduleReload())
+      .on("postgres_changes", { event: "*", schema: "public", table: "outreach_alt_contacts", filter }, () => scheduleReload())
       .subscribe();
     return () => { void supabase.removeChannel(ch); };
   }, [user, activeWorkspaceId, supabase, scheduleReload]);
@@ -314,6 +351,47 @@ export default function OutreachPage() {
     if (error) setErr(error.message); else await load();
   }
 
+  async function overrideIcpRejection(leadId: string) {
+    if (!confirm("Send personen til render-køen alligevel?")) return;
+    setBusyLead(leadId); setErr(null); setInfo(null);
+    const { error } = await supabase
+      .from("outreach_pipeline")
+      .update({ status: "pending_pre_render" })
+      .eq("sendpilot_lead_id", leadId);
+    setBusyLead(null);
+    if (error) setErr(error.message); else { setInfo("Override – sendt tilbage til afventer."); await load(); }
+  }
+
+  async function useOriginal(leadId: string) {
+    setBusyLead(leadId); setErr(null); setInfo(null);
+    const { error } = await supabase
+      .from("outreach_pipeline")
+      .update({
+        status: "pending_pre_render",
+        alt_decided_at: new Date().toISOString(),
+        alt_decided_by: user?.email ?? null,
+      })
+      .eq("sendpilot_lead_id", leadId);
+    setBusyLead(null);
+    if (error) setErr(error.message); else { setInfo("Bruger original – afventer render."); await load(); }
+  }
+
+  async function inviteAlt(altContactId: string, leadId: string) {
+    setBusyLead(leadId); setErr(null); setInfo(null);
+    const { data, error } = await supabase.functions.invoke("invite-alt-contact", {
+      body: { altContactId },
+    });
+    setBusyLead(null);
+    if (error) { setErr(error.message ?? String(error)); return; }
+    if (data?.error) { setErr(`${data.error}${data.details ? `: ${data.details}` : ""}`); return; }
+    if (data?.ok) {
+      setInfo("Forbindelsesanmodning sendt til alternativ kontakt.");
+      await load();
+    } else {
+      setErr(`SendPilot HTTP ${data?.status ?? "?"}`);
+    }
+  }
+
   // ---------- auth UI helpers ----------
   async function sendOtp(e: FormEvent<HTMLFormElement>) {
     e.preventDefault(); setErr(null); setInfo(null);
@@ -336,7 +414,7 @@ export default function OutreachPage() {
   }
   async function signOut() {
     await supabase.auth.signOut();
-    setUser(null); setRows([]); setReplies([]);
+    setUser(null); setRows([]); setReplies([]); setAltContacts([]);
   }
 
   // ---------- derived ----------
@@ -344,6 +422,7 @@ export default function OutreachPage() {
     const c = {
       total: rows.length, invited: 0, accepted: 0, rendering: 0,
       pending: 0, sent: 0, rejected: 0, failed: 0, replied: 0,
+      icp_rejected: 0, alt_review: 0,
     };
     for (const r of rows) {
       if (r.status === "invited") c.invited++;
@@ -352,11 +431,35 @@ export default function OutreachPage() {
       else if (r.status === "pending_approval") c.pending++;
       else if (r.status === "sent") c.sent++;
       else if (r.status === "rejected") c.rejected++;
+      else if (r.status === "rejected_by_icp") c.icp_rejected++;
+      else if (r.status === "pending_alt_review") c.alt_review++;
       else if (r.status === "failed") c.failed++;
       if (r.last_reply_at) c.replied++;
     }
     return c;
   }, [rows]);
+
+  const icpRejected = useMemo(
+    () => rows.filter((r) => r.status === "rejected_by_icp")
+      .sort((a, b) => (b.icp_scored_at ?? "").localeCompare(a.icp_scored_at ?? "")),
+    [rows],
+  );
+
+  const altReview = useMemo(
+    () => rows.filter((r) => r.status === "pending_alt_review")
+      .sort((a, b) => (b.icp_scored_at ?? "").localeCompare(a.icp_scored_at ?? "")),
+    [rows],
+  );
+
+  const altByLead = useMemo(() => {
+    const m = new Map<string, AltContact[]>();
+    for (const a of altContacts) {
+      const arr = m.get(a.pipeline_lead_id) ?? [];
+      arr.push(a);
+      m.set(a.pipeline_lead_id, arr);
+    }
+    return m;
+  }, [altContacts]);
 
   const sparkline = useMemo(() => buildSparkline(rows, 30), [rows]);
   const unhandledReplies = useMemo(() => replies.filter((r) => !r.handled), [replies]);
@@ -479,6 +582,8 @@ export default function OutreachPage() {
         replies: unhandledReplies.length,
         sent: stats.sent,
         all: stats.total,
+        icp_rejected: icpRejected.length,
+        alt_review: altReview.length,
       }} />
 
       <section className="mx-auto w-full max-w-[1400px] px-4 pb-12 sm:px-8 lg:px-12">
@@ -511,6 +616,15 @@ export default function OutreachPage() {
           <RepliesTab replies={replies} onMarkHandled={(id) => void markReplyHandled(id)} />
         ) : tab === "sent" ? (
           <SentTab rows={sent} />
+        ) : tab === "icp_rejected" ? (
+          <IcpRejectedTab rows={icpRejected} busyLead={busyLead}
+            onOverride={(id) => void overrideIcpRejection(id)} />
+        ) : tab === "alt_review" ? (
+          <AltReviewTab rows={altReview} altsByLead={altByLead} busyLead={busyLead}
+            onUseOriginal={(id) => void useOriginal(id)}
+            onInviteAlt={(altId, leadId) => void inviteAlt(altId, leadId)} />
+        ) : tab === "icp" ? (
+          <IcpOverviewTab />
         ) : (
           <AllTab rows={allRecent} />
         )}
@@ -627,14 +741,20 @@ function Sparkline({ data }: { data: { day: string; count: number }[] }) {
 }
 
 function Tabs({ tab, setTab, counts }: {
-  tab: Tab; setTab: (t: Tab) => void; counts: { pending: number; accepted: number; replies: number; sent: number; all: number };
+  tab: Tab; setTab: (t: Tab) => void; counts: {
+    pending: number; accepted: number; replies: number; sent: number; all: number;
+    icp_rejected: number; alt_review: number;
+  };
 }) {
   const items: { id: Tab; label: string; count: number; accent?: boolean }[] = [
     { id: "pending", label: "Afventer", count: counts.pending, accent: counts.pending > 0 },
     { id: "accepted", label: "Accepteret", count: counts.accepted, accent: counts.accepted > 0 },
+    { id: "alt_review", label: "Rigtig person?", count: counts.alt_review, accent: counts.alt_review > 0 },
     { id: "replies", label: "Svar", count: counts.replies, accent: counts.replies > 0 },
     { id: "sent", label: "Sendt", count: counts.sent },
+    { id: "icp_rejected", label: "ICP-afvist", count: counts.icp_rejected },
     { id: "all", label: "Alle", count: counts.all },
+    { id: "icp", label: "ICP", count: 0 },
   ];
   return (
     <nav className="mx-auto mt-2 mb-4 w-full max-w-[1400px] px-4 sm:px-8 lg:px-12">
@@ -1073,6 +1193,8 @@ function StatusPill({ status }: { status: Status }) {
     pending_approval: { label: "Afventer", bg: "rgba(185,112,65,0.14)", fg: "var(--clay)" },
     sent: { label: "Sendt", bg: "rgba(35,90,67,0.14)", fg: "var(--forest)" },
     rejected: { label: "Afvist", bg: "rgb(0 0 0 / .06)", fg: "rgb(0 0 0 / .45)" },
+    rejected_by_icp: { label: "ICP-afvist", bg: "rgb(0 0 0 / .06)", fg: "rgb(0 0 0 / .50)" },
+    pending_alt_review: { label: "Person?", bg: "rgba(185,112,65,0.14)", fg: "var(--clay)" },
     failed: { label: "Fejl", bg: "rgba(185,112,65,0.14)", fg: "var(--clay)" },
     pre_connected: { label: "Eksisterende", bg: "rgba(35,90,67,0.10)", fg: "var(--forest)" },
   };
@@ -1206,4 +1328,173 @@ function arrayBuffersEqual(left: ArrayBuffer | null | undefined, right: Uint8Arr
   if (!left || left.byteLength !== right.byteLength) return false;
   const lb = new Uint8Array(left);
   return lb.every((b, i) => b === right[i]);
+}
+
+// ===================== ICP tabs =====================
+
+function IcpRejectedTab({ rows, busyLead, onOverride }: {
+  rows: PipelineRow[];
+  busyLead: string | null;
+  onOverride: (leadId: string) => void;
+}) {
+  if (rows.length === 0) {
+    return <p className="tabular py-12 text-center text-[11px] uppercase tracking-[0.22em] text-[var(--ink)]/35">Ingen ICP-afviste leads.</p>;
+  }
+  return (
+    <ul className="divide-y divide-[var(--ink)]/[0.08]">
+      {rows.map((r) => {
+        const name = `${r.lead?.first_name ?? ""} ${r.lead?.last_name ?? ""}`.trim() || "?";
+        return (
+          <li key={r.sendpilot_lead_id} className="py-5">
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+              <span className="font-medium text-[var(--ink)]">{name}</span>
+              <span className="tabular text-[10px] uppercase tracking-[0.18em] text-[var(--ink)]/45">{r.lead?.title ?? "—"}</span>
+            </div>
+            <div className="mt-1 tabular text-[11px] text-[var(--ink)]/55">
+              {r.lead?.company ?? "(intet firma)"} · score {r.icp_company_score ?? "?"}/{r.icp_person_score ?? "?"}
+            </div>
+            {r.icp_rationale ? (
+              <p className="mt-2 max-w-2xl text-sm leading-relaxed text-[var(--ink)]/65">{r.icp_rationale}</p>
+            ) : null}
+            <div className="mt-3 flex flex-wrap gap-3">
+              <a href={r.linkedin_url} target="_blank" rel="noopener noreferrer"
+                className="tabular text-[11px] uppercase tracking-[0.2em] text-[var(--forest)] underline-offset-[6px] hover:underline">
+                LinkedIn →
+              </a>
+              <button onClick={() => onOverride(r.sendpilot_lead_id)} disabled={busyLead === r.sendpilot_lead_id}
+                className="tabular text-[11px] uppercase tracking-[0.2em] text-[var(--clay)] underline-offset-[6px] hover:underline disabled:opacity-50">
+                Override – send til afventer
+              </button>
+            </div>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function AltReviewTab({ rows, altsByLead, busyLead, onUseOriginal, onInviteAlt }: {
+  rows: PipelineRow[];
+  altsByLead: Map<string, AltContact[]>;
+  busyLead: string | null;
+  onUseOriginal: (leadId: string) => void;
+  onInviteAlt: (altId: string, leadId: string) => void;
+}) {
+  if (rows.length === 0) {
+    return <p className="tabular py-12 text-center text-[11px] uppercase tracking-[0.22em] text-[var(--ink)]/35">Ingen leads under person-review.</p>;
+  }
+  return (
+    <ul className="divide-y divide-[var(--ink)]/[0.08]">
+      {rows.map((r) => {
+        const name = `${r.lead?.first_name ?? ""} ${r.lead?.last_name ?? ""}`.trim() || "?";
+        const alts = altsByLead.get(r.sendpilot_lead_id) ?? [];
+        return (
+          <li key={r.sendpilot_lead_id} className="py-6">
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+              <span className="font-medium text-[var(--ink)]">{name}</span>
+              <span className="tabular text-[10px] uppercase tracking-[0.18em] text-[var(--ink)]/45">{r.lead?.title ?? "—"}</span>
+            </div>
+            <div className="mt-1 tabular text-[11px] text-[var(--ink)]/55">
+              {r.lead?.company ?? "(intet firma)"} · score {r.icp_company_score ?? "?"}/{r.icp_person_score ?? "?"}
+            </div>
+            {r.icp_rationale ? (
+              <p className="mt-2 max-w-2xl text-sm leading-relaxed text-[var(--ink)]/65">{r.icp_rationale}</p>
+            ) : null}
+
+            <div className="mt-4">
+              {r.alt_search_status === "pending" ? (
+                <p className="tabular text-[11px] uppercase tracking-[0.2em] text-[var(--ink)]/45">Søger alternative kontakter …</p>
+              ) : r.alt_search_status === "empty" || (r.alt_search_status === "completed" && alts.length === 0) ? (
+                <p className="tabular text-[11px] uppercase tracking-[0.2em] text-[var(--ink)]/45">
+                  Ingen automatiske kandidater – undersøg manuelt på{" "}
+                  <a href={r.linkedin_url} target="_blank" rel="noopener noreferrer"
+                    className="text-[var(--forest)] underline underline-offset-[3px]">LinkedIn</a>.
+                </p>
+              ) : r.alt_search_status === "failed" ? (
+                <p className="tabular text-[11px] uppercase tracking-[0.2em] text-[var(--clay)]">Søgning fejlede.</p>
+              ) : (
+                <ul className="space-y-3">
+                  {alts.map((a) => (
+                    <li key={a.id} className="rounded-sm border border-[var(--ink)]/15 p-3">
+                      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                        <div className="min-w-0">
+                          <div className="font-medium text-[var(--ink)]">{a.name}</div>
+                          <div className="tabular text-[11px] text-[var(--ink)]/55">
+                            {a.title ?? "—"}{a.seniority ? ` · ${a.seniority}` : ""}{a.employees ? ` · ${a.employees}` : ""}
+                          </div>
+                        </div>
+                        <div className="flex shrink-0 gap-3">
+                          <a href={a.linkedin_url} target="_blank" rel="noopener noreferrer"
+                            className="tabular text-[11px] uppercase tracking-[0.2em] text-[var(--forest)] underline-offset-[6px] hover:underline">
+                            LinkedIn →
+                          </a>
+                          <button onClick={() => onInviteAlt(a.id, r.sendpilot_lead_id)} disabled={busyLead === r.sendpilot_lead_id}
+                            className="tabular text-[11px] uppercase tracking-[0.2em] text-[var(--clay)] underline-offset-[6px] hover:underline disabled:opacity-50">
+                            Inviter →
+                          </button>
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-4">
+              <a href={r.linkedin_url} target="_blank" rel="noopener noreferrer"
+                className="tabular text-[11px] uppercase tracking-[0.2em] text-[var(--ink)]/60 underline-offset-[6px] hover:underline">
+                Se original-profil →
+              </a>
+              <button onClick={() => onUseOriginal(r.sendpilot_lead_id)} disabled={busyLead === r.sendpilot_lead_id}
+                className="tabular text-[11px] uppercase tracking-[0.2em] text-[var(--ink)]/70 underline-offset-[6px] hover:underline disabled:opacity-50">
+                Brug original alligevel →
+              </button>
+            </div>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function IcpOverviewTab() {
+  const titles = ICP.alternateSearchTitles.join(" · ");
+  return (
+    <div className="mx-auto max-w-3xl py-4 text-[14px] leading-relaxed text-[var(--ink)]/80">
+      <p className="tabular text-[10px] uppercase tracking-[0.32em] text-[var(--ink)]/40">Hvad vi scorer mod</p>
+      <h2 className="font-display mt-2 text-3xl italic text-[var(--ink)]">ICP</h2>
+
+      <section className="mt-6">
+        <h3 className="tabular text-[11px] uppercase tracking-[0.22em] text-[var(--ink)]/65">Firma-fit</h3>
+        <pre className="mt-2 whitespace-pre-wrap font-sans text-[14px] text-[var(--ink)]/75">{ICP.companyFit}</pre>
+      </section>
+
+      <section className="mt-6">
+        <h3 className="tabular text-[11px] uppercase tracking-[0.22em] text-[var(--ink)]/65">Person-fit</h3>
+        <pre className="mt-2 whitespace-pre-wrap font-sans text-[14px] text-[var(--ink)]/75">{ICP.personFit}</pre>
+      </section>
+
+      <section className="mt-6">
+        <h3 className="tabular text-[11px] uppercase tracking-[0.22em] text-[var(--ink)]/65">Søg-titler (alternativer)</h3>
+        <p className="mt-2 text-[14px] text-[var(--ink)]/75">{titles}</p>
+      </section>
+
+      <section className="mt-6">
+        <h3 className="tabular text-[11px] uppercase tracking-[0.22em] text-[var(--ink)]/65">Lokationer</h3>
+        <p className="mt-2 text-[14px] text-[var(--ink)]/75">{ICP.alternateSearchLocations.join(", ")}</p>
+      </section>
+
+      <section className="mt-6">
+        <h3 className="tabular text-[11px] uppercase tracking-[0.22em] text-[var(--ink)]/65">Tærskler (1–5)</h3>
+        <ul className="mt-2 text-[14px] text-[var(--ink)]/75">
+          <li>Firma-score &lt; {ICP.thresholds.minCompanyScore} → afvist</li>
+          <li>Person-score &lt; {ICP.thresholds.minPersonScore} → søg efter alternativ</li>
+        </ul>
+      </section>
+
+      <p className="mt-8 tabular text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/35">
+        Sidst opdateret: {ICP.lastUpdated} · supabase/functions/_shared/icp.ts
+      </p>
+    </div>
+  );
 }

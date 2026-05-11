@@ -4,6 +4,7 @@
 // Mirrors the notify-new-lead pattern (same VAPID + push_subscriptions table).
 import { createClient } from "npm:@supabase/supabase-js@2.103.3";
 import webpush from "npm:web-push@3.6.7";
+import { workspaceLabel } from "../_shared/workspaces.ts";
 
 type PipelineRow = {
   sendpilot_lead_id: string;
@@ -87,9 +88,10 @@ Deno.serve(async (request) => {
 
   const firstName = (lead?.first_name ?? "").trim() || "(?)";
   const company = (lead?.company ?? "").trim();
-  const title = newStatus === "pending_pre_render"
+  const baseTitle = newStatus === "pending_pre_render"
     ? `Video-review: ${firstName}`
     : `Outreach venter: ${firstName}`;
+  const title = `${workspaceLabel(workspaceId)} /outreach · ${baseTitle}`;
   const bodyLine = company ? `${firstName} @ ${company}` : firstName;
 
   webpush.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey);

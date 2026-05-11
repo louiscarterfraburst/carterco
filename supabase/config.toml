@@ -411,6 +411,18 @@ verify_jwt = false
 [functions.outreach-webhook-health]
 verify_jwt = false
 
+# Daily cron polls tracked_companies careers pages → push-notifies new postings.
+[functions.track-job-postings]
+verify_jwt = false
+
+# Cron — scores newly-accepted leads against CarterCo ICP.
+[functions.score-accepted-lead]
+verify_jwt = false
+
+# Cron — polls SendPilot lead-database searches kicked off by scoring.
+[functions.poll-alt-searches]
+verify_jwt = false
+
 [analytics]
 enabled = true
 port = 54327
