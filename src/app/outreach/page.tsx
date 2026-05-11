@@ -96,7 +96,7 @@ type AltContact = {
   seniority: string | null;
   employees: string | null;
   company: string | null;
-  source: "sendpilot" | "team_page";
+  source: "sendpilot" | "team_page" | "reply_referral";
   surfaced_at: string;
   acted_on_at: string | null;
   error: string | null;
@@ -470,6 +470,21 @@ export default function OutreachPage() {
     return m;
   }, [altContacts]);
 
+  // Referrals are alt_contacts with source='reply_referral' — spawned by
+  // classifyReplyAsync when a prospect tells us to talk to someone else.
+  // Surfaced inline under the triggering reply in the Svar tab (the lead's
+  // status is 'sent', so the Vælg-rigtig-person flow doesn't touch them).
+  const referralsByLead = useMemo(() => {
+    const m = new Map<string, AltContact[]>();
+    for (const a of altContacts) {
+      if (a.source !== "reply_referral") continue;
+      const arr = m.get(a.pipeline_lead_id) ?? [];
+      arr.push(a);
+      m.set(a.pipeline_lead_id, arr);
+    }
+    return m;
+  }, [altContacts]);
+
   const sparkline = useMemo(() => buildSparkline(rows, 30), [rows]);
   const unhandledReplies = useMemo(() => replies.filter((r) => !r.handled), [replies]);
 
@@ -627,7 +642,13 @@ export default function OutreachPage() {
             onInviteAlt={(altId, leadId) => void inviteAlt(altId, leadId)}
           />
         ) : tab === "replies" ? (
-          <RepliesTab replies={replies} onMarkHandled={(id) => void markReplyHandled(id)} />
+          <RepliesTab
+            replies={replies}
+            referralsByLead={referralsByLead}
+            busyLead={busyLead}
+            onMarkHandled={(id) => void markReplyHandled(id)}
+            onInviteAlt={(altId, leadId) => void inviteAlt(altId, leadId)}
+          />
         ) : tab === "sent" ? (
           <SentTab rows={sent} />
         ) : tab === "icp_rejected" ? (
@@ -1045,49 +1066,94 @@ function AcceptedTab({ rows, busyLead, onRender, onReject }: {
   );
 }
 
-function RepliesTab({ replies, onMarkHandled }: {
-  replies: Reply[]; onMarkHandled: (id: string) => void;
+function RepliesTab({ replies, referralsByLead, busyLead, onMarkHandled, onInviteAlt }: {
+  replies: Reply[];
+  referralsByLead: Map<string, AltContact[]>;
+  busyLead: string | null;
+  onMarkHandled: (id: string) => void;
+  onInviteAlt: (altId: string, leadId: string) => void;
 }) {
   if (replies.length === 0) {
     return <p className="mt-4 text-sm text-[var(--ink)]/45">Ingen svar endnu.</p>;
   }
   return (
     <ul className="mt-2 flex flex-col gap-3">
-      {replies.map((r) => (
-        <li key={r.id}
-          className={`rounded-sm border p-4 sm:p-5 transition ${
-            r.handled ? "border-[var(--ink)]/8 bg-transparent opacity-60" : "border-[var(--ink)]/12 bg-[var(--cream)]/40"
-          }`}>
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="min-w-0">
-              <div className="font-display text-xl italic leading-tight tracking-tight text-[var(--ink)]">
-                {r.lead?.first_name} {r.lead?.last_name}
+      {replies.map((r) => {
+        const referrals = referralsByLead.get(r.sendpilot_lead_id) ?? [];
+        return (
+          <li key={r.id}
+            className={`rounded-sm border p-4 sm:p-5 transition ${
+              r.handled ? "border-[var(--ink)]/8 bg-transparent opacity-60" : "border-[var(--ink)]/12 bg-[var(--cream)]/40"
+            }`}>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="font-display text-xl italic leading-tight tracking-tight text-[var(--ink)]">
+                  {r.lead?.first_name} {r.lead?.last_name}
+                </div>
+                <div className="tabular mt-0.5 text-[12px] text-[var(--ink)]/55">
+                  {r.lead?.company}
+                  {" · "}
+                  <a href={r.linkedin_url} target="_blank" rel="noreferrer"
+                    className="underline underline-offset-2 hover:text-[var(--ink)]">LinkedIn ↗</a>
+                  {" · "}
+                  {fmtRelative(r.received_at)}
+                </div>
               </div>
-              <div className="tabular mt-0.5 text-[12px] text-[var(--ink)]/55">
-                {r.lead?.company}
-                {" · "}
-                <a href={r.linkedin_url} target="_blank" rel="noreferrer"
-                  className="underline underline-offset-2 hover:text-[var(--ink)]">LinkedIn ↗</a>
-                {" · "}
-                {fmtRelative(r.received_at)}
+              <div className="flex items-center gap-2">
+                <IntentPill intent={r.intent} confidence={r.confidence} />
+                {!r.handled ? (
+                  <button type="button" onClick={() => onMarkHandled(r.id)}
+                    className="focus-cream tabular rounded-sm border border-[var(--ink)]/15 px-3 py-1.5 text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/65 hover:border-[var(--ink)]/35 hover:text-[var(--ink)]">
+                    Markér behandlet
+                  </button>
+                ) : null}
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <IntentPill intent={r.intent} confidence={r.confidence} />
-              {!r.handled ? (
-                <button type="button" onClick={() => onMarkHandled(r.id)}
-                  className="focus-cream tabular rounded-sm border border-[var(--ink)]/15 px-3 py-1.5 text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/65 hover:border-[var(--ink)]/35 hover:text-[var(--ink)]">
-                  Markér behandlet
-                </button>
-              ) : null}
-            </div>
-          </div>
-          <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-[var(--ink)]/85">{r.message}</p>
-          {r.reasoning ? (
-            <p className="tabular mt-2 text-[11px] italic text-[var(--ink)]/45">AI: {r.reasoning}</p>
-          ) : null}
-        </li>
-      ))}
+            <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-[var(--ink)]/85">{r.message}</p>
+            {r.reasoning ? (
+              <p className="tabular mt-2 text-[11px] italic text-[var(--ink)]/45">AI: {r.reasoning}</p>
+            ) : null}
+            {referrals.length > 0 ? (
+              <div className="mt-3 rounded-sm border border-[var(--clay)]/30 bg-[var(--clay)]/5 p-3">
+                <p className="tabular text-[10px] uppercase tracking-[0.22em] text-[var(--clay)]">
+                  Henviser til {referrals.length === 1 ? "" : `${referrals.length} personer`}
+                </p>
+                <ul className="mt-2 space-y-2">
+                  {referrals.map((alt) => (
+                    <li key={alt.id} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium text-[var(--ink)]">{alt.name}</div>
+                        <div className="tabular text-[11px] text-[var(--ink)]/55">
+                          {alt.title ?? "—"}{alt.company ? ` · ${alt.company}` : ""}
+                        </div>
+                      </div>
+                      <div className="flex shrink-0 gap-3">
+                        {alt.linkedin_url ? (
+                          <a href={alt.linkedin_url} target="_blank" rel="noopener noreferrer"
+                            className="tabular text-[11px] uppercase tracking-[0.2em] text-[var(--forest)] underline-offset-[6px] hover:underline">
+                            LinkedIn →
+                          </a>
+                        ) : (
+                          <span className="tabular text-[11px] uppercase tracking-[0.2em] text-[var(--ink)]/45">Mangler LinkedIn</span>
+                        )}
+                        {alt.linkedin_url && !alt.acted_on_at ? (
+                          <button onClick={() => onInviteAlt(alt.id, r.sendpilot_lead_id)} disabled={busyLead === r.sendpilot_lead_id}
+                            className="tabular text-[11px] uppercase tracking-[0.2em] text-[var(--clay)] underline-offset-[6px] hover:underline disabled:opacity-50">
+                            Inviter →
+                          </button>
+                        ) : null}
+                        {alt.acted_on_at ? (
+                          <span className="tabular text-[11px] uppercase tracking-[0.2em] text-[var(--forest)]">Inviteret ✓</span>
+                        ) : null}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          </li>
+        );
+      })}
     </ul>
   );
 }
