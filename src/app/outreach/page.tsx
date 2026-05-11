@@ -14,7 +14,7 @@ import Link from "next/link";
 import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/utils/supabase/client";
 import { useWorkspace, type Workspace } from "@/utils/workspace";
-import { ICP } from "@/lib/icp";
+import { ICP, CARTERCO_WORKSPACE_ID } from "@/lib/icp";
 
 const VAPID_PUBLIC_KEY =
   process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ??
@@ -155,6 +155,7 @@ export default function OutreachPage() {
     return workspaces.find((w) => w.id === selectedWorkspaceId) ?? workspace ?? workspaces[0];
   }, [selectedWorkspaceId, workspace, workspaces]);
   const activeWorkspaceId = activeWorkspace?.id ?? "";
+  const isCarterCo = activeWorkspaceId === CARTERCO_WORKSPACE_ID;
 
   function chooseWorkspace(id: string) {
     setSelectedWorkspaceId(id);
@@ -235,6 +236,14 @@ export default function OutreachPage() {
   useEffect(() => {
     if (user && activeWorkspaceId) void Promise.resolve().then(load);
   }, [user, activeWorkspaceId, load]);
+
+  // If user switches to a non-CarterCo workspace while parked on an ICP-only
+  // tab, snap back to inbox so they don't see an empty/missing tab.
+  useEffect(() => {
+    if (!isCarterCo && (tab === "icp_rejected" || tab === "icp")) {
+      setTab("inbox");
+    }
+  }, [isCarterCo, tab]);
 
   // ---------- realtime ----------
   useEffect(() => {
@@ -576,7 +585,7 @@ export default function OutreachPage() {
       {err ? <Banner kind="error">{err}</Banner> : null}
       {bulkProgress ? <Banner kind="info">Behandler {bulkProgress.done}/{bulkProgress.total}…</Banner> : null}
 
-      <Tabs tab={tab} setTab={setTab} counts={{
+      <Tabs tab={tab} setTab={setTab} showIcpTabs={isCarterCo} counts={{
         inbox: stats.pending + accepted.length + altReview.length,
         replies: unhandledReplies.length,
         sent: stats.sent,
@@ -733,19 +742,22 @@ function Sparkline({ data }: { data: { day: string; count: number }[] }) {
   );
 }
 
-function Tabs({ tab, setTab, counts }: {
-  tab: Tab; setTab: (t: Tab) => void; counts: {
+function Tabs({ tab, setTab, showIcpTabs, counts }: {
+  tab: Tab; setTab: (t: Tab) => void;
+  showIcpTabs: boolean;
+  counts: {
     inbox: number; replies: number; sent: number; all: number; icp_rejected: number;
   };
 }) {
-  const items: { id: Tab; label: string; count: number; accent?: boolean }[] = [
+  const all: { id: Tab; label: string; count: number; accent?: boolean; icpOnly?: boolean }[] = [
     { id: "inbox", label: "Indbakke", count: counts.inbox, accent: counts.inbox > 0 },
     { id: "replies", label: "Svar", count: counts.replies, accent: counts.replies > 0 },
     { id: "sent", label: "Sendt", count: counts.sent },
-    { id: "icp_rejected", label: "ICP-afvist", count: counts.icp_rejected },
+    { id: "icp_rejected", label: "ICP-afvist", count: counts.icp_rejected, icpOnly: true },
     { id: "all", label: "Alle", count: counts.all },
-    { id: "icp", label: "ICP", count: 0 },
+    { id: "icp", label: "ICP", count: 0, icpOnly: true },
   ];
+  const items = all.filter((it) => !it.icpOnly || showIcpTabs);
   return (
     <nav className="mx-auto mt-2 mb-4 w-full max-w-[1400px] px-4 sm:px-8 lg:px-12">
       <div className="flex gap-1 overflow-x-auto border-b border-[var(--ink)]/10">

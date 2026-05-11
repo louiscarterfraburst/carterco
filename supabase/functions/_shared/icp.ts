@@ -6,6 +6,12 @@
 // To tune: edit this file, redeploy the two functions, and the UI tab will
 // reflect the new values on the next reload. Tell Louis what you changed.
 
+// ICP scoring is currently CarterCo-only. Tresyv (and any other workspaces)
+// run a different outreach for different companies and must NOT be scored
+// against this ICP. score-accepted-lead + poll-alt-searches filter on this
+// constant; the /outreach UI hides the ICP-related tabs for other workspaces.
+export const CARTERCO_WORKSPACE_ID = "1e067f9a-d453-41a7-8bc4-9fdb5644a5fa";
+
 export const ICP = {
   // Free-text fit description fed into Haiku for company scoring.
   companyFit: `Carter & Co builds AI/automation systems for small/medium B2B companies.

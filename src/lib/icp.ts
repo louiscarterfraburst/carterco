@@ -1,6 +1,12 @@
 // UI mirror of supabase/functions/_shared/icp.ts. Must stay in sync with
 // that file — Louis tells me what to change, I update both and redeploy.
 // Used by /outreach's ICP overview tab.
+
+// ICP is CarterCo-only for now. Tresyv runs a separate outreach for a
+// different company. The /outreach UI hides ICP tabs/scores when the
+// active workspace isn't CarterCo.
+export const CARTERCO_WORKSPACE_ID = "1e067f9a-d453-41a7-8bc4-9fdb5644a5fa";
+
 export const ICP = {
   companyFit: `Carter & Co builds AI/automation systems for small/medium B2B companies.
 

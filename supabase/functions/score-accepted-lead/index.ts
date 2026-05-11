@@ -12,7 +12,7 @@
 // All branches stamp icp_scored_at + scores + rationale.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.103.3";
-import { ICP, type IcpScores } from "../_shared/icp.ts";
+import { ICP, CARTERCO_WORKSPACE_ID, type IcpScores } from "../_shared/icp.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -50,9 +50,14 @@ Deno.serve(async (request) => {
   if (request.method === "GET") return json({ ok: true, name: "score-accepted-lead" });
   if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
+  // CarterCo-only. Tresyv (and other workspaces) run different outreach for
+  // different companies — their pending_pre_render rows must not be scored
+  // against CarterCo's ICP. If we ever add per-workspace ICPs, this filter
+  // becomes "workspaces with an ICP defined".
   const { data: rows, error } = await supabase
     .from("outreach_pipeline")
     .select("sendpilot_lead_id, contact_email, workspace_id, icp_attempts")
+    .eq("workspace_id", CARTERCO_WORKSPACE_ID)
     .eq("status", "pending_pre_render")
     .is("icp_scored_at", null)
     .lt("icp_attempts", 3)

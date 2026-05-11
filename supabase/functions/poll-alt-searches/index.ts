@@ -12,6 +12,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.103.3";
 import webpush from "npm:web-push@3.6.7";
 import { workspaceLabel } from "../_shared/workspaces.ts";
+import { CARTERCO_WORKSPACE_ID } from "../_shared/icp.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -61,9 +62,11 @@ Deno.serve(async (request) => {
     webpush.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey);
   }
 
+  // CarterCo-only — same scoping as score-accepted-lead.
   const { data: rows, error } = await supabase
     .from("outreach_pipeline")
     .select("sendpilot_lead_id, workspace_id, contact_email, alt_search_id")
+    .eq("workspace_id", CARTERCO_WORKSPACE_ID)
     .eq("alt_search_status", "pending")
     .not("alt_search_id", "is", null)
     .limit(50);
