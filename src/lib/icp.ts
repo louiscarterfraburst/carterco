@@ -18,7 +18,12 @@ A company is a FIT if all three apply:
 NOT a fit (score 1):
 - Clearly 200+ employees (out of CarterCo's sweet spot)
 - Pure non-profit / community / public sector / educational
-- AI/automation builders themselves (would compete, not buy)
+- AI/automation TOOLING vendors — companies whose product or primary
+  revenue is selling AI/automation tools to others (e.g. AI SaaS,
+  RPA platforms, agent frameworks, lead-gen-tool vendors like Apollo).
+  This excludes ONLY tool-builders. Consulting firms in cyber, AI, IT,
+  legal, or ops who USE automation to enhance their own delivery are
+  BUYERS, not competitors — they ARE in-ICP.
 - Pure consumer B2C (no operational ICP fit)
 
 IMPORTANT: niche-vertical B2B SMBs (e.g. "cybersecurity consultancy",
