@@ -34,6 +34,7 @@ type PipelineRow = {
   sendpilot_lead_id: string;
   contact_email: string;
   workspace_id: string;
+  icp_attempts?: number;
 };
 
 type LeadEnrich = {
@@ -51,9 +52,10 @@ Deno.serve(async (request) => {
 
   const { data: rows, error } = await supabase
     .from("outreach_pipeline")
-    .select("sendpilot_lead_id, contact_email, workspace_id")
+    .select("sendpilot_lead_id, contact_email, workspace_id, icp_attempts")
     .eq("status", "pending_pre_render")
     .is("icp_scored_at", null)
+    .lt("icp_attempts", 3)
     .order("accepted_at", { ascending: true })
     .limit(BATCH_LIMIT);
   if (error) return json({ error: error.message }, 500);
@@ -81,11 +83,15 @@ async function scoreOne(row: PipelineRow): Promise<Record<string, unknown>> {
     scores = await haikuScore(enrich);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
+    // Do NOT stamp icp_scored_at on transient failure — cron will retry on
+    // the next tick. Bump icp_attempts so we cap at 3 (filtered in the
+    // select query) and don't loop on permanently-broken rows.
+    const attempts = (row.icp_attempts ?? 0) + 1;
     await supabase.from("outreach_pipeline").update({
-      icp_scored_at: now,
-      icp_rationale: `score error: ${msg.slice(0, 400)}`,
+      icp_attempts: attempts,
+      icp_last_error: msg.slice(0, 400),
     }).eq("sendpilot_lead_id", row.sendpilot_lead_id);
-    return { lead: row.sendpilot_lead_id, error: msg.slice(0, 200) };
+    return { lead: row.sendpilot_lead_id, error: msg.slice(0, 200), attempts };
   }
 
   const { minCompanyScore, minPersonScore } = ICP.thresholds;
@@ -98,6 +104,7 @@ async function scoreOne(row: PipelineRow): Promise<Record<string, unknown>> {
       icp_company_score: scores.companyScore,
       icp_person_score: scores.personScore,
       icp_rationale: scores.rationale,
+      icp_last_error: null,
     }).eq("sendpilot_lead_id", row.sendpilot_lead_id);
     return {
       lead: row.sendpilot_lead_id,
@@ -116,6 +123,7 @@ async function scoreOne(row: PipelineRow): Promise<Record<string, unknown>> {
       icp_company_score: scores.companyScore,
       icp_person_score: scores.personScore,
       icp_rationale: scores.rationale,
+      icp_last_error: null,
       alt_search_id: searchOut.id,
       alt_search_status: searchOut.id ? "pending" : "failed",
     }).eq("sendpilot_lead_id", row.sendpilot_lead_id);
@@ -134,6 +142,7 @@ async function scoreOne(row: PipelineRow): Promise<Record<string, unknown>> {
     icp_company_score: scores.companyScore,
     icp_person_score: scores.personScore,
     icp_rationale: scores.rationale,
+    icp_last_error: null,
   }).eq("sendpilot_lead_id", row.sendpilot_lead_id);
   return {
     lead: row.sendpilot_lead_id,

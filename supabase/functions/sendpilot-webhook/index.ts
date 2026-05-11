@@ -61,10 +61,19 @@ Deno.serve(async (request) => {
   const data = evt.data ?? {};
   const leadId = (data.leadId ?? "").toString();
   const linkedinUrl = (data.linkedinUrl ?? "").toString();
-  const campaignId = (data.campaignId ?? "").toString();
+  let campaignId = (data.campaignId ?? "").toString();
   const senderId = (data.senderId ?? "").toString();
   const lead = leadId ? await lookupLead(leadId, linkedinUrl) : null;
   const workspaceId = lead?.workspace_id ?? null;
+
+  // Fallback for alts invited via /v1/inbox/connect (one-off, not
+  // campaign-driven). The connection.accepted event may arrive with no
+  // campaignId. invite-alt-contact planted outreach_leads.campaign_id with
+  // the original lead's value precisely so we can pick it up here and the
+  // SendSpark render uses the right dynamic template.
+  if (!campaignId && lead && (lead as { campaign_id?: string }).campaign_id) {
+    campaignId = String((lead as { campaign_id?: string }).campaign_id);
+  }
 
   const { error: evtErr } = await supabase.from("outreach_events").insert({
     event_id: evt.eventId,

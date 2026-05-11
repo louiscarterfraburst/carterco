@@ -81,7 +81,10 @@ Deno.serve(async (request) => {
 
   // Plant an outreach_leads row for the alternate so the future accept
   // webhook can look them up by linkedin_url and the SendSpark render uses
-  // the same company/website context.
+  // the same company/website context. campaign_id mirrors the original so
+  // sendpilot-webhook can fall back to it when the connection.accepted
+  // event payload has no campaignId (the /v1/inbox/connect path is one-off,
+  // not campaign-driven, so the event may arrive bare).
   const altContactEmail = synthContactEmail(alt.linkedin_url);
   const [altFirst, ...altRest] = (alt.name as string).trim().split(/\s+/);
   await admin.from("outreach_leads").upsert({
@@ -94,6 +97,7 @@ Deno.serve(async (request) => {
     website: origLead?.website ?? null,
     contact_email: altContactEmail,
     workspace_id: alt.workspace_id,
+    campaign_id: orig.campaign_id ?? null,
   }, { onConflict: "linkedin_url" });
 
   // Send the connection request via SendPilot.
