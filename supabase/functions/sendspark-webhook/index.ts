@@ -20,7 +20,7 @@
 // outreach_events, prune the map to the actual strings.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.103.3";
-import { normalizeCompanyName, normalizeWebsiteUrl } from "../_shared/text.ts";
+import { firstNameForGreeting, normalizeCompanyName, normalizeWebsiteUrl } from "../_shared/text.ts";
 
 const corsHeaders = {
     "Access-Control-Allow-Origin": "*",
@@ -189,7 +189,7 @@ async function handleRenderReady(evt: SendSparkEvent, email: string, videoLink: 
         .eq("contact_email", email)
         .maybeSingle();
 
-    const firstName = (lead?.first_name ?? "").trim() || "der";
+    const firstName = firstNameForGreeting(lead?.first_name) || "der";
     const company = normalizeCompanyName(lead?.company);
     const website = normalizeWebsiteUrl(lead?.website);
     // Use the SendPilot campaign_id we stored on the pipeline row, not

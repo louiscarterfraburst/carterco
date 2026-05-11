@@ -26,7 +26,7 @@
 //     marked failed so the cron stops touching them.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.103.3";
-import { normalizeCompanyName, normalizeWebsiteUrl, urlOrigin } from "../_shared/text.ts";
+import { firstNameForGreeting, normalizeCompanyName, normalizeWebsiteUrl, urlOrigin } from "../_shared/text.ts";
 import { sendsparkCredsFor } from "../_shared/sendspark-config.ts";
 
 const corsHeaders = {
@@ -184,7 +184,7 @@ Deno.serve(async (req) => {
         body: JSON.stringify({
           processAndAuthorizeCharge: true,
           prospect: {
-            contactName: ((lead.first_name as string) ?? "").trim() || "there",
+            contactName: firstNameForGreeting(lead.first_name as string) || "there",
             contactEmail: row.contact_email,
             company: normalizeCompanyName(lead.company as string).slice(0, 80),
             jobTitle: ((lead.title as string) ?? "").slice(0, 100),
@@ -277,7 +277,7 @@ async function diagnose(limit: number) {
         body: JSON.stringify({
           processAndAuthorizeCharge: false,
           prospect: {
-            contactName: (probeLead?.first_name ?? "there").trim() || "there",
+            contactName: firstNameForGreeting(probeLead?.first_name) || "there",
             contactEmail: probeEmail,
             company: (probeLead?.company ?? "").slice(0, 80),
             jobTitle: (probeLead?.title ?? "").slice(0, 100),

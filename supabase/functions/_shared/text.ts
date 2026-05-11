@@ -56,6 +56,24 @@ export function normalizeWebsiteUrl(input: string | null | undefined): string {
   return s.toLowerCase().trim();
 }
 
+// `firstNameForGreeting` returns just the first whitespace-separated token of
+// a name, for use in greetings and SendSpark voice-overs. LinkedIn scrapers
+// stuff all given names into `firstName` ("Michael Bjørn Rasmussen" →
+// firstName="Michael Bjørn"), which reads weird in a "Hej {firstName}" line.
+// We strip to the first token only — for the rare hyphenated double-name
+// ("Mary-Anne") that's still one token, so it's preserved.
+//
+// Examples:
+//   "Michael Bjørn"  → "Michael"
+//   "Mary-Anne"      → "Mary-Anne"
+//   "  Sofie  "      → "Sofie"
+//   "" / null        → ""
+export function firstNameForGreeting(input: string | null | undefined): string {
+  const s = (input ?? "").trim();
+  if (!s) return "";
+  return s.split(/\s+/)[0] ?? "";
+}
+
 // `urlOrigin` returns just the protocol+host of a URL — no path, no query,
 // no hash. Use for the URL pushed to scrapers/screenshot services (e.g.
 // SendSpark `backgroundUrl`) so the upstream scraper hits the bare home

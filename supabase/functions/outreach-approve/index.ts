@@ -6,7 +6,7 @@
 //             for any accepted/pre-render/failed lead.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.103.3";
-import { normalizeCompanyName, urlOrigin } from "../_shared/text.ts";
+import { firstNameForGreeting, normalizeCompanyName, urlOrigin } from "../_shared/text.ts";
 import { checkLeadReplied } from "../_shared/sendpilot-client.ts";
 import { sendsparkCredsFor } from "../_shared/sendspark-config.ts";
 
@@ -207,7 +207,7 @@ async function sendsparkRender(lead: Record<string, unknown>, campaignId = "", w
   const payload = {
     processAndAuthorizeCharge: true,
     prospect: {
-      contactName: ((lead.first_name as string) ?? "").trim() || "there",
+      contactName: firstNameForGreeting(lead.first_name as string) || "there",
       contactEmail: lead.contact_email as string,
       company: normalizeCompanyName(lead.company as string).slice(0, 80),
       jobTitle: ((lead.title as string) ?? "").slice(0, 100),

@@ -4,7 +4,7 @@
 // See docs/outreach-playbook.md for intent, signal vocabulary, and the
 // step-by-step "how to add a rule" checklist.
 
-import { normalizeCompanyName } from "./text.ts";
+import { firstNameForGreeting, normalizeCompanyName } from "./text.ts";
 
 export type Signal =
     | "sent"          // we sent the post-render LinkedIn message
@@ -131,7 +131,7 @@ export function renderTemplate(
     lead: { first_name?: string | null; company?: string | null; video_link?: string | null },
 ): string {
     return tpl
-        .replaceAll("{firstName}", (lead.first_name ?? "").trim() || "der")
+        .replaceAll("{firstName}", firstNameForGreeting(lead.first_name) || "der")
         .replaceAll("{company}",   normalizeCompanyName(lead.company))
         .replaceAll("{videoLink}", (lead.video_link ?? "").trim());
 }
