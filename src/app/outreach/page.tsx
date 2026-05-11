@@ -34,7 +34,7 @@ type Status =
   | "failed"
   | "pre_connected";
 
-type Intent = "interested" | "question" | "decline" | "ooo" | "other";
+type Intent = "interested" | "question" | "decline" | "ooo" | "other" | "referral";
 
 type LeadEnrich = {
   first_name: string | null;
@@ -1250,6 +1250,7 @@ function IntentPill({ intent, confidence }: { intent: Intent | null; confidence:
     decline:    { label: "nej tak",       bg: "rgb(0 0 0 / .08)", fg: "rgb(0 0 0 / .55)" },
     ooo:        { label: "fravær",        bg: "rgb(0 0 0 / .06)", fg: "rgb(0 0 0 / .45)" },
     other:      { label: "andet",         bg: "rgb(0 0 0 / .06)", fg: "rgb(0 0 0 / .45)" },
+    referral:   { label: "henvisning",    bg: "rgba(185,112,65,0.18)", fg: "var(--clay)" },
   };
   const s = map[intent];
   return (
