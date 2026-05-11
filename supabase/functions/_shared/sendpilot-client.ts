@@ -9,6 +9,7 @@
 // kind of incident we just lived through.
 
 const SP_API_BASE = "https://api.sendpilot.ai";
+const SP_SEARCH_BASE = `${SP_API_BASE}/v1/lead-database/searches`;
 
 export type ReplyCheckResult =
     | { replied: true;  lastReplyAt: string;  source: "live_api" }
@@ -137,4 +138,42 @@ export async function checkLeadReplied(args: {
     // is by definition someone with no recent activity → "not replied" is
     // correct for our purposes.
     return { replied: false, checkedAt, source: "live_api" };
+}
+
+// Fires a SendPilot lead-database search and returns the search ID for later
+// polling. Used to find alternate contacts at a company when:
+//   - the originally-accepted person isn't a buyer (score-accepted-lead), or
+//   - the prospect replies with a referral to someone else at the same firm
+//     (sendpilot-webhook).
+//
+// Returns { id } on success or { id: null, error } on failure. Callers persist
+// the ID on outreach_pipeline.alt_search_id and let poll-alt-searches pick it
+// up on the next 2-min cron tick.
+export async function fireSendpilotLeadSearch(args: {
+    apiKey: string;
+    companyName: string;
+    titles: string[];
+    locations: string[];
+    limit?: number;
+}): Promise<{ id: string | null; error?: string }> {
+    const { apiKey, companyName, titles, locations, limit } = args;
+    if (!apiKey) return { id: null, error: "SENDPILOT_API_KEY not set" };
+    const name = (companyName ?? "").trim();
+    if (!name) return { id: null, error: "no company name" };
+
+    const res = await fetch(SP_SEARCH_BASE, {
+        method: "POST",
+        headers: { "X-API-Key": apiKey, "Content-Type": "application/json" },
+        body: JSON.stringify({
+            name: `carterco-alt-${Date.now()}`,
+            limit: limit ?? 5,
+            filters: { companies: [name], jobTitles: titles, locations },
+        }),
+    });
+    if (!res.ok) {
+        const txt = await res.text().catch(() => "");
+        return { id: null, error: `sendpilot ${res.status}: ${txt.slice(0, 200)}` };
+    }
+    const body = await res.json().catch(() => null) as { id?: string } | null;
+    return { id: body?.id ?? null };
 }

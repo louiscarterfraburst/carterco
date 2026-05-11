@@ -5,6 +5,8 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.103.3";
 import { normalizeWebsiteUrl } from "../_shared/text.ts";
+import { fireSendpilotLeadSearch } from "../_shared/sendpilot-client.ts";
+import { ICP } from "../_shared/icp.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -296,17 +298,24 @@ async function classifyReplyAsync(
         last_reply_intent: j.intent,
       }).eq("sendpilot_lead_id", leadId);
 
-      // Referral pivot: when the prospect points us at someone else, spawn an
-      // outreach_alt_contacts row so the existing alt-review UI surfaces the
-      // pivot for one-click action. linkedin_url is empty initially — the UI
-      // can offer a SendPilot lead-database search by name+company to fill it,
-      // or fall back to manual entry. We only spawn when Claude actually
-      // extracted a name; "you should talk to someone else" with no name is
-      // useless without manual follow-up.
+      // Referral pivot: when the prospect points us at someone else, do two
+      // things:
+      //   1. Plant a `reply_referral` outreach_alt_contacts row with the name
+      //      Claude extracted (linkedin_url=null). This is the "hint" — the
+      //      user can read it and know who the prospect actually meant.
+      //   2. Fire a SendPilot lead-database search against the original
+      //      company so the existing poll-alt-searches cron back-fills the
+      //      alt_contacts table with 5 real candidates from that company
+      //      (one of them is hopefully the same person the prospect named).
+      //
+      // Both rows land in the same alt-review UI panel; the user picks the
+      // one that matches the referral and invites them. We only spawn this
+      // when Claude actually extracted a name — "talk to someone else" with
+      // no name still needs manual follow-up.
       if (isReferral && j.referralTarget?.name) {
         const { data: pipe } = await supabase
           .from("outreach_pipeline")
-          .select("workspace_id, contact_email")
+          .select("workspace_id, contact_email, alt_search_id")
           .eq("sendpilot_lead_id", leadId)
           .maybeSingle();
         const { data: origLead } = await supabase
@@ -314,16 +323,36 @@ async function classifyReplyAsync(
           .select("company")
           .eq("contact_email", pipe?.contact_email ?? "")
           .maybeSingle();
+        const company = j.referralTarget.company ?? origLead?.company ?? null;
+
         await supabase.from("outreach_alt_contacts").insert({
           pipeline_lead_id: leadId,
           workspace_id: pipe?.workspace_id ?? null,
           name: j.referralTarget.name,
           title: j.referralTarget.title ?? null,
-          company: j.referralTarget.company ?? origLead?.company ?? null,
+          company,
           linkedin_url: null,
           source: "reply_referral",
           surfaced_at: now,
         });
+
+        // Kick a SendPilot lead-database search for the company so the user
+        // gets profile URLs they can actually invite. poll-alt-searches will
+        // pick it up on the next 2-min cron tick.
+        if (company) {
+          const searchOut = await fireSendpilotLeadSearch({
+            apiKey: Deno.env.get("SENDPILOT_API_KEY") ?? "",
+            companyName: company,
+            titles: ICP.alternateSearchTitles,
+            locations: ICP.alternateSearchLocations,
+          });
+          if (searchOut.id) {
+            await supabase.from("outreach_pipeline").update({
+              alt_search_id: searchOut.id,
+              alt_search_status: "pending",
+            }).eq("sendpilot_lead_id", leadId);
+          }
+        }
       }
   } catch (e) {
     console.error("classifyReplyAsync error", e);
