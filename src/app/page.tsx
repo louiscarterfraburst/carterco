@@ -823,12 +823,12 @@ export default function Home() {
           </span>
         </h1>
 
-        <div className="mt-16 flex flex-col gap-8 pb-10 sm:mt-20 lg:mt-24">
+        <div className="mt-16 flex flex-col gap-14 pb-10 sm:mt-20 lg:mt-24">
           <p
             className="max-w-xl text-lg leading-relaxed text-[var(--cream)]/70 sm:max-w-2xl sm:text-xl"
             style={{ textWrap: "balance" }}
           >
-            Når et lead skriver sig op, køler interessen ned på få minutter. Jeg bygger systemet, der skaffer flere leads – og får dem ringet op, før de køler ned.
+            Leads køler. Møder glipper. Pipelines visner. Jeg bygger systemet, der finder dem, ringer dem op før de køler, plejer dem til de er klar – så du kan få flere aftaler i hus.
           </p>
 
           <div className="flex flex-col-reverse items-start justify-between gap-8 sm:flex-row sm:items-end">
@@ -1043,7 +1043,7 @@ export default function Home() {
             <h2 className="font-display text-[11vw] leading-[0.88] tracking-[-0.045em] sm:text-7xl lg:text-[6rem]">
               Hele vejen fra
               <br />
-              kontakt til <span className="bg-gradient-to-b from-[#ffb86b] via-[#ff6b2c] to-[#c93c0a] bg-clip-text text-transparent">kontrakt.</span>
+              kontakt til kontrakt.
             </h2>
           </div>
 
@@ -1987,7 +1987,7 @@ export default function Home() {
 
         <div className="relative z-[1] mx-auto w-full max-w-[1280px] px-8 sm:px-12">
           <h2 className="ml-auto max-w-3xl text-right font-display text-[10vw] leading-[0.92] tracking-[-0.04em] text-[#29261f] sm:text-6xl lg:text-7xl">
-            Det her er <span className="italic text-[var(--clay)]">forskellen.</span>
+            Det her er forskellen.
           </h2>
 
           <div className="mt-16 grid gap-6 sm:mt-20 sm:grid-cols-2 sm:gap-10">

@@ -147,11 +147,10 @@ export function ExitIntent({ onOpenQuiz, suppressed }: Props) {
             Inden du går
           </p>
           <h2 className="font-display mt-3 text-3xl leading-[1.05]">
-            Et hurtigt regnestykke?
+            Jeg har et tal til dig.
           </h2>
           <p className="mt-4 text-[15px] leading-relaxed text-[var(--cream)]/75">
-            Fem felter, dine egne tal. Så har du dit tab-tal — uden at booke
-            noget.
+            Svar på 5 spørgsmål — så regner jeg hvor meget du mister.
           </p>
           <button
             type="button"
