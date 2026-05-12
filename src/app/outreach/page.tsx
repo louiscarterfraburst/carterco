@@ -1267,17 +1267,30 @@ function RepliesTab({ replies, referralsByLead, busyLead, onMarkHandled, onInvit
   // we render the message thread newest-first so the most-recent reply is the
   // first thing you scan, and tag each message with its direction so the
   // inbound vs outbound styling is unambiguous.
+  //
+  // Svar tab semantics: only show contacts who actually replied. Outbound-only
+  // threads (we sent, no response yet) belong in the Sendt tab, not here.
   const byContact = new Map<string, Reply[]>();
   for (const r of replies) {
     const key = r.linkedin_url;
     if (!byContact.has(key)) byContact.set(key, []);
     byContact.get(key)!.push(r);
   }
-  for (const arr of byContact.values()) {
+  for (const [key, arr] of byContact) {
+    if (!arr.some((r) => r.direction === "inbound")) {
+      byContact.delete(key);
+      continue;
+    }
     arr.sort((a, b) => (b.received_at ?? "").localeCompare(a.received_at ?? ""));
   }
-  // Card sort: latest INBOUND first — outbound-only conversations (we sent,
-  // they haven't replied yet) shouldn't bump above unanswered prospect replies.
+  if (byContact.size === 0) {
+    return (
+      <p className="tabular py-12 text-center text-[11px] uppercase tracking-[0.22em] text-[var(--ink)]/35">
+        Ingen svar endnu.
+      </p>
+    );
+  }
+  // Card sort: latest INBOUND first.
   const latestInboundAt = (arr: Reply[]) =>
     arr.find((r) => r.direction === "inbound")?.received_at ?? arr[0]?.received_at ?? "";
   const contacts = Array.from(byContact.entries()).sort(
