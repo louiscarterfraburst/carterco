@@ -477,6 +477,22 @@ export default function OutreachPage() {
     if (error) setErr(error.message); else await load();
   }
 
+  async function sendReply(replyId: string, messageOverride: string): Promise<boolean> {
+    setErr(null); setInfo(null);
+    const { data, error } = await supabase.functions.invoke("outreach-approve", {
+      body: { decision: "reply", replyId, messageOverride },
+    });
+    if (error) { setErr(error.message ?? String(error)); return false; }
+    if (data?.error) { setErr(`${data.error}${data.details ? `: ${data.details}` : ""}`); return false; }
+    if (data?.ok) {
+      setInfo("Svar sendt via SendPilot.");
+      await load();
+      return true;
+    }
+    setErr(`SendPilot HTTP ${data?.status ?? "?"}`);
+    return false;
+  }
+
   async function overrideIcpRejection(leadId: string) {
     // If the row has unactioned alts surfaced from a prior alt-search, send
     // it BACK to "Vælg rigtig person" instead of pending_pre_render — that
@@ -799,6 +815,7 @@ export default function OutreachPage() {
             busyLead={busyLead}
             onMarkHandled={(id) => void markReplyHandled(id)}
             onInviteAlt={(altId, leadId) => void inviteAlt(altId, leadId)}
+            onSendReply={sendReply}
           />
         ) : tab === "sent" ? (
           <SentTab
@@ -1247,12 +1264,13 @@ function AcceptedTab({ rows, busyLead, onRender, onReject }: {
   );
 }
 
-function RepliesTab({ replies, referralsByLead, busyLead, onMarkHandled, onInviteAlt }: {
+function RepliesTab({ replies, referralsByLead, busyLead, onMarkHandled, onInviteAlt, onSendReply }: {
   replies: Reply[];
   referralsByLead: Map<string, AltContact[]>;
   busyLead: string | null;
   onMarkHandled: (id: string) => void;
   onInviteAlt: (altId: string, leadId: string) => void;
+  onSendReply: (replyId: string, messageOverride: string) => Promise<boolean>;
 }) {
   if (replies.length === 0) {
     return (
@@ -1394,7 +1412,7 @@ function RepliesTab({ replies, referralsByLead, busyLead, onMarkHandled, onInvit
                         <p className="tabular mt-1 text-[11px] text-[var(--ink)]/55">AI: {r.reasoning}</p>
                       ) : null}
                       {!isOutbound && r.suggested_reply ? (
-                        <SuggestedReply text={r.suggested_reply} />
+                        <SuggestedReply replyId={r.id} text={r.suggested_reply} onSend={onSendReply} />
                       ) : null}
                     </div>
                   </li>
@@ -1571,27 +1589,60 @@ function LoginGate({ email, setEmail, token, setToken, sendOtp, verifyOtp, info,
   );
 }
 
-function SuggestedReply({ text }: { text: string }) {
+function SuggestedReply({ replyId, text, onSend }: {
+  replyId: string;
+  text: string;
+  onSend: (replyId: string, messageOverride: string) => Promise<boolean>;
+}) {
+  const [draft, setDraft] = useState(text);
+  const [editing, setEditing] = useState(false);
+  const [sending, setSending] = useState(false);
   const [copied, setCopied] = useState(false);
   const [hidden, setHidden] = useState(false);
   if (hidden) return null;
+
   async function copy() {
     try {
-      await navigator.clipboard.writeText(text);
+      await navigator.clipboard.writeText(draft);
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch {
       /* clipboard blocked — ignore */
     }
   }
+
+  async function send() {
+    if (!draft.trim() || sending) return;
+    if (!confirm("Send svaret via SendPilot nu?")) return;
+    setSending(true);
+    const ok = await onSend(replyId, draft.trim());
+    setSending(false);
+    if (ok) setHidden(true);
+  }
+
   return (
     <div className="mt-2 rounded-sm border border-dashed border-[var(--forest)]/30 bg-[var(--forest)]/[0.04] p-3 text-left">
       <div className="tabular flex items-center justify-between gap-2 text-[10px] uppercase tracking-[0.22em] text-[var(--forest)]">
         <span>✦ Foreslået svar</span>
         <div className="flex gap-1">
+          {!editing ? (
+            <button type="button" onClick={() => setEditing(true)}
+              className="focus-cream rounded-sm border border-[var(--ink)]/15 px-2 py-0.5 text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/55 hover:border-[var(--ink)]/35 hover:text-[var(--ink)]/80">
+              Rediger
+            </button>
+          ) : (
+            <button type="button" onClick={() => { setDraft(text); setEditing(false); }}
+              className="focus-cream rounded-sm border border-[var(--ink)]/15 px-2 py-0.5 text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/55 hover:border-[var(--ink)]/35 hover:text-[var(--ink)]/80">
+              Annullér
+            </button>
+          )}
           <button type="button" onClick={() => void copy()}
             className="focus-cream rounded-sm border border-[var(--forest)]/30 px-2 py-0.5 text-[10px] uppercase tracking-[0.22em] text-[var(--forest)] hover:bg-[var(--forest)]/10">
             {copied ? "Kopieret ✓" : "Kopiér"}
+          </button>
+          <button type="button" onClick={() => void send()} disabled={sending || !draft.trim()}
+            className="focus-orange rounded-sm bg-[var(--forest)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.22em] text-[var(--cream)] hover:bg-[#2f5e4e] disabled:opacity-40">
+            {sending ? "Sender…" : "Send"}
           </button>
           <button type="button" onClick={() => setHidden(true)}
             className="focus-cream rounded-sm border border-[var(--ink)]/15 px-2 py-0.5 text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/55 hover:border-[var(--ink)]/35 hover:text-[var(--ink)]/80">
@@ -1599,7 +1650,16 @@ function SuggestedReply({ text }: { text: string }) {
           </button>
         </div>
       </div>
-      <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-[var(--ink)]/85">{text}</p>
+      {editing ? (
+        <textarea
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          rows={Math.max(3, draft.split("\n").length + 1)}
+          className="focus-cream mt-2 w-full resize-y whitespace-pre-wrap rounded-sm border border-[var(--forest)]/30 bg-[var(--cream)]/40 px-3 py-2 text-sm leading-relaxed text-[var(--ink)]/90 outline-none focus:border-[var(--forest)]/60"
+        />
+      ) : (
+        <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-[var(--ink)]/85">{draft}</p>
+      )}
     </div>
   );
 }

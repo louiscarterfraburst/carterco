@@ -46,16 +46,37 @@ Deno.serve(async (request) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
   );
 
-  let body: { leadId?: string; decision?: string; messageOverride?: string };
+  let body: { leadId?: string; replyId?: string; decision?: string; messageOverride?: string };
   try {
     body = await request.json();
   } catch {
     return json({ error: "invalid json" }, 400);
   }
-  const leadId = (body.leadId ?? "").trim();
   const decision = (body.decision ?? "").toLowerCase();
-  if (!leadId || !["approve", "reject", "render"].includes(decision)) {
-    return json({ error: "leadId and decision (approve|reject|render) required" }, 400);
+  if (!["approve", "reject", "render", "reply"].includes(decision)) {
+    return json({ error: "decision must be one of: approve | reject | render | reply" }, 400);
+  }
+
+  // Reply path uses replyId (the inbound row we're responding to). Look up
+  // the reply, then resolve the pipeline row from its sendpilot_lead_id.
+  // Approve/reject/render use leadId directly.
+  let leadId = (body.leadId ?? "").trim();
+  let replyRow: { id: string; sendpilot_lead_id: string; suggested_reply: string | null; handled: boolean } | null = null;
+  if (decision === "reply") {
+    const replyId = (body.replyId ?? "").trim();
+    if (!replyId) return json({ error: "replyId required for decision=reply" }, 400);
+    const { data: r, error: rErr } = await admin
+      .from("outreach_replies")
+      .select("id, sendpilot_lead_id, suggested_reply, handled, direction")
+      .eq("id", replyId)
+      .maybeSingle();
+    if (rErr) return json({ error: "db fetch reply", details: rErr.message }, 500);
+    if (!r) return json({ error: "reply not found" }, 404);
+    if (r.direction !== "inbound") return json({ error: "can only reply to inbound messages" }, 400);
+    leadId = r.sendpilot_lead_id;
+    replyRow = r as typeof replyRow;
+  } else if (!leadId) {
+    return json({ error: "leadId required" }, 400);
   }
 
   // Fetch the pipeline row.
@@ -68,6 +89,62 @@ Deno.serve(async (request) => {
   if (!pipe) return json({ error: "lead not found" }, 404);
 
   const now = new Date().toISOString();
+
+  if (decision === "reply") {
+    if (!pipe.sendpilot_sender_id) {
+      return json({ error: "lead has no sendpilot_sender_id" }, 400);
+    }
+    if (!pipe.linkedin_url) {
+      return json({ error: "lead has no linkedin_url" }, 400);
+    }
+    const message = (body.messageOverride && body.messageOverride.trim())
+      ? body.messageOverride.trim()
+      : (replyRow?.suggested_reply ?? "").trim();
+    if (!message) return json({ error: "no message to send (empty messageOverride and no suggested_reply)" }, 400);
+
+    const send = await fetch("https://api.sendpilot.ai/v1/inbox/send", {
+      method: "POST",
+      headers: { "X-API-Key": SP_API_KEY, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        senderId: pipe.sendpilot_sender_id,
+        recipientLinkedinUrl: pipe.linkedin_url,
+        message,
+      }),
+    });
+    let respBody: unknown = null;
+    try { respBody = await send.json(); } catch { /* ignore */ }
+    const success = send.status === 200 || send.status === 201;
+
+    if (success) {
+      // Insert the outbound row immediately so UI updates without waiting
+      // for the next sync tick. external_id stays null; sync will patch it
+      // in within ~15min when SendPilot's conversation API exposes the id.
+      await admin.from("outreach_replies").insert({
+        sendpilot_lead_id: leadId,
+        linkedin_url: pipe.linkedin_url,
+        message,
+        workspace_id: pipe.workspace_id,
+        direction: "outbound",
+        external_id: null,
+        received_at: now,
+      });
+      // Mark the inbound we're answering as handled.
+      if (replyRow) {
+        await admin.from("outreach_replies").update({
+          handled: true,
+          handled_at: now,
+          handled_by: email,
+        }).eq("id", replyRow.id);
+      }
+    }
+
+    return json({
+      ok: success,
+      decision: "reply",
+      status: send.status,
+      response: respBody,
+    }, success ? 200 : 502);
+  }
 
   if (decision === "render") {
     if (!pipe.contact_email) return json({ error: "lead has no contact_email" }, 400);
