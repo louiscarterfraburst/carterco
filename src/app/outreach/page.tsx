@@ -1372,8 +1372,8 @@ function RepliesTab({ replies, referralsByLead, busyLead, onMarkHandled, onInvit
                       </div>
                       <p className={`whitespace-pre-wrap rounded-sm px-3 py-2 text-sm leading-relaxed text-left ${
                         isOutbound
-                          ? "mt-1 bg-[var(--forest)]/10 text-[var(--ink)]/90 ring-1 ring-[var(--forest)]/15"
-                          : "mt-1 bg-[var(--cream)]/80 text-[var(--ink)]/90 ring-1 ring-[var(--ink)]/[0.06]"
+                          ? "mt-1 bg-[var(--forest)]/[0.18] text-[var(--ink)]/90 ring-1 ring-[var(--forest)]/30"
+                          : "mt-1 bg-[var(--cream)] text-[var(--ink)]/90 ring-1 ring-[var(--ink)]/10"
                       }`}>{r.message}</p>
                       {!isOutbound && r.reasoning ? (
                         <p className="tabular mt-1 text-[11px] text-[var(--ink)]/55">AI: {r.reasoning}</p>
