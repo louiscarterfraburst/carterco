@@ -219,10 +219,8 @@ export function LeadQuiz({ open, onClose, onConvert }: Props) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <button
-        type="button"
-        aria-label="Luk"
-        onClick={onClose}
+      <div
+        aria-hidden
         className="absolute inset-0 bg-black/80 backdrop-blur-md"
       />
       <div className="relative z-10 flex max-h-[92vh] w-[calc(100%-2rem)] max-w-2xl flex-col overflow-hidden rounded-2xl border border-[var(--cream)]/10 bg-[#14110d] text-[var(--cream)] shadow-[0_40px_120px_rgba(0,0,0,0.6)]">
@@ -272,7 +270,6 @@ export function LeadQuiz({ open, onClose, onConvert }: Props) {
               value={url}
               onChange={setUrl}
               onSubmit={handleNextFromUrl}
-              onSkip={() => next()}
             />
           )}
           {currentStepKey === "leads" && (
@@ -430,35 +427,23 @@ function UrlStep({
   value,
   onChange,
   onSubmit,
-  onSkip,
 }: {
   value: string;
   onChange: (v: string) => void;
   onSubmit: () => void;
-  onSkip: () => void;
 }) {
   const valid = isUrlValid(value);
   return (
     <StepShell
-      question="Indsæt din hjemmeside, så jeg kan kigge på den."
-      hint="Vi læser din side for at finde din ICP og hvilke kanaler du mangler. Tager 5 sekunder."
+      question="Din hjemmeside?"
       footer={
-        <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center">
-          <PrimaryButton
-            type="button"
-            onClick={onSubmit}
-            disabled={!valid}
-          >
-            Næste →
-          </PrimaryButton>
-          <button
-            type="button"
-            onClick={onSkip}
-            className="text-[11px] font-bold uppercase tracking-[0.25em] text-[var(--cream)]/45 transition hover:text-[var(--cream)]"
-          >
-            Spring over
-          </button>
-        </div>
+        <PrimaryButton
+          type="button"
+          onClick={onSubmit}
+          disabled={!valid}
+        >
+          Næste →
+        </PrimaryButton>
       }
     >
       <input
@@ -475,7 +460,7 @@ function UrlStep({
         placeholder="dinvirksomhed.dk"
         autoComplete="url"
         inputMode="url"
-        className="w-full border-b border-[var(--cream)]/20 bg-transparent pb-3 font-display text-2xl text-[var(--cream)] placeholder:text-[var(--cream)]/25 focus:border-[#ff6b2c] focus:outline-none sm:text-3xl"
+        className="w-full border-b border-[var(--cream)]/20 bg-transparent pb-3 font-display text-2xl text-[var(--cream)] placeholder:font-sans placeholder:text-base placeholder:text-[var(--cream)]/25 focus:border-[#ff6b2c] focus:outline-none sm:text-3xl"
       />
     </StepShell>
   );

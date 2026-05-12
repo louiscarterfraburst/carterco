@@ -1230,61 +1230,135 @@ function RepliesTab({ replies, referralsByLead, busyLead, onMarkHandled, onInvit
   if (replies.length === 0) {
     return <p className="mt-4 text-sm text-[var(--ink)]/45">Ingen svar endnu.</p>;
   }
-  // Pin the referral block to ONE reply per lead — the most recent one in
-  // the list, which is the row a user is most likely scanning. Without this
-  // the same Morten Otto card repeats under every reply Justyna sent in the
-  // same conversation, which reads as duplicated content not multi-turn.
-  const referralAnchor = new Map<string, string>();
+
+  // Group replies by contact (linkedin_url) — one card per person regardless
+  // of how many sendpilot_lead_id campaigns they appear in. Within each card
+  // we render the message thread newest-first so the most-recent reply is the
+  // first thing you scan.
+  const byContact = new Map<string, Reply[]>();
   for (const r of replies) {
-    if (referralsByLead.has(r.sendpilot_lead_id) && !referralAnchor.has(r.sendpilot_lead_id)) {
-      referralAnchor.set(r.sendpilot_lead_id, r.id);
-    }
+    const key = r.linkedin_url;
+    if (!byContact.has(key)) byContact.set(key, []);
+    byContact.get(key)!.push(r);
   }
+  for (const arr of byContact.values()) {
+    arr.sort((a, b) => (b.received_at ?? "").localeCompare(a.received_at ?? ""));
+  }
+  const contacts = Array.from(byContact.entries()).sort(
+    ([, a], [, b]) => (b[0]?.received_at ?? "").localeCompare(a[0]?.received_at ?? "")
+  );
+
   return (
     <ul className="mt-2 flex flex-col gap-3">
-      {replies.map((r) => {
-        const showReferrals = referralAnchor.get(r.sendpilot_lead_id) === r.id;
-        const referrals = showReferrals ? (referralsByLead.get(r.sendpilot_lead_id) ?? []) : [];
+      {contacts.map(([linkedinUrl, contactReplies]) => {
+        const latest = contactReplies[0]!;
+        const unhandledCount = contactReplies.filter((r) => !r.handled).length;
+        const allHandled = unhandledCount === 0;
+
+        // Aggregate referrals from every campaign this contact appears in,
+        // dedupe by alt.id. Use the latest-touched sendpilot_lead_id as the
+        // anchor for the Inviter callback (any lead_id of this contact would
+        // work; latest keeps the invite tied to the most recent campaign).
+        const seenAltIds = new Set<string>();
+        const aggregatedReferrals: AltContact[] = [];
+        let referralAnchorLeadId: string | null = null;
+        for (const r of contactReplies) {
+          const refs = referralsByLead.get(r.sendpilot_lead_id);
+          if (!refs || refs.length === 0) continue;
+          if (!referralAnchorLeadId) referralAnchorLeadId = r.sendpilot_lead_id;
+          for (const alt of refs) {
+            if (!seenAltIds.has(alt.id)) {
+              seenAltIds.add(alt.id);
+              aggregatedReferrals.push(alt);
+            }
+          }
+        }
+
         return (
-          <li key={r.id}
+          <li key={linkedinUrl}
             className={`rounded-sm border p-4 sm:p-5 transition ${
-              r.handled ? "border-[var(--ink)]/8 bg-transparent opacity-60" : "border-[var(--ink)]/12 bg-[var(--cream)]/40"
+              allHandled ? "border-[var(--ink)]/8 bg-transparent opacity-60" : "border-[var(--ink)]/12 bg-[var(--cream)]/40"
             }`}>
+            {/* Contact header */}
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
                 <div className="font-display text-xl italic leading-tight tracking-tight text-[var(--ink)]">
-                  {r.lead?.first_name} {r.lead?.last_name}
+                  {latest.lead?.first_name} {latest.lead?.last_name}
                 </div>
                 <div className="tabular mt-0.5 text-[12px] text-[var(--ink)]/55">
-                  {r.lead?.company}
+                  {latest.lead?.company}
                   {" · "}
-                  <a href={r.linkedin_url} target="_blank" rel="noreferrer"
+                  <a href={linkedinUrl} target="_blank" rel="noreferrer"
                     className="underline underline-offset-2 hover:text-[var(--ink)]">LinkedIn ↗</a>
                   {" · "}
-                  {fmtRelative(r.received_at)}
+                  {fmtRelative(latest.received_at)}
+                  {contactReplies.length > 1 ? (
+                    <span className="text-[var(--ink)]/40">{" · "}{contactReplies.length} beskeder</span>
+                  ) : null}
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <IntentPill intent={r.intent} confidence={r.confidence} />
-                {!r.handled ? (
-                  <button type="button" onClick={() => onMarkHandled(r.id)}
-                    className="focus-cream tabular rounded-sm border border-[var(--ink)]/15 px-3 py-1.5 text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/65 hover:border-[var(--ink)]/35 hover:text-[var(--ink)]">
-                    Markér behandlet
-                  </button>
+                <IntentPill intent={latest.intent} confidence={latest.confidence} />
+                {unhandledCount > 0 && contactReplies.length > 1 ? (
+                  <span className="tabular text-[10px] uppercase tracking-[0.22em] text-[var(--clay)]">
+                    {unhandledCount} ubehandlet
+                  </span>
                 ) : null}
               </div>
             </div>
-            <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-[var(--ink)]/85">{r.message}</p>
-            {r.reasoning ? (
-              <p className="tabular mt-2 text-[11px] italic text-[var(--ink)]/45">AI: {r.reasoning}</p>
-            ) : null}
-            {referrals.length > 0 ? (
-              <div className="mt-3 rounded-sm border border-[var(--clay)]/30 bg-[var(--clay)]/5 p-3">
+
+            {/* Message thread */}
+            <ul className={`flex flex-col gap-4 ${contactReplies.length > 1 ? "mt-4 border-l border-[var(--ink)]/10 pl-4" : "mt-3"}`}>
+              {contactReplies.map((r, idx) => {
+                const isLatest = idx === 0;
+                return (
+                  <li key={r.id} className={r.handled ? "opacity-50" : ""}>
+                    {contactReplies.length > 1 ? (
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="tabular text-[11px] text-[var(--ink)]/50">
+                          {fmtRelative(r.received_at)}
+                          {!isLatest && r.intent !== latest.intent ? (
+                            <span className="ml-2 inline-block align-middle">
+                              <IntentPill intent={r.intent} confidence={r.confidence} />
+                            </span>
+                          ) : null}
+                        </span>
+                        {!r.handled ? (
+                          <button type="button" onClick={() => onMarkHandled(r.id)}
+                            className="focus-cream tabular rounded-sm border border-[var(--ink)]/15 px-3 py-1.5 text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/65 hover:border-[var(--ink)]/35 hover:text-[var(--ink)]">
+                            Markér behandlet
+                          </button>
+                        ) : null}
+                      </div>
+                    ) : (
+                      // Single-message contact: skip the per-message timestamp/button row since
+                      // the header already shows the same info; just show the message + handle button.
+                      !r.handled ? (
+                        <div className="flex justify-end">
+                          <button type="button" onClick={() => onMarkHandled(r.id)}
+                            className="focus-cream tabular rounded-sm border border-[var(--ink)]/15 px-3 py-1.5 text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/65 hover:border-[var(--ink)]/35 hover:text-[var(--ink)]">
+                            Markér behandlet
+                          </button>
+                        </div>
+                      ) : null
+                    )}
+                    <p className={`whitespace-pre-wrap text-sm leading-relaxed text-[var(--ink)]/85 ${contactReplies.length > 1 ? "mt-2" : "mt-3"}`}>{r.message}</p>
+                    {r.reasoning ? (
+                      <p className="tabular mt-1 text-[11px] italic text-[var(--ink)]/45">AI: {r.reasoning}</p>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+
+            {/* Aggregated referrals across all of this contact's campaigns */}
+            {aggregatedReferrals.length > 0 && referralAnchorLeadId ? (
+              <div className="mt-4 rounded-sm border border-[var(--clay)]/30 bg-[var(--clay)]/5 p-3">
                 <p className="tabular text-[10px] uppercase tracking-[0.22em] text-[var(--clay)]">
-                  Henviser til {referrals.length === 1 ? "" : `${referrals.length} personer`}
+                  Henviser til {aggregatedReferrals.length === 1 ? "" : `${aggregatedReferrals.length} personer`}
                 </p>
                 <ul className="mt-2 space-y-2">
-                  {referrals.map((alt) => (
+                  {aggregatedReferrals.map((alt) => (
                     <li key={alt.id} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
                       <div className="min-w-0">
                         <div className="text-sm font-medium text-[var(--ink)]">{alt.name}</div>
@@ -1302,7 +1376,7 @@ function RepliesTab({ replies, referralsByLead, busyLead, onMarkHandled, onInvit
                           <span className="tabular text-[11px] uppercase tracking-[0.2em] text-[var(--ink)]/45">Mangler LinkedIn</span>
                         )}
                         {alt.linkedin_url && !alt.acted_on_at ? (
-                          <button onClick={() => onInviteAlt(alt.id, r.sendpilot_lead_id)} disabled={busyLead === r.sendpilot_lead_id}
+                          <button onClick={() => onInviteAlt(alt.id, referralAnchorLeadId!)} disabled={busyLead === referralAnchorLeadId}
                             className="tabular text-[11px] uppercase tracking-[0.2em] text-[var(--clay)] underline-offset-[6px] hover:underline disabled:opacity-50">
                             Inviter →
                           </button>
@@ -1683,6 +1757,7 @@ function InboxTab(props: {
             busyLead={rest.busyLead}
             onUseOriginal={rest.onUseOriginal}
             onInviteAlt={rest.onInviteAlt}
+            onRejectOne={rest.onRejectOne}
           />
         </InboxSection>
       ) : null}
@@ -1750,12 +1825,13 @@ function IcpRejectedTab({ rows, busyLead, onOverride }: {
   );
 }
 
-function AltReviewTab({ rows, altsByLead, busyLead, onUseOriginal, onInviteAlt }: {
+function AltReviewTab({ rows, altsByLead, busyLead, onUseOriginal, onInviteAlt, onRejectOne }: {
   rows: PipelineRow[];
   altsByLead: Map<string, AltContact[]>;
   busyLead: string | null;
   onUseOriginal: (leadId: string) => void;
   onInviteAlt: (altId: string, leadId: string) => void;
+  onRejectOne: (r: PipelineRow) => void;
 }) {
   if (rows.length === 0) {
     return <p className="tabular py-12 text-center text-[11px] uppercase tracking-[0.22em] text-[var(--ink)]/35">Ingen leads under person-review.</p>;
@@ -1833,6 +1909,10 @@ function AltReviewTab({ rows, altsByLead, busyLead, onUseOriginal, onInviteAlt }
               <button onClick={() => onUseOriginal(r.sendpilot_lead_id)} disabled={busyLead === r.sendpilot_lead_id}
                 className="tabular text-[11px] uppercase tracking-[0.2em] text-[var(--ink)]/70 underline-offset-[6px] hover:underline disabled:opacity-50">
                 Brug original alligevel →
+              </button>
+              <button onClick={() => onRejectOne(r)} disabled={busyLead === r.sendpilot_lead_id}
+                className="tabular text-[11px] uppercase tracking-[0.2em] text-[var(--ink)]/55 underline-offset-[6px] hover:underline disabled:opacity-50">
+                Drop leadet →
               </button>
             </div>
           </li>

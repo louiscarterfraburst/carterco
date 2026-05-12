@@ -2292,7 +2292,7 @@ export default function Home() {
                 <div className="mt-8 max-w-md space-y-5 text-[15px] leading-[1.7] text-[#29261f]/85 sm:mt-10 sm:text-[16px]">
                   <p>
                     <span className="font-semibold text-[#29261f]">
-                      Hvert system bygges af mig.
+                      Hvert system bygges hands-on.
                     </span>
                   </p>
                   <p>
@@ -2302,7 +2302,7 @@ export default function Home() {
                     Du har mig fra dag ét. Du beholder mig efter overdragelsen.
                   </p>
                   <p>
-                    Oplev et rigtigt flow fra kundens side — og se hvad dit eget system mangler.
+                    Tag quizzen — oplev flowet fra kundens side, og se hvad dit eget system mangler.
                   </p>
                   <div className="pt-2">
                     <button
@@ -2344,7 +2344,7 @@ export default function Home() {
                   <div className="mt-3 flex items-center gap-2 font-mono text-[9px] font-bold uppercase tracking-[0.3em] text-[#29261f]/55">
                     <span>Louis Carter</span>
                     <span aria-hidden className="h-px flex-1 bg-[#29261f]/20" />
-                    <span>OP. №01</span>
+                    <span>København</span>
                   </div>
 
                   {/* Handwritten arrow + caption — points at photo */}

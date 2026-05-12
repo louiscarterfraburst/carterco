@@ -46,3 +46,4 @@ scripts/**/_smoke_*.py
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+.gstack/
