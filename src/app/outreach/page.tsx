@@ -138,6 +138,8 @@ type Reply = {
   handled: boolean;
   handled_by: string | null;
   direction: "inbound" | "outbound";
+  suggested_reply: string | null;
+  suggested_reply_generated_at: string | null;
   lead?: LeadEnrich;
 };
 
@@ -1378,6 +1380,9 @@ function RepliesTab({ replies, referralsByLead, busyLead, onMarkHandled, onInvit
                       {!isOutbound && r.reasoning ? (
                         <p className="tabular mt-1 text-[11px] text-[var(--ink)]/55">AI: {r.reasoning}</p>
                       ) : null}
+                      {!isOutbound && r.suggested_reply ? (
+                        <SuggestedReply text={r.suggested_reply} />
+                      ) : null}
                     </div>
                   </li>
                 );
@@ -1550,6 +1555,39 @@ function LoginGate({ email, setEmail, token, setToken, sendOtp, verifyOtp, info,
         <p className="tabular text-[10px] uppercase tracking-[0.28em] text-[var(--ink)]/25">{new Date().getFullYear()} · CarterCo Outreach</p>
       </div>
     </main>
+  );
+}
+
+function SuggestedReply({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  const [hidden, setHidden] = useState(false);
+  if (hidden) return null;
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* clipboard blocked — ignore */
+    }
+  }
+  return (
+    <div className="mt-2 rounded-sm border border-dashed border-[var(--forest)]/30 bg-[var(--forest)]/[0.04] p-3 text-left">
+      <div className="tabular flex items-center justify-between gap-2 text-[10px] uppercase tracking-[0.22em] text-[var(--forest)]">
+        <span>✦ Foreslået svar</span>
+        <div className="flex gap-1">
+          <button type="button" onClick={() => void copy()}
+            className="focus-cream rounded-sm border border-[var(--forest)]/30 px-2 py-0.5 text-[10px] uppercase tracking-[0.22em] text-[var(--forest)] hover:bg-[var(--forest)]/10">
+            {copied ? "Kopieret ✓" : "Kopiér"}
+          </button>
+          <button type="button" onClick={() => setHidden(true)}
+            className="focus-cream rounded-sm border border-[var(--ink)]/15 px-2 py-0.5 text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/55 hover:border-[var(--ink)]/35 hover:text-[var(--ink)]/80">
+            Skjul
+          </button>
+        </div>
+      </div>
+      <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-[var(--ink)]/85">{text}</p>
+    </div>
   );
 }
 

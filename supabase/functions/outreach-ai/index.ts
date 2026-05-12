@@ -78,8 +78,154 @@ Deno.serve(async (req) => {
     return json(result);
   }
 
+  if (op === "draft_reply") {
+    const replyId = String(body.replyId ?? "").trim();
+    if (!replyId) return json({ error: "replyId required" }, 400);
+    const admin = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    );
+    const result = await draftReply(admin, replyId);
+    if ("error" in result) return json(result, 502);
+    return json(result);
+  }
+
   return json({ error: `unknown op: ${op}` }, 400);
 });
+
+type Playbook = {
+  workspace_id: string;
+  owner_first_name: string;
+  value_prop: string;
+  guidelines: string;
+  cta_preference: "no_cta" | "soft_discovery" | "booking_link";
+  booking_link: string | null;
+};
+
+async function draftReply(
+  admin: ReturnType<typeof createClient>,
+  replyId: string,
+): Promise<{ draft: string; model: string; workspace_id: string } | { error: string }> {
+  // Load the inbound reply + lead context + workspace playbook + full thread.
+  const { data: reply } = await admin
+    .from("outreach_replies")
+    .select("id, sendpilot_lead_id, linkedin_url, message, intent, reasoning, workspace_id, direction")
+    .eq("id", replyId)
+    .maybeSingle();
+  if (!reply) return { error: "reply not found" };
+  if (reply.direction !== "inbound") return { error: "can only draft against inbound replies" };
+
+  const { data: playbook } = await admin
+    .from("outreach_voice_playbooks")
+    .select("*")
+    .eq("workspace_id", reply.workspace_id ?? "")
+    .maybeSingle<Playbook>();
+  if (!playbook) return { error: `no voice playbook for workspace ${reply.workspace_id}` };
+
+  // Pull pipeline row for the original cold message + lead identity.
+  const { data: pipe } = await admin
+    .from("outreach_pipeline")
+    .select("contact_email, rendered_message, referred_from_pipeline_lead_id")
+    .eq("sendpilot_lead_id", reply.sendpilot_lead_id)
+    .maybeSingle();
+  const { data: lead } = await admin
+    .from("outreach_leads")
+    .select("first_name, last_name, company, title, website")
+    .eq("contact_email", pipe?.contact_email ?? "")
+    .maybeSingle();
+
+  // Full thread history for this lead, oldest first — so Claude sees how the
+  // owner has been writing on this exact thread.
+  const { data: thread } = await admin
+    .from("outreach_replies")
+    .select("direction, message, received_at")
+    .eq("sendpilot_lead_id", reply.sendpilot_lead_id)
+    .order("received_at", { ascending: true });
+
+  const ctaInstruction = playbook.cta_preference === "no_cta"
+    ? "Do NOT push for a meeting, demo, or call. The vibe is collaborative — leave room for a low-friction next exchange."
+    : playbook.cta_preference === "booking_link"
+    ? `When suggesting a next step, include the booking link: ${playbook.booking_link ?? "(missing)"}`
+    : "Use soft-discovery framing — suggest informal exchange (\"stikke hovederne sammen\", \"sig til hvis det giver mening\"). Never aggressive close.";
+
+  const systemPrompt = [
+    `You're drafting a LinkedIn reply on behalf of ${playbook.owner_first_name}.`,
+    "",
+    "## What we offer",
+    playbook.value_prop,
+    "",
+    "## Voice — VERY IMPORTANT",
+    `Your reference voice is ${playbook.owner_first_name}'s OWN past outbound messages in the conversation history below. Match that voice EXACTLY: same sentence length, same word choice, same level of formality, same use of emoji (or lack of). Never sound more salesy or more corporate than ${playbook.owner_first_name} actually writes.`,
+    "",
+    "If no prior outbound exists in this thread (this is the first inbound reply to a fresh cold message), fall back to the guidelines below.",
+    "",
+    "## Match the prospect's tone",
+    "- They wrote casually (emoji, contractions, joking) → match casual",
+    "- They wrote formally → match more measured",
+    "- They wrote terse → keep yours short",
+    "- They wrote long → match length but stay concise",
+    "Never sacrifice clarity for tone-matching.",
+    "",
+    `## Guidelines specific to ${playbook.owner_first_name}`,
+    playbook.guidelines,
+    "",
+    "## CTA preference",
+    ctaInstruction,
+    "",
+    "## Output format",
+    "- Plain Danish text, ready to paste into LinkedIn",
+    "- No \"Best regards\", no \"/\"-signature, no \"Bh,\" closing — SendPilot adds those",
+    "- No <reasoning> tags, no preamble, no explanation",
+    "- Just the message body",
+  ].join("\n");
+
+  const conversationLines: string[] = [];
+  conversationLines.push(`Lead: ${lead?.first_name ?? "?"} ${lead?.last_name ?? ""} at ${lead?.company ?? "?"}, ${lead?.title ?? "?"}`);
+  conversationLines.push("");
+  if (pipe?.rendered_message) {
+    conversationLines.push(`${playbook.owner_first_name}'s original outbound (the cold opener):`);
+    conversationLines.push(`> ${pipe.rendered_message.replaceAll("\n", "\n> ")}`);
+    conversationLines.push("");
+  }
+  if (thread && thread.length > 0) {
+    conversationLines.push("Conversation since then (chronological):");
+    for (const m of thread) {
+      const role = m.direction === "outbound" ? playbook.owner_first_name : (lead?.first_name ?? "Prospect");
+      conversationLines.push(`${role}: ${m.message}`);
+    }
+    conversationLines.push("");
+  }
+  conversationLines.push(`The prospect just sent the latest inbound reply above (intent classified as "${reply.intent}", reasoning: "${reply.reasoning ?? ""}").`);
+  conversationLines.push("");
+  conversationLines.push(`Draft ${playbook.owner_first_name}'s reply now. Plain text only.`);
+
+  const userBlock = conversationLines.join("\n");
+
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "x-api-key": ANTHROPIC_API_KEY,
+      "anthropic-version": "2023-06-01",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-6",
+      max_tokens: 400,
+      system: systemPrompt,
+      messages: [{ role: "user", content: userBlock }],
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    console.error("draft_reply ai error", res.status, body);
+    return { error: `ai HTTP ${res.status}` };
+  }
+  const data = await res.json();
+  const blocks = (data.content ?? []) as Array<{ type: string; text?: string }>;
+  const draft = blocks.filter((b) => b.type === "text").map((b) => b.text ?? "").join("").trim();
+  if (!draft) return { error: "empty draft" };
+  return { draft, model: "claude-sonnet-4-6", workspace_id: reply.workspace_id ?? "" };
+}
 
 async function classifyReply(
   text: string,

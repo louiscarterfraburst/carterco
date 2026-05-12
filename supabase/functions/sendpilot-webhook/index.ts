@@ -326,6 +326,38 @@ async function classifyReplyAsync(
       // is noise when we already know the specific name. We only spawn the
       // hint row when Claude extracted a name — "talk to someone else" with
       // no name still needs manual follow-up.
+      // Draftable intents trigger an automatic suggested-reply generation.
+      // Decline/ooo/other don't get auto-drafts — they rarely need a reply.
+      // Referral has its own alt-contact flow (handled below), so we skip
+      // draft there too to avoid wasted Sonnet calls.
+      const DRAFTABLE = new Set(["question", "interested"]);
+      if (DRAFTABLE.has(j.intent)) {
+        try {
+          const draftUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/outreach-ai?op=draft_reply`;
+          const draftRes = await fetch(draftUrl, {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ replyId }),
+          });
+          if (draftRes.ok) {
+            const dj = await draftRes.json() as { draft?: string };
+            if (dj.draft) {
+              await supabase.from("outreach_replies").update({
+                suggested_reply: dj.draft,
+                suggested_reply_generated_at: new Date().toISOString(),
+              }).eq("id", replyId);
+            }
+          } else {
+            console.error("draft_reply non-200", draftRes.status, await draftRes.text());
+          }
+        } catch (e) {
+          console.error("draft_reply error", e);
+        }
+      }
+
       if (isReferral && j.referralTarget?.name) {
         const { data: pipe } = await supabase
           .from("outreach_pipeline")
