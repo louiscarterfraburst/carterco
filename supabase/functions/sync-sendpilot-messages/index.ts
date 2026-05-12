@@ -231,7 +231,12 @@ async function syncOne(
   let inboundInserted = 0;
   for (const m of relevant) {
     const direction = m.direction === "sent" ? "outbound" : "inbound";
-    const messageText = (m.content ?? "").slice(0, 8000);
+    // CRITICAL: trim. SendPilot's conversations API returns messages with
+    // trailing whitespace, but sendpilot-webhook trims via .trim() in its
+    // own insert path. Without trimming here, the dedupe-by-content check
+    // below misses the webhook row (off-by-1 trailing space → exact-match
+    // fails), and we end up with duplicate inbound bubbles in the Svar tab.
+    const messageText = (m.content ?? "").trim().slice(0, 8000);
 
     // For inbound: legacy rows from sendpilot-webhook lack external_id. Look
     // for an existing row with the same content first, and if found, just
