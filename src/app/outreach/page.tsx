@@ -137,6 +137,7 @@ type Reply = {
   received_at: string;
   handled: boolean;
   handled_by: string | null;
+  direction: "inbound" | "outbound";
   lead?: LeadEnrich;
 };
 
@@ -627,7 +628,12 @@ export default function OutreachPage() {
   }, [altContacts]);
 
   const sparkline = useMemo(() => buildSparkline(rows, 30), [rows]);
-  const unhandledReplies = useMemo(() => replies.filter((r) => !r.handled), [replies]);
+  // Only inbound replies count as "unhandled" — outbound messages are by
+  // definition already our own action.
+  const unhandledReplies = useMemo(
+    () => replies.filter((r) => r.direction === "inbound" && !r.handled),
+    [replies],
+  );
 
   const pending = useMemo(() => {
     const filtered = rows.filter((r) => r.status === "pending_approval")
@@ -1234,7 +1240,8 @@ function RepliesTab({ replies, referralsByLead, busyLead, onMarkHandled, onInvit
   // Group replies by contact (linkedin_url) — one card per person regardless
   // of how many sendpilot_lead_id campaigns they appear in. Within each card
   // we render the message thread newest-first so the most-recent reply is the
-  // first thing you scan.
+  // first thing you scan, and tag each message with its direction so the
+  // inbound vs outbound styling is unambiguous.
   const byContact = new Map<string, Reply[]>();
   for (const r of replies) {
     const key = r.linkedin_url;
@@ -1244,15 +1251,22 @@ function RepliesTab({ replies, referralsByLead, busyLead, onMarkHandled, onInvit
   for (const arr of byContact.values()) {
     arr.sort((a, b) => (b.received_at ?? "").localeCompare(a.received_at ?? ""));
   }
+  // Card sort: latest INBOUND first — outbound-only conversations (we sent,
+  // they haven't replied yet) shouldn't bump above unanswered prospect replies.
+  const latestInboundAt = (arr: Reply[]) =>
+    arr.find((r) => r.direction === "inbound")?.received_at ?? arr[0]?.received_at ?? "";
   const contacts = Array.from(byContact.entries()).sort(
-    ([, a], [, b]) => (b[0]?.received_at ?? "").localeCompare(a[0]?.received_at ?? "")
+    ([, a], [, b]) => latestInboundAt(b).localeCompare(latestInboundAt(a)),
   );
 
   return (
     <ul className="mt-2 flex flex-col gap-3">
       {contacts.map(([linkedinUrl, contactReplies]) => {
+        // Header signals + IntentPill should reflect the latest INBOUND.
+        // Outbound has no intent classification (we sent it, we know why).
+        const latestInbound = contactReplies.find((r) => r.direction === "inbound") ?? contactReplies[0]!;
         const latest = contactReplies[0]!;
-        const unhandledCount = contactReplies.filter((r) => !r.handled).length;
+        const unhandledCount = contactReplies.filter((r) => r.direction === "inbound" && !r.handled).length;
         const allHandled = unhandledCount === 0;
 
         // Aggregate referrals from every campaign this contact appears in,
@@ -1298,7 +1312,7 @@ function RepliesTab({ replies, referralsByLead, busyLead, onMarkHandled, onInvit
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <IntentPill intent={latest.intent} confidence={latest.confidence} />
+                <IntentPill intent={latestInbound.intent} confidence={latestInbound.confidence} />
                 {unhandledCount > 0 && contactReplies.length > 1 ? (
                   <span className="tabular text-[10px] uppercase tracking-[0.22em] text-[var(--clay)]">
                     {unhandledCount} ubehandlet
@@ -1307,45 +1321,41 @@ function RepliesTab({ replies, referralsByLead, busyLead, onMarkHandled, onInvit
               </div>
             </div>
 
-            {/* Message thread */}
-            <ul className={`flex flex-col gap-4 ${contactReplies.length > 1 ? "mt-4 border-l border-[var(--ink)]/10 pl-4" : "mt-3"}`}>
+            {/* Message thread — inbound left, outbound right, chat-style */}
+            <ul className={`flex flex-col gap-3 ${contactReplies.length > 1 ? "mt-4" : "mt-3"}`}>
               {contactReplies.map((r, idx) => {
                 const isLatest = idx === 0;
+                const isOutbound = r.direction === "outbound";
+                const showHandleButton = !isOutbound && !r.handled;
                 return (
-                  <li key={r.id} className={r.handled ? "opacity-50" : ""}>
-                    {contactReplies.length > 1 ? (
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <span className="tabular text-[11px] text-[var(--ink)]/50">
-                          {fmtRelative(r.received_at)}
-                          {!isLatest && r.intent !== latest.intent ? (
-                            <span className="ml-2 inline-block align-middle">
-                              <IntentPill intent={r.intent} confidence={r.confidence} />
-                            </span>
-                          ) : null}
-                        </span>
-                        {!r.handled ? (
+                  <li key={r.id}
+                    className={`flex ${isOutbound ? "justify-end" : "justify-start"} ${r.handled ? "opacity-50" : ""}`}>
+                    <div className={`max-w-[88%] sm:max-w-[78%] ${isOutbound ? "text-right" : ""}`}>
+                      <div className={`tabular flex flex-wrap items-center gap-2 text-[11px] ${
+                        isOutbound ? "justify-end text-[var(--ink)]/45" : "text-[var(--ink)]/50"
+                      }`}>
+                        <span>{isOutbound ? "Du" : "Dem"} · {fmtRelative(r.received_at)}</span>
+                        {!isOutbound && !isLatest && r.intent !== latestInbound.intent ? (
+                          <span className="inline-block align-middle">
+                            <IntentPill intent={r.intent} confidence={r.confidence} />
+                          </span>
+                        ) : null}
+                        {showHandleButton ? (
                           <button type="button" onClick={() => onMarkHandled(r.id)}
-                            className="focus-cream tabular rounded-sm border border-[var(--ink)]/15 px-3 py-1.5 text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/65 hover:border-[var(--ink)]/35 hover:text-[var(--ink)]">
+                            className="focus-cream tabular rounded-sm border border-[var(--ink)]/15 px-2.5 py-1 text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/65 hover:border-[var(--ink)]/35 hover:text-[var(--ink)]">
                             Markér behandlet
                           </button>
                         ) : null}
                       </div>
-                    ) : (
-                      // Single-message contact: skip the per-message timestamp/button row since
-                      // the header already shows the same info; just show the message + handle button.
-                      !r.handled ? (
-                        <div className="flex justify-end">
-                          <button type="button" onClick={() => onMarkHandled(r.id)}
-                            className="focus-cream tabular rounded-sm border border-[var(--ink)]/15 px-3 py-1.5 text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/65 hover:border-[var(--ink)]/35 hover:text-[var(--ink)]">
-                            Markér behandlet
-                          </button>
-                        </div>
-                      ) : null
-                    )}
-                    <p className={`whitespace-pre-wrap text-sm leading-relaxed text-[var(--ink)]/85 ${contactReplies.length > 1 ? "mt-2" : "mt-3"}`}>{r.message}</p>
-                    {r.reasoning ? (
-                      <p className="tabular mt-1 text-[11px] italic text-[var(--ink)]/45">AI: {r.reasoning}</p>
-                    ) : null}
+                      <p className={`whitespace-pre-wrap rounded-sm px-3 py-2 text-sm leading-relaxed text-[var(--ink)]/90 ${
+                        isOutbound
+                          ? "mt-1 bg-[var(--ink)]/[0.06] text-left"
+                          : "mt-1 bg-[var(--cream)]/70 text-left"
+                      }`}>{r.message}</p>
+                      {!isOutbound && r.reasoning ? (
+                        <p className="tabular mt-1 text-[11px] italic text-[var(--ink)]/45">AI: {r.reasoning}</p>
+                      ) : null}
+                    </div>
                   </li>
                 );
               })}
