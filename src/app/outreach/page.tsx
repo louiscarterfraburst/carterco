@@ -737,18 +737,19 @@ export default function OutreachPage() {
       />
 
       <section className="mx-auto w-full max-w-[1400px] px-4 pt-10 pb-6 sm:px-8 sm:pt-14 lg:px-12">
-        <p className="tabular text-[10px] uppercase tracking-[0.32em] text-[var(--ink)]/40">Status</p>
-        <h1 className="font-display mt-2 text-[15vw] italic leading-[0.85] tracking-[-0.03em] text-[var(--ink)] sm:text-[88px]">
-          Outreach
-        </h1>
-
-        <Funnel stats={stats} />
-
-        <div className="mt-6 sm:mt-8">
-          <div className="flex flex-wrap items-end gap-3 sm:gap-6">
+        <div className="flex items-end justify-between gap-6">
+          <div>
+            <p className="tabular text-[10px] uppercase tracking-[0.32em] text-[var(--ink)]/40">Status</p>
+            <h1 className="font-display mt-2 text-[12vw] italic leading-[0.85] tracking-[-0.03em] text-[var(--ink)] sm:text-[64px]">
+              Outreach
+            </h1>
+          </div>
+          <div className="hidden sm:block shrink-0">
             <Sparkline data={sparkline} />
           </div>
         </div>
+
+        <Funnel stats={stats} />
       </section>
 
       {info ? <Banner kind="info">{info}</Banner> : null}
@@ -955,13 +956,17 @@ function Tabs({ tab, setTab, showIcpTabs, counts }: {
           return (
             <button key={it.id} type="button" onClick={() => setTab(it.id)}
               className={`relative tabular flex items-baseline gap-1.5 whitespace-nowrap px-3 py-2 text-[12px] uppercase tracking-[0.22em] transition ${
-                active ? "text-[var(--ink)]" : "text-[var(--ink)]/50 hover:text-[var(--ink)]/80"
+                active
+                  ? "text-[var(--ink)] font-semibold"
+                  : "text-[var(--ink)]/50 hover:text-[var(--ink)]/80"
               }`}>
               <span>{it.label}</span>
               <span className={`tabular text-[10px] ${it.accent ? "text-[var(--clay)]" : "text-[var(--ink)]/40"}`}>
                 {it.count}
               </span>
-              {active ? <span className="absolute inset-x-0 -bottom-px h-px bg-[var(--ink)]" /> : null}
+              {active ? (
+                <span className="absolute inset-x-0 -bottom-px h-[2px] bg-[var(--clay)]" />
+              ) : null}
             </button>
           );
         })}
@@ -1002,37 +1007,49 @@ function PendingTab(props: {
   return (
     <>
       {/* Filter bar */}
-      <div className="flex flex-wrap items-center gap-2 border-b border-[var(--ink)]/10 pb-3">
-        <input
-          value={filters.company}
-          onChange={(e: ChangeEvent<HTMLInputElement>) => setFilters.setCompany(e.target.value)}
-          placeholder="Filtrer firma"
-          className="focus-cream tabular w-40 rounded-sm border border-[var(--ink)]/15 bg-transparent px-2 py-1.5 text-[12px] text-[var(--ink)] outline-none placeholder:text-[var(--ink)]/30 focus:border-[var(--ink)]/35"
-        />
-        <input
-          value={filters.role}
-          onChange={(e: ChangeEvent<HTMLInputElement>) => setFilters.setRole(e.target.value)}
-          placeholder="Filtrer titel"
-          className="focus-cream tabular w-40 rounded-sm border border-[var(--ink)]/15 bg-transparent px-2 py-1.5 text-[12px] text-[var(--ink)] outline-none placeholder:text-[var(--ink)]/30 focus:border-[var(--ink)]/35"
-        />
-        <select
-          value={filters.cold}
-          onChange={(e: ChangeEvent<HTMLSelectElement>) => setFilters.setCold(e.target.value as ColdFilter)}
-          className="focus-cream tabular rounded-sm border border-[var(--ink)]/15 bg-transparent px-2 py-1.5 text-[12px] text-[var(--ink)] outline-none focus:border-[var(--ink)]/35"
-        >
-          <option value="all">Alle</option>
-          <option value="cold">Kun kolde</option>
-          <option value="warm">Kun forbundne</option>
-        </select>
-        <select
-          value={sortKey}
-          onChange={(e: ChangeEvent<HTMLSelectElement>) => setSortKey(e.target.value as SortKey)}
-          className="focus-cream tabular rounded-sm border border-[var(--ink)]/15 bg-transparent px-2 py-1.5 text-[12px] text-[var(--ink)] outline-none focus:border-[var(--ink)]/35"
-        >
-          <option value="queued_oldest">Ældste først</option>
-          <option value="queued_newest">Nyeste først</option>
-          <option value="name">Efter navn</option>
-        </select>
+      <div className="flex flex-wrap items-end gap-3 border-b border-[var(--ink)]/10 pb-3">
+        <label className="flex flex-col gap-1">
+          <span className="tabular text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/45">Firma</span>
+          <input
+            value={filters.company}
+            onChange={(e: ChangeEvent<HTMLInputElement>) => setFilters.setCompany(e.target.value)}
+            placeholder="Filtrér…"
+            className="focus-cream tabular w-40 rounded-sm border border-[var(--ink)]/15 bg-transparent px-2 py-1.5 text-[12px] text-[var(--ink)] outline-none placeholder:text-[var(--ink)]/30 focus:border-[var(--ink)]/35"
+          />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="tabular text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/45">Titel</span>
+          <input
+            value={filters.role}
+            onChange={(e: ChangeEvent<HTMLInputElement>) => setFilters.setRole(e.target.value)}
+            placeholder="Filtrér…"
+            className="focus-cream tabular w-40 rounded-sm border border-[var(--ink)]/15 bg-transparent px-2 py-1.5 text-[12px] text-[var(--ink)] outline-none placeholder:text-[var(--ink)]/30 focus:border-[var(--ink)]/35"
+          />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="tabular text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/45">Type</span>
+          <select
+            value={filters.cold}
+            onChange={(e: ChangeEvent<HTMLSelectElement>) => setFilters.setCold(e.target.value as ColdFilter)}
+            className="focus-cream tabular rounded-sm border border-[var(--ink)]/15 bg-transparent px-2 py-1.5 text-[12px] text-[var(--ink)] outline-none focus:border-[var(--ink)]/35"
+          >
+            <option value="all">Alle</option>
+            <option value="cold">Kun kolde</option>
+            <option value="warm">Kun forbundne</option>
+          </select>
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="tabular text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/45">Sortér</span>
+          <select
+            value={sortKey}
+            onChange={(e: ChangeEvent<HTMLSelectElement>) => setSortKey(e.target.value as SortKey)}
+            className="focus-cream tabular rounded-sm border border-[var(--ink)]/15 bg-transparent px-2 py-1.5 text-[12px] text-[var(--ink)] outline-none focus:border-[var(--ink)]/35"
+          >
+            <option value="queued_oldest">Ældste først</option>
+            <option value="queued_newest">Nyeste først</option>
+            <option value="name">Efter navn</option>
+          </select>
+        </label>
 
         <div className="ml-auto flex items-center gap-2">
           <span className="tabular text-[11px] text-[var(--ink)]/55">{selected.size} valgt</span>
@@ -1048,7 +1065,9 @@ function PendingTab(props: {
       </div>
 
       {rows.length === 0 ? (
-        <p className="mt-6 text-sm text-[var(--ink)]/45">Ingen ventende beskeder lige nu.</p>
+        <p className="tabular py-12 text-center text-[11px] uppercase tracking-[0.22em] text-[var(--ink)]/35">
+          Ingen ventende beskeder lige nu.
+        </p>
       ) : (
         <ul className="mt-4 flex flex-col gap-3">
           {rows.map((r) => {
@@ -1234,7 +1253,11 @@ function RepliesTab({ replies, referralsByLead, busyLead, onMarkHandled, onInvit
   onInviteAlt: (altId: string, leadId: string) => void;
 }) {
   if (replies.length === 0) {
-    return <p className="mt-4 text-sm text-[var(--ink)]/45">Ingen svar endnu.</p>;
+    return (
+      <p className="tabular py-12 text-center text-[11px] uppercase tracking-[0.22em] text-[var(--ink)]/35">
+        Ingen svar endnu.
+      </p>
+    );
   }
 
   // Group replies by contact (linkedin_url) — one card per person regardless
@@ -1347,13 +1370,13 @@ function RepliesTab({ replies, referralsByLead, busyLead, onMarkHandled, onInvit
                           </button>
                         ) : null}
                       </div>
-                      <p className={`whitespace-pre-wrap rounded-sm px-3 py-2 text-sm leading-relaxed text-[var(--ink)]/90 ${
+                      <p className={`whitespace-pre-wrap rounded-sm px-3 py-2 text-sm leading-relaxed text-left ${
                         isOutbound
-                          ? "mt-1 bg-[var(--ink)]/[0.06] text-left"
-                          : "mt-1 bg-[var(--cream)]/70 text-left"
+                          ? "mt-1 bg-[var(--forest)]/10 text-[var(--ink)]/90 ring-1 ring-[var(--forest)]/15"
+                          : "mt-1 bg-[var(--cream)]/80 text-[var(--ink)]/90 ring-1 ring-[var(--ink)]/[0.06]"
                       }`}>{r.message}</p>
                       {!isOutbound && r.reasoning ? (
-                        <p className="tabular mt-1 text-[11px] italic text-[var(--ink)]/45">AI: {r.reasoning}</p>
+                        <p className="tabular mt-1 text-[11px] text-[var(--ink)]/55">AI: {r.reasoning}</p>
                       ) : null}
                     </div>
                   </li>
@@ -1412,7 +1435,13 @@ function SentTab({ rows, busyLead, onSetOutcome }: {
   busyLead: string | null;
   onSetOutcome: (leadId: string, outcome: Outcome | null) => void;
 }) {
-  if (rows.length === 0) return <p className="mt-4 text-sm text-[var(--ink)]/45">Endnu intet sendt.</p>;
+  if (rows.length === 0) {
+    return (
+      <p className="tabular py-12 text-center text-[11px] uppercase tracking-[0.22em] text-[var(--ink)]/35">
+        Endnu intet sendt.
+      </p>
+    );
+  }
   return (
     <ul className="mt-4 flex flex-col divide-y divide-[var(--ink)]/8 border-y border-[var(--ink)]/8">
       {rows.map((r) => (
@@ -1457,7 +1486,13 @@ function OutcomePicker({ outcome, busy, onChange }: {
 }
 
 function AllTab({ rows }: { rows: PipelineRow[] }) {
-  if (rows.length === 0) return <p className="mt-4 text-sm text-[var(--ink)]/45">Ingenting endnu.</p>;
+  if (rows.length === 0) {
+    return (
+      <p className="tabular py-12 text-center text-[11px] uppercase tracking-[0.22em] text-[var(--ink)]/35">
+        Ingenting endnu.
+      </p>
+    );
+  }
   return (
     <ul className="mt-4 flex flex-col divide-y divide-[var(--ink)]/8 border-y border-[var(--ink)]/8">
       {rows.map((r) => (
@@ -1519,10 +1554,23 @@ function LoginGate({ email, setEmail, token, setToken, sendOtp, verifyOtp, info,
 }
 
 function Banner({ kind, children }: { kind: "info" | "error"; children: ReactNode }) {
-  const color = kind === "error" ? "var(--clay)" : "var(--forest)";
+  const isError = kind === "error";
+  const color = isError ? "var(--clay)" : "var(--forest)";
   return (
     <section className="mx-auto mb-3 w-full max-w-[1400px] px-4 sm:px-8 lg:px-12">
-      <p className="border-l pl-3 text-sm" style={{ borderColor: color, color: kind === "error" ? color : "rgb(0 0 0 / 0.7)" }}>{children}</p>
+      <p
+        className="flex items-start gap-2 rounded-sm border-l-2 py-2 pl-3 pr-3 text-sm"
+        style={{
+          borderColor: color,
+          background: isError ? "rgba(185,112,65,0.06)" : "rgba(56,89,73,0.06)",
+          color: isError ? color : "rgb(0 0 0 / 0.75)",
+        }}
+      >
+        <span aria-hidden className="tabular text-[11px] font-semibold uppercase tracking-[0.18em] mt-0.5" style={{ color }}>
+          {isError ? "Fejl" : "Info"}
+        </span>
+        <span>{children}</span>
+      </p>
     </section>
   );
 }
