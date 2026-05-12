@@ -74,10 +74,43 @@ Deno.serve(async (req) => {
   if (req.method === "GET") return json({ ok: true, name: "sync-sendpilot-messages" });
   if (req.method !== "POST") return json({ error: "POST only" }, 405);
 
-  let body: { leadIds?: string[]; limit?: number; dryRun?: boolean } = {};
+  let body: { leadIds?: string[]; limit?: number; dryRun?: boolean; enrichOnly?: boolean } = {};
   try { body = await req.json().catch(() => ({})); } catch { body = {}; }
   const dryRun = body.dryRun === true;
   const limit = body.limit ?? 100;
+
+  // Enrich-only mode: find existing inbound rows with intent=null and run
+  // classification + auto-draft on them. Used to backfill rows that were
+  // inserted via sync (no webhook → no classifyReplyAsync) or that landed
+  // before the auto-draft system existed.
+  if (body.enrichOnly) {
+    const { data: unenriched } = await supabase
+      .from("outreach_replies")
+      .select("id, message, sendpilot_lead_id")
+      .eq("direction", "inbound")
+      .is("intent", null)
+      .limit(limit);
+    if (!unenriched || unenriched.length === 0) {
+      return json({ ok: true, enriched: 0, note: "nothing to enrich" });
+    }
+    const emails = new Map<string, string>();
+    for (const r of unenriched) {
+      const { data: p } = await supabase
+        .from("outreach_pipeline")
+        .select("contact_email")
+        .eq("sendpilot_lead_id", r.sendpilot_lead_id)
+        .maybeSingle();
+      if (p?.contact_email) emails.set(r.id as string, p.contact_email as string);
+    }
+    let enriched = 0;
+    for (const r of unenriched) {
+      const email = emails.get(r.id as string);
+      if (!email) continue;
+      await enrichInbound(r.id as string, r.message as string, email);
+      enriched++;
+    }
+    return json({ ok: true, enriched, scanned: unenriched.length });
+  }
 
   let query = supabase
     .from("outreach_pipeline")
@@ -109,11 +142,13 @@ Deno.serve(async (req) => {
 
   const summary: Array<Record<string, unknown>> = [];
   let totalOutboundInserted = 0;
+  let totalInboundInserted = 0;
   for (const row of rows as PipelineRow[]) {
     try {
       const fullName = nameByEmail.get(row.contact_email) ?? "";
       const result = await syncOne(row, fullName, dryRun);
       totalOutboundInserted += result.outbound_inserted;
+      totalInboundInserted += (result.inbound_inserted as number | undefined) ?? 0;
       summary.push(result);
     } catch (e) {
       summary.push({ lead: row.sendpilot_lead_id, error: (e as Error).message.slice(0, 200) });
@@ -125,6 +160,7 @@ Deno.serve(async (req) => {
     dryRun,
     scanned: rows.length,
     outbound_inserted: totalOutboundInserted,
+    inbound_inserted: totalInboundInserted,
     samples: summary.slice(0, 10),
   });
 });
@@ -173,37 +209,153 @@ async function syncOne(
   const msgBody = await msgRes.json() as { messages?: Message[] };
   const messages = msgBody.messages ?? [];
 
-  // Step 3: upsert outbound messages. We skip inbound — reply.received
-  // webhook already handles those, and our legacy rows lack external_id so
-  // a content-based dedupe is fragile.
-  const outbound = messages.filter((m) => m.direction === "sent" && m.id && m.content);
-  if (outbound.length === 0) {
-    return { lead: row.sendpilot_lead_id, conv: convId, outbound_in_thread: 0, outbound_inserted: 0 };
+  // Step 3: upsert both inbound and outbound messages, idempotent on
+  // external_id (SendPilot's message id). Legacy webhook-inserted inbound
+  // rows lack external_id; this sync can repopulate them for backfill but
+  // can't dedupe against them (NULL ≠ NULL in unique). Acceptable: the
+  // backfill creates a second copy of any legacy inbound, but only for
+  // workspaces whose webhook never fired in the first place — Tresyv being
+  // the primary case (no legacy inbound rows to clash with).
+  const relevant = messages.filter((m) => (m.direction === "sent" || m.direction === "received") && m.id && m.content);
+  if (relevant.length === 0) {
+    return { lead: row.sendpilot_lead_id, conv: convId, in_thread: 0, outbound_inserted: 0, inbound_inserted: 0 };
   }
 
   if (dryRun) {
-    return { lead: row.sendpilot_lead_id, conv: convId, outbound_in_thread: outbound.length, outbound_inserted: 0, dryRun: true };
+    const ob = relevant.filter((m) => m.direction === "sent").length;
+    const ib = relevant.filter((m) => m.direction === "received").length;
+    return { lead: row.sendpilot_lead_id, conv: convId, in_thread: relevant.length, outbound_in_thread: ob, inbound_in_thread: ib, outbound_inserted: 0, inbound_inserted: 0, dryRun: true };
   }
 
-  let inserted = 0;
-  for (const m of outbound) {
-    const { error: insErr } = await supabase.from("outreach_replies").insert({
+  let outboundInserted = 0;
+  let inboundInserted = 0;
+  for (const m of relevant) {
+    const direction = m.direction === "sent" ? "outbound" : "inbound";
+    const messageText = (m.content ?? "").slice(0, 8000);
+
+    // For inbound: legacy rows from sendpilot-webhook lack external_id. Look
+    // for an existing row with the same content first, and if found, just
+    // patch its external_id instead of inserting a duplicate. Outbound rows
+    // are always sync-inserted with external_id set, so the unique index
+    // alone handles their idempotency.
+    if (direction === "inbound") {
+      const { data: existing } = await supabase
+        .from("outreach_replies")
+        .select("id, external_id")
+        .eq("sendpilot_lead_id", row.sendpilot_lead_id)
+        .eq("direction", "inbound")
+        .eq("message", messageText)
+        .maybeSingle();
+      if (existing) {
+        if (!existing.external_id) {
+          await supabase.from("outreach_replies")
+            .update({ external_id: m.id })
+            .eq("id", existing.id);
+        }
+        continue;
+      }
+    }
+
+    const { data: inserted, error: insErr } = await supabase.from("outreach_replies").insert({
       sendpilot_lead_id: row.sendpilot_lead_id,
       linkedin_url: row.linkedin_url,
-      message: (m.content ?? "").slice(0, 8000),
+      message: messageText,
       workspace_id: row.workspace_id,
-      direction: "outbound",
+      direction,
       external_id: m.id,
       received_at: m.sentAt ?? new Date().toISOString(),
-    });
+    }).select("id").maybeSingle();
     if (insErr && !`${insErr.message}`.includes("duplicate")) {
-      console.error("outbound insert error", row.sendpilot_lead_id, insErr.message);
+      console.error(`${direction} insert error`, row.sendpilot_lead_id, insErr.message);
       continue;
     }
-    if (!insErr) inserted++;
+    if (!insErr) {
+      if (direction === "outbound") outboundInserted++;
+      else {
+        inboundInserted++;
+        // Newly-discovered inbound (the webhook missed it, or this is a
+        // pre-webhook lead). Trigger classification + auto-draft inline so
+        // Tresyv backfill gets the same intent/draft enrichment that
+        // webhook-fed CarterCo replies already have.
+        if (inserted?.id && row.contact_email) {
+          void enrichInbound(inserted.id, messageText, row.contact_email);
+        }
+      }
+    }
   }
 
-  return { lead: row.sendpilot_lead_id, conv: convId, outbound_in_thread: outbound.length, outbound_inserted: inserted };
+  return {
+    lead: row.sendpilot_lead_id,
+    conv: convId,
+    in_thread: relevant.length,
+    outbound_inserted: outboundInserted,
+    inbound_inserted: inboundInserted,
+  };
+}
+
+// Fire classify_reply (and draft_reply when intent matches) on a newly
+// inserted inbound row. Same enrichment path sendpilot-webhook's
+// classifyReplyAsync provides for live webhook events. Fire-and-forget —
+// failures log and don't block the sync.
+async function enrichInbound(replyId: string, text: string, contactEmail: string): Promise<void> {
+  try {
+    const { data: lead } = await supabase
+      .from("outreach_leads")
+      .select("first_name, company")
+      .eq("contact_email", contactEmail)
+      .maybeSingle();
+
+    const aiBase = `${Deno.env.get("SUPABASE_URL")}/functions/v1/outreach-ai`;
+    const authHeader = `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`;
+
+    const classifyRes = await fetch(`${aiBase}?op=classify_reply`, {
+      method: "POST",
+      headers: { "Authorization": authHeader, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        text,
+        lead: { firstName: lead?.first_name, company: lead?.company },
+      }),
+    });
+    if (!classifyRes.ok) {
+      console.error("enrich classify non-200", classifyRes.status);
+      return;
+    }
+    const cj = await classifyRes.json() as {
+      intent: string; confidence: number; reasoning: string;
+      referralTarget?: { name?: string; title?: string; company?: string };
+    };
+    const isReferral = cj.intent === "referral";
+    await supabase.from("outreach_replies").update({
+      intent: cj.intent,
+      confidence: cj.confidence,
+      reasoning: cj.reasoning,
+      classified_at: new Date().toISOString(),
+      referral_target_name:    isReferral ? (cj.referralTarget?.name ?? null) : null,
+      referral_target_title:   isReferral ? (cj.referralTarget?.title ?? null) : null,
+      referral_target_company: isReferral ? (cj.referralTarget?.company ?? null) : null,
+    }).eq("id", replyId);
+
+    if (cj.intent === "question" || cj.intent === "interested") {
+      const draftRes = await fetch(`${aiBase}?op=draft_reply`, {
+        method: "POST",
+        headers: { "Authorization": authHeader, "Content-Type": "application/json" },
+        body: JSON.stringify({ replyId }),
+      });
+      if (draftRes.ok) {
+        const dj = await draftRes.json() as { draft?: string };
+        if (dj.draft) {
+          await supabase.from("outreach_replies").update({
+            suggested_reply: dj.draft,
+            suggested_reply_generated_at: new Date().toISOString(),
+          }).eq("id", replyId);
+        }
+      } else {
+        console.error("enrich draft non-200", draftRes.status);
+      }
+    }
+  } catch (e) {
+    console.error("enrichInbound error", e);
+  }
 }
 
 function json(obj: unknown, status = 200) {
