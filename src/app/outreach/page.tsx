@@ -140,10 +140,42 @@ type Reply = {
   direction: "inbound" | "outbound";
   suggested_reply: string | null;
   suggested_reply_generated_at: string | null;
+  triage_priority: number | null;
+  triage_action: string | null;
+  triage_draft: string | null;
+  triage_signals: Record<string, unknown> | null;
+  triage_processed_at: string | null;
+  scheduled_followup_at: string | null;
   lead?: LeadEnrich;
 };
 
-type Tab = "inbox" | "replies" | "sent" | "all" | "icp_rejected" | "icp";
+type Signal = {
+  id: string;
+  source: string;
+  signal_type: string | null;
+  identified_at: string;
+  person_name: string | null;
+  person_title: string | null;
+  person_linkedin_url: string | null;
+  person_email: string | null;
+  company_name: string | null;
+  company_domain: string | null;
+  company_industry: string | null;
+  company_size: string | null;
+  geo: Record<string, unknown> | null;
+  page_views: unknown;
+  payload: Record<string, unknown>;
+  icp_score: number | null;
+  icp_reasoning: string | null;
+  handled: boolean;
+  notes: string | null;
+  phone_direct: string | null;
+  phone_office: string | null;
+  phone_source: string | null;
+  phone_scouted_at: string | null;
+};
+
+type Tab = "opgaver" | "signaler" | "inbox" | "replies" | "sent" | "all" | "icp_rejected" | "icp";
 
 type IcpVersion = {
   id: string;
@@ -189,6 +221,7 @@ export default function OutreachPage() {
   );
   const [rows, setRows] = useState<PipelineRow[]>([]);
   const [replies, setReplies] = useState<Reply[]>([]);
+  const [signals, setSignals] = useState<Signal[]>([]);
   const [altContacts, setAltContacts] = useState<AltContact[]>([]);
   const [activeIcp, setActiveIcp] = useState<IcpVersion | null>(null);
   const [icpProposals, setIcpProposals] = useState<IcpProposal[]>([]);
@@ -287,6 +320,14 @@ export default function OutreachPage() {
       .order("surfaced_at", { ascending: false })
       .limit(500);
     setAltContacts((alts ?? []) as AltContact[]);
+
+    const { data: signalRows } = await supabase
+      .from("outreach_signals")
+      .select("*")
+      .eq("workspace_id", activeWorkspaceId)
+      .order("identified_at", { ascending: false })
+      .limit(200);
+    setSignals((signalRows ?? []) as Signal[]);
 
     // Active ICP version + recent proposals (last 20) — drives the Læring tab.
     const [{ data: ver }, { data: props }] = await Promise.all([
@@ -477,6 +518,31 @@ export default function OutreachPage() {
     if (error) setErr(error.message); else await load();
   }
 
+  async function markSignalHandled(signalId: string) {
+    const { error } = await supabase
+      .from("outreach_signals")
+      .update({ handled: true, handled_at: new Date().toISOString(), handled_by: user?.email ?? null })
+      .eq("id", signalId);
+    if (error) setErr(error.message); else await load();
+  }
+
+  async function scoutSignalPhones(signalId: string) {
+    setErr(null); setInfo(null);
+    setBusyLead(`signal:${signalId}`);
+    const { data, error } = await supabase.functions.invoke("signal-scout-phones", {
+      body: { signalId },
+    });
+    setBusyLead(null);
+    if (error) { setErr(error.message ?? String(error)); return; }
+    if (data?.error) { setErr(`${data.error}${data.details ? `: ${data.details}` : ""}`); return; }
+    const direct = data?.phone_direct as string | null;
+    const office = data?.phone_office as string | null;
+    if (direct) setInfo(`Telefon fundet: ${direct} (${data?.phone_source ?? "?"})`);
+    else if (office) setInfo(`Kun hovednummer fundet: ${office}`);
+    else setInfo("Ingen telefon fundet.");
+    await load();
+  }
+
   async function sendReply(replyId: string, messageOverride: string): Promise<boolean> {
     setErr(null); setInfo(null);
     const { data, error } = await supabase.functions.invoke("outreach-approve", {
@@ -583,7 +649,7 @@ export default function OutreachPage() {
   }
   async function signOut() {
     await supabase.auth.signOut();
-    setUser(null); setRows([]); setReplies([]); setAltContacts([]);
+    setUser(null); setRows([]); setReplies([]); setSignals([]); setAltContacts([]);
   }
 
   // ---------- derived ----------
@@ -651,6 +717,30 @@ export default function OutreachPage() {
   const unhandledReplies = useMemo(
     () => replies.filter((r) => r.direction === "inbound" && !r.handled),
     [replies],
+  );
+
+  const unhandledSignals = useMemo(
+    () => signals.filter((s) => !s.handled),
+    [signals],
+  );
+
+  // Triage'd unhandled replies sorted by priority + due date for the
+  // Opgaver tab. Exclude "done" bucket (priority 1) — those are decline-
+  // like and don't need active surfacing. Items with a due_at sort by it.
+  const opgaver = useMemo(
+    () => unhandledReplies
+      .filter((r) => (r.triage_priority ?? 0) >= 3)
+      .sort((a, b) => {
+        // Due-at items first, sorted by date asc (soonest first)
+        const aDue = a.scheduled_followup_at ? new Date(a.scheduled_followup_at).getTime() : null;
+        const bDue = b.scheduled_followup_at ? new Date(b.scheduled_followup_at).getTime() : null;
+        if (aDue !== null && bDue !== null) return aDue - bDue;
+        if (aDue !== null) return -1;
+        if (bDue !== null) return 1;
+        // Then by priority desc
+        return (b.triage_priority ?? 0) - (a.triage_priority ?? 0);
+      }),
+    [unhandledReplies],
   );
 
   const pending = useMemo(() => {
@@ -775,6 +865,8 @@ export default function OutreachPage() {
       {bulkProgress ? <Banner kind="info">Behandler {bulkProgress.done}/{bulkProgress.total}…</Banner> : null}
 
       <Tabs tab={tab} setTab={setTab} showIcpTabs={hasActiveIcp} counts={{
+        opgaver: opgaver.length,
+        signaler: unhandledSignals.length,
         inbox: stats.pending + accepted.length + altReview.length,
         replies: unhandledReplies.length,
         sent: stats.sent,
@@ -784,7 +876,19 @@ export default function OutreachPage() {
       }} />
 
       <section className="mx-auto w-full max-w-[1400px] px-4 pb-12 sm:px-8 lg:px-12">
-        {tab === "inbox" ? (
+        {tab === "opgaver" ? (
+          <OpgaverTab
+            tasks={opgaver}
+            onMarkHandled={(id) => void markReplyHandled(id)}
+          />
+        ) : tab === "signaler" ? (
+          <SignalerTab
+            signals={unhandledSignals}
+            busyLead={busyLead}
+            onMarkHandled={(id) => void markSignalHandled(id)}
+            onScoutPhones={(id) => void scoutSignalPhones(id)}
+          />
+        ) : tab === "inbox" ? (
           <InboxTab
             pendingRows={pending}
             acceptedRows={accepted}
@@ -954,11 +1058,13 @@ function Tabs({ tab, setTab, showIcpTabs, counts }: {
   tab: Tab; setTab: (t: Tab) => void;
   showIcpTabs: boolean;
   counts: {
-    inbox: number; replies: number; sent: number; all: number;
+    opgaver: number; signaler: number; inbox: number; replies: number; sent: number; all: number;
     icp_rejected: number; icp_open_proposals: number;
   };
 }) {
   const all: { id: Tab; label: string; count: number; accent?: boolean; icpOnly?: boolean }[] = [
+    { id: "opgaver", label: "Opgaver", count: counts.opgaver, accent: counts.opgaver > 0 },
+    { id: "signaler", label: "Signaler", count: counts.signaler, accent: counts.signaler > 0 },
     { id: "inbox", label: "Indbakke", count: counts.inbox, accent: counts.inbox > 0 },
     { id: "replies", label: "Svar", count: counts.replies, accent: counts.replies > 0 },
     { id: "sent", label: "Sendt", count: counts.sent },
@@ -1257,6 +1363,263 @@ function AcceptedTab({ rows, busyLead, onRender, onReject }: {
                 )}
               </div>
             </div>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function OpgaverTab({ tasks, onMarkHandled }: {
+  tasks: Reply[];
+  onMarkHandled: (id: string) => void;
+}) {
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  if (tasks.length === 0) {
+    return (
+      <p className="mt-12 text-center tabular text-[11px] uppercase tracking-[0.22em] text-[var(--ink)]/35">
+        Ingen opgaver lige nu. Alle replies er behandlet eller markeret som done.
+      </p>
+    );
+  }
+
+  function bucketPill(bucket: string | undefined) {
+    if (bucket === "high") return { label: "Nu", cls: "border-[var(--clay)]/40 bg-[var(--clay)]/10 text-[var(--clay)]" };
+    if (bucket === "medium") return { label: "Medium", cls: "border-[var(--ink)]/25 bg-[var(--ink)]/5 text-[var(--ink)]/70" };
+    if (bucket === "low") return { label: "Lav", cls: "border-[var(--ink)]/15 text-[var(--ink)]/45" };
+    return { label: "—", cls: "border-[var(--ink)]/10 text-[var(--ink)]/40" };
+  }
+
+  function fmtDue(iso: string | null): string | null {
+    if (!iso) return null;
+    const due = new Date(iso);
+    const now = new Date();
+    const sameDay = due.toDateString() === now.toDateString();
+    const tomorrow = new Date(now); tomorrow.setDate(tomorrow.getDate() + 1);
+    const isTomorrow = due.toDateString() === tomorrow.toDateString();
+    const time = due.toLocaleTimeString("da-DK", { hour: "2-digit", minute: "2-digit" });
+    if (sameDay) return `I dag ${time}`;
+    if (isTomorrow) return `I morgen ${time}`;
+    return due.toLocaleDateString("da-DK", { day: "numeric", month: "short" }) + " " + time;
+  }
+
+  function dueIsPast(iso: string | null): boolean {
+    if (!iso) return false;
+    return new Date(iso).getTime() < Date.now();
+  }
+
+  return (
+    <ul className="mt-2 flex flex-col gap-2">
+      {tasks.map((t) => {
+        const bucket = (t.triage_signals as Record<string, unknown> | null)?.["priority_bucket"] as string | undefined;
+        const pill = bucketPill(bucket);
+        const due = fmtDue(t.scheduled_followup_at);
+        const past = dueIsPast(t.scheduled_followup_at);
+        const expanded = expandedId === t.id;
+        const name = `${t.lead?.first_name ?? ""} ${t.lead?.last_name ?? ""}`.trim() || "(ukendt)";
+        const company = t.lead?.company;
+        const hasDraft = !!t.triage_draft;
+
+        return (
+          <li key={t.id}
+            className={`group rounded-sm border bg-[var(--cream)]/30 transition ${
+              past ? "border-[var(--clay)]/45" : "border-[var(--ink)]/12"
+            }`}>
+            <button type="button" onClick={() => setExpandedId(expanded ? null : t.id)}
+              className="flex w-full items-start gap-3 px-4 py-3 text-left sm:px-5">
+              <span className={`tabular shrink-0 rounded-full border px-2 py-0.5 text-[9px] uppercase tracking-[0.22em] ${pill.cls}`}>
+                {pill.label}
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="text-[14px] leading-snug text-[var(--ink)]/90">
+                  {t.triage_action ?? <em className="text-[var(--ink)]/45">(ingen opgave-tekst — venter på AI)</em>}
+                </div>
+                <div className="tabular mt-1 text-[11px] text-[var(--ink)]/55">
+                  <span className="font-medium text-[var(--ink)]/70">{name}</span>
+                  {company ? <span> · {company}</span> : null}
+                  {due ? (
+                    <span className={past ? "ml-2 text-[var(--clay)]" : "ml-2 text-[var(--ink)]/65"}>
+                      · {due}
+                    </span>
+                  ) : null}
+                  {hasDraft ? <span className="ml-2 text-[var(--forest)]">· udkast klar</span> : null}
+                </div>
+              </div>
+              <span className="tabular shrink-0 self-center text-[10px] text-[var(--ink)]/35">
+                {expanded ? "−" : "+"}
+              </span>
+            </button>
+
+            {expanded ? (
+              <div className="border-t border-[var(--ink)]/8 px-4 py-3 sm:px-5">
+                <p className="text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/45">Original besked</p>
+                <p className="mt-1 whitespace-pre-wrap text-[13px] leading-relaxed text-[var(--ink)]/75">{t.message}</p>
+
+                {t.triage_draft ? (
+                  <>
+                    <p className="mt-4 text-[10px] uppercase tracking-[0.22em] text-[var(--forest)]">Udkast til svar</p>
+                    <div className="mt-1 rounded-sm border border-[var(--forest)]/20 bg-[var(--forest)]/5 p-3">
+                      <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-[var(--ink)]/90">{t.triage_draft}</p>
+                      <button type="button" onClick={() => { navigator.clipboard?.writeText(t.triage_draft ?? ""); }}
+                        className="focus-cream mt-3 tabular rounded-sm border border-[var(--forest)]/30 px-2.5 py-1 text-[10px] uppercase tracking-[0.22em] text-[var(--forest)] hover:border-[var(--forest)]/60">
+                        Kopiér udkast
+                      </button>
+                    </div>
+                  </>
+                ) : null}
+
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <a href={t.linkedin_url} target="_blank" rel="noreferrer"
+                    className="tabular text-[11px] uppercase tracking-[0.22em] text-[var(--forest)] underline-offset-[6px] hover:underline">
+                    Åbn LinkedIn ↗
+                  </a>
+                  <button type="button" onClick={() => onMarkHandled(t.id)}
+                    className="focus-cream tabular rounded-sm border border-[var(--ink)]/15 px-3 py-1.5 text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/65 hover:border-[var(--ink)]/35 hover:text-[var(--ink)]">
+                    Markér behandlet
+                  </button>
+                </div>
+              </div>
+            ) : null}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function SignalerTab({ signals, busyLead, onMarkHandled, onScoutPhones }: {
+  signals: Signal[];
+  busyLead: string | null;
+  onMarkHandled: (id: string) => void;
+  onScoutPhones: (id: string) => void;
+}) {
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  if (signals.length === 0) {
+    return (
+      <p className="mt-12 text-center tabular text-[11px] uppercase tracking-[0.22em] text-[var(--ink)]/35">
+        Ingen signaler endnu. Når RB2B identificerer en besøgende, lander de her.
+      </p>
+    );
+  }
+
+  function fmtWhen(iso: string): string {
+    const d = new Date(iso);
+    const now = new Date();
+    const sameDay = d.toDateString() === now.toDateString();
+    const time = d.toLocaleTimeString("da-DK", { hour: "2-digit", minute: "2-digit" });
+    if (sameDay) return `I dag ${time}`;
+    const yesterday = new Date(now); yesterday.setDate(yesterday.getDate() - 1);
+    if (d.toDateString() === yesterday.toDateString()) return `I går ${time}`;
+    return d.toLocaleDateString("da-DK", { day: "numeric", month: "short" }) + " " + time;
+  }
+
+  function sourceLabel(src: string): string {
+    if (src.startsWith("rb2b")) return "RB2B";
+    return src;
+  }
+
+  return (
+    <ul className="mt-2 flex flex-col gap-2">
+      {signals.map((s) => {
+        const expanded = expandedId === s.id;
+        const name = s.person_name ?? "(ukendt person)";
+        const titleCompany = [s.person_title, s.company_name].filter(Boolean).join(" hos ");
+        const geo = s.geo as { city?: string; country?: string } | null;
+        const location = geo ? [geo.city, geo.country].filter(Boolean).join(", ") : "";
+        const rawBody = (s.payload as { raw_body?: string } | null)?.raw_body ?? null;
+
+        return (
+          <li key={s.id} className="group rounded-sm border border-[var(--ink)]/12 bg-[var(--cream)]/30 transition">
+            <button type="button" onClick={() => setExpandedId(expanded ? null : s.id)}
+              className="flex w-full items-start gap-3 px-4 py-3 text-left sm:px-5">
+              <span className="tabular shrink-0 rounded-full border border-[var(--forest)]/30 bg-[var(--forest)]/5 px-2 py-0.5 text-[9px] uppercase tracking-[0.22em] text-[var(--forest)]">
+                {sourceLabel(s.source)}
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="text-[14px] leading-snug text-[var(--ink)]/90">
+                  <span className="font-medium">{name}</span>
+                  {titleCompany ? <span className="text-[var(--ink)]/65"> · {titleCompany}</span> : null}
+                </div>
+                <div className="tabular mt-1 text-[11px] text-[var(--ink)]/55">
+                  <span>{fmtWhen(s.identified_at)}</span>
+                  {location ? <span> · {location}</span> : null}
+                  {s.company_domain ? <span> · {s.company_domain}</span> : null}
+                </div>
+              </div>
+              <span className="tabular shrink-0 self-center text-[10px] text-[var(--ink)]/35">
+                {expanded ? "−" : "+"}
+              </span>
+            </button>
+
+            {expanded ? (
+              <div className="border-t border-[var(--ink)]/8 px-4 py-3 sm:px-5">
+                <dl className="grid grid-cols-1 gap-x-6 gap-y-1 text-[12px] sm:grid-cols-2">
+                  {s.person_email ? (
+                    <div><dt className="tabular text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/45">Email</dt><dd className="text-[var(--ink)]/85">{s.person_email}</dd></div>
+                  ) : null}
+                  {s.company_industry ? (
+                    <div><dt className="tabular text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/45">Branche</dt><dd className="text-[var(--ink)]/85">{s.company_industry}</dd></div>
+                  ) : null}
+                  {s.company_size ? (
+                    <div><dt className="tabular text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/45">Størrelse</dt><dd className="text-[var(--ink)]/85">{s.company_size}</dd></div>
+                  ) : null}
+                  {s.icp_score !== null ? (
+                    <div><dt className="tabular text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/45">ICP-score</dt><dd className="text-[var(--ink)]/85">{s.icp_score}</dd></div>
+                  ) : null}
+                </dl>
+
+                {rawBody ? (
+                  <>
+                    <p className="mt-4 text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/45">Original notifikation</p>
+                    <p className="mt-1 whitespace-pre-wrap text-[12px] leading-relaxed text-[var(--ink)]/70">{rawBody}</p>
+                  </>
+                ) : null}
+
+                {(s.phone_direct || s.phone_office) ? (
+                  <div className="mt-4 rounded-sm border border-[var(--forest)]/20 bg-[var(--forest)]/5 p-3">
+                    <p className="tabular text-[10px] uppercase tracking-[0.22em] text-[var(--forest)]">Telefon</p>
+                    {s.phone_direct ? (
+                      <p className="mt-1 text-[13px] text-[var(--ink)]/90">
+                        <a href={`tel:${s.phone_direct}`} className="font-medium underline-offset-[4px] hover:underline">{s.phone_direct}</a>
+                        <span className="tabular ml-2 text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/45">direkte · {s.phone_source ?? "?"}</span>
+                      </p>
+                    ) : null}
+                    {s.phone_office ? (
+                      <p className="mt-1 text-[13px] text-[var(--ink)]/75">
+                        <a href={`tel:${s.phone_office}`} className="underline-offset-[4px] hover:underline">{s.phone_office}</a>
+                        <span className="tabular ml-2 text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/45">hovednummer</span>
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                <div className="mt-4 flex flex-wrap gap-3">
+                  {s.person_linkedin_url ? (
+                    <a href={s.person_linkedin_url} target="_blank" rel="noreferrer"
+                      className="tabular text-[11px] uppercase tracking-[0.22em] text-[var(--forest)] underline-offset-[6px] hover:underline">
+                      Åbn LinkedIn ↗
+                    </a>
+                  ) : null}
+                  {s.company_domain ? (
+                    <a href={`https://${s.company_domain}`} target="_blank" rel="noreferrer"
+                      className="tabular text-[11px] uppercase tracking-[0.22em] text-[var(--forest)] underline-offset-[6px] hover:underline">
+                      Åbn website ↗
+                    </a>
+                  ) : null}
+                  <button type="button" onClick={() => onScoutPhones(s.id)}
+                    disabled={busyLead === `signal:${s.id}`}
+                    className="focus-cream tabular rounded-sm border border-[var(--forest)]/30 px-3 py-1.5 text-[10px] uppercase tracking-[0.22em] text-[var(--forest)] hover:border-[var(--forest)]/60 disabled:opacity-40">
+                    {busyLead === `signal:${s.id}` ? "Søger…" : s.phone_scouted_at ? "Søg igen" : "Find telefon"}
+                  </button>
+                  <button type="button" onClick={() => onMarkHandled(s.id)}
+                    className="focus-cream tabular rounded-sm border border-[var(--ink)]/15 px-3 py-1.5 text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/65 hover:border-[var(--ink)]/35 hover:text-[var(--ink)]">
+                    Markér behandlet
+                  </button>
+                </div>
+              </div>
+            ) : null}
           </li>
         );
       })}
