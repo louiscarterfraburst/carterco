@@ -92,6 +92,9 @@ export default function RootLayout({
         <Script id="plausible-init" strategy="afterInteractive">
           {`window.plausible = window.plausible || function() { (window.plausible.q = window.plausible.q || []).push(arguments) }`}
         </Script>
+        <Script id="rb2b" strategy="afterInteractive">
+          {`!function(key){if(window.reb2b)return;window.reb2b={loaded:true};var s=document.createElement("script");s.async=true;s.src="https://ddwl4m2hdecbv.cloudfront.net/b/"+key+"/"+key+".js.gz";document.getElementsByTagName("script")[0].parentNode.insertBefore(s,document.getElementsByTagName("script")[0])}("Q6J2RH2GQ36D");`}
+        </Script>
         <PwaRegistrar />
         {children}
       </body>
