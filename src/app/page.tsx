@@ -757,69 +757,19 @@ export default function Home() {
       </nav>
 
       <div className="mx-auto flex w-full max-w-[1400px] flex-1 flex-col justify-center px-8 pt-16 sm:px-12 sm:pt-20">
-        <h1 className="font-display text-[14vw] leading-[0.82] tracking-[-0.05em] sm:text-[12vw] lg:text-[clamp(5rem,10vw,9.5rem)]">
-          <span className="relative inline-block">
-            Smed
+        <h1 className="font-display leading-[0.88] tracking-[-0.04em]">
+          <span className="relative inline-block text-[14vw] sm:text-[12vw] lg:text-[clamp(5rem,9.5vw,9rem)]">
             <span
-              className="pointer-events-none absolute left-[8%] bottom-full mb-[0.05em] hidden items-center gap-[0.2em] whitespace-nowrap text-[0.28em] font-normal leading-none tracking-normal text-[var(--cream)]/95 sm:inline-flex"
-              style={{
-                fontFamily: "var(--font-handwritten)",
-                transform: "translate(1.4em, 0.6em) rotate(-4deg)",
-              }}
-            >
-              Sælg
-              <span
-                aria-hidden
-                className="inline-block h-[0.8em] w-[0.8em] shrink-0 bg-[#ff6b2c]"
-                style={{
-                  maskImage: "url(/annotation-arrow.png)",
-                  maskSize: "contain",
-                  maskRepeat: "no-repeat",
-                  maskPosition: "center",
-                  WebkitMaskImage: "url(/annotation-arrow.png)",
-                  WebkitMaskSize: "contain",
-                  WebkitMaskRepeat: "no-repeat",
-                  WebkitMaskPosition: "center",
-                  transform: "translate(0.12em, 0.24em)",
-                }}
-              />
-            </span>
-          </span>{" "}
-          mens
-          <br />
-          <span className="relative inline-block">
-            jernet
-            <span
-              className="pointer-events-none absolute left-[12%] top-full mt-[0.05em] hidden items-center gap-[0.2em] whitespace-nowrap text-[0.28em] font-normal leading-none tracking-normal text-[var(--cream)]/95 sm:inline-flex"
-              style={{
-                fontFamily: "var(--font-handwritten)",
-                transform: "rotate(-3deg)",
-              }}
-            >
-              leadet
-              <span
-                aria-hidden
-                className="inline-block h-[0.8em] w-[0.8em] shrink-0 bg-[#ff6b2c]"
-                style={{
-                  maskImage: "url(/annotation-arrow.png)",
-                  maskSize: "contain",
-                  maskRepeat: "no-repeat",
-                  maskPosition: "center",
-                  WebkitMaskImage: "url(/annotation-arrow.png)",
-                  WebkitMaskSize: "contain",
-                  WebkitMaskRepeat: "no-repeat",
-                  WebkitMaskPosition: "center",
-                  transform: "scaleY(-1)",
-                }}
-              />
-            </span>
-          </span>{" "}
-          er{" "}
-          <span className="relative inline-block">
-            <span className="absolute inset-0 -z-10 scale-125 bg-[radial-gradient(ellipse_at_center,rgba(255,107,44,0.45),transparent_65%)] blur-2xl" />
+              aria-hidden
+              className="pointer-events-none absolute inset-0 -z-10 scale-125 bg-[radial-gradient(ellipse_at_center,rgba(255,107,44,0.45),transparent_65%)] blur-2xl"
+            />
             <span className="bg-gradient-to-b from-[#ffb86b] via-[#ff6b2c] to-[#c93c0a] bg-clip-text italic text-transparent">
-              varmt.
+              Salgsinfrastruktur
             </span>
+          </span>
+          <br />
+          <span className="mt-4 inline-block text-[8vw] leading-[1.05] text-[var(--cream)]/55 sm:mt-6 sm:text-[6.5vw] lg:text-[clamp(2.5rem,5.25vw,5rem)]">
+            til ambitiøse B2B teams
           </span>
         </h1>
 
