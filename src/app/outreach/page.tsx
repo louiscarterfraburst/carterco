@@ -149,6 +149,22 @@ type Reply = {
   lead?: LeadEnrich;
 };
 
+// Match between a signal company (by domain) and existing outreach_leads rows.
+// Lets the Signaler card surface "we already have 3 people at Vela Wood, one
+// already in outreach" instead of treating the signal as cold.
+type SignalLeadMatch = {
+  contact_email: string;
+  first_name: string | null;
+  last_name: string | null;
+  title: string | null;
+  linkedin_url: string | null;
+  company: string | null;
+  in_pipeline: boolean;
+  pipeline_status: string | null;
+  pipeline_last_reply_at: string | null;
+  pipeline_sent_at: string | null;
+};
+
 type Signal = {
   id: string;
   source: string;
@@ -224,6 +240,17 @@ function firstName(name: string | null) {
   return name.trim().split(/\s+/)[0] ?? name;
 }
 
+// Strip protocol, www, path. Lowercases. Returns null if there's nothing
+// that looks like a domain. Used to match signals (which store bare domain
+// like "velawood.com") against outreach_leads.website (which may have full
+// URLs like "http://www.velawood.com/contact").
+function normalizeSignalDomain(raw: string | null): string | null {
+  if (!raw) return null;
+  const stripped = raw.replace(/^https?:\/\//i, "").replace(/^www\./i, "").split("/")[0];
+  const cleaned = stripped.toLowerCase().trim();
+  return cleaned && cleaned.includes(".") ? cleaned : null;
+}
+
 // Cold opener — assumes you've just dialled and got no answer, or you're
 // reaching out shortly after seeing the visit. Refine per workspace later.
 function buildSignalSmsBody(name: string | null, identity: Identity, companyName: string | null) {
@@ -269,6 +296,8 @@ export default function OutreachPage() {
   const [rows, setRows] = useState<PipelineRow[]>([]);
   const [replies, setReplies] = useState<Reply[]>([]);
   const [signals, setSignals] = useState<Signal[]>([]);
+  // Keyed by normalized domain (no protocol, no www) → leads at that company
+  const [signalLeadMatches, setSignalLeadMatches] = useState<Record<string, SignalLeadMatch[]>>({});
   const [altContacts, setAltContacts] = useState<AltContact[]>([]);
   const [activeIcp, setActiveIcp] = useState<IcpVersion | null>(null);
   const [icpProposals, setIcpProposals] = useState<IcpProposal[]>([]);
@@ -404,6 +433,61 @@ export default function OutreachPage() {
       .order("identified_at", { ascending: false })
       .limit(200);
     setSignals((signalRows ?? []) as Signal[]);
+
+    // Lead-match for each signal domain. Two queries: (1) leads at that domain,
+    // (2) pipeline rows for those lead emails so we can show "already in
+    // outreach" badges. Skipped entirely if no signal has a domain.
+    const signalDomains = Array.from(new Set(
+      ((signalRows ?? []) as Signal[])
+        .map((s) => normalizeSignalDomain(s.company_domain))
+        .filter(Boolean) as string[],
+    ));
+    if (signalDomains.length === 0) {
+      setSignalLeadMatches({});
+    } else {
+      const orFilter = signalDomains.map((d) => `website.ilike.%${d}%`).join(",");
+      const { data: matchedLeads } = await supabase
+        .from("outreach_leads")
+        .select("contact_email, first_name, last_name, title, linkedin_url, company, website")
+        .eq("workspace_id", activeWorkspaceId)
+        .or(orFilter)
+        .limit(200);
+      const matchedEmails = (matchedLeads ?? []).map((l) => l.contact_email).filter(Boolean);
+      const { data: pipelineForMatches } = matchedEmails.length
+        ? await supabase
+            .from("outreach_pipeline")
+            .select("contact_email, status, last_reply_at, sent_at")
+            .eq("workspace_id", activeWorkspaceId)
+            .in("contact_email", matchedEmails)
+        : { data: [] as { contact_email: string; status: string; last_reply_at: string | null; sent_at: string | null }[] };
+      const pipeByEmail = new Map(
+        (pipelineForMatches ?? []).map((p) => [p.contact_email, p]),
+      );
+      const matchMap: Record<string, SignalLeadMatch[]> = {};
+      for (const lead of (matchedLeads ?? []) as Array<{
+        contact_email: string; first_name: string | null; last_name: string | null;
+        title: string | null; linkedin_url: string | null; company: string | null; website: string | null;
+      }>) {
+        const norm = normalizeSignalDomain(lead.website);
+        if (!norm || !signalDomains.includes(norm)) continue;
+        const pipe = pipeByEmail.get(lead.contact_email);
+        const entry: SignalLeadMatch = {
+          contact_email: lead.contact_email,
+          first_name: lead.first_name,
+          last_name: lead.last_name,
+          title: lead.title,
+          linkedin_url: lead.linkedin_url,
+          company: lead.company,
+          in_pipeline: !!pipe,
+          pipeline_status: pipe?.status ?? null,
+          pipeline_last_reply_at: pipe?.last_reply_at ?? null,
+          pipeline_sent_at: pipe?.sent_at ?? null,
+        };
+        if (!matchMap[norm]) matchMap[norm] = [];
+        matchMap[norm].push(entry);
+      }
+      setSignalLeadMatches(matchMap);
+    }
 
     // Active ICP version + recent proposals (last 20) — drives the Læring tab.
     const [{ data: ver }, { data: props }] = await Promise.all([
@@ -726,7 +810,7 @@ export default function OutreachPage() {
   }
   async function signOut() {
     await supabase.auth.signOut();
-    setUser(null); setRows([]); setReplies([]); setSignals([]); setAltContacts([]);
+    setUser(null); setRows([]); setReplies([]); setSignals([]); setSignalLeadMatches({}); setAltContacts([]);
   }
 
   // ---------- derived ----------
@@ -963,6 +1047,7 @@ export default function OutreachPage() {
             signals={unhandledSignals}
             busyLead={busyLead}
             identity={identity}
+            leadMatches={signalLeadMatches}
             onMarkHandled={(ids) => void markSignalsHandled(ids)}
             onScoutPhones={(id) => void scoutSignalPhones(id)}
           />
@@ -1566,10 +1651,11 @@ function OpgaverTab({ tasks, onMarkHandled }: {
   );
 }
 
-function SignalerTab({ signals, busyLead, identity, onMarkHandled, onScoutPhones }: {
+function SignalerTab({ signals, busyLead, identity, leadMatches, onMarkHandled, onScoutPhones }: {
   signals: Signal[];
   busyLead: string | null;
   identity: Identity;
+  leadMatches: Record<string, SignalLeadMatch[]>;
   onMarkHandled: (ids: string[]) => void;
   onScoutPhones: (id: string) => void;
 }) {
@@ -1685,6 +1771,8 @@ function SignalerTab({ signals, busyLead, identity, onMarkHandled, onScoutPhones
         const expanded = expandedKey === g.key;
         const visitCount = g.visits.length;
         const isRepeatProspect = visitCount > 1 || g.totalPageViews > 1;
+        const knownPeople = (g.companyDomain ? leadMatches[g.companyDomain] : null) ?? [];
+        const inPipelineCount = knownPeople.filter((p) => p.in_pipeline).length;
         const sublineParts = [
           g.companyIndustry,
           g.companySize ? `${g.companySize} ansatte` : null,
@@ -1705,11 +1793,17 @@ function SignalerTab({ signals, busyLead, identity, onMarkHandled, onScoutPhones
                 RB2B
               </span>
               <div className="min-w-0 flex-1">
-                <div className="flex items-baseline gap-2 text-[14px] leading-snug text-[var(--ink)]/90">
+                <div className="flex flex-wrap items-baseline gap-2 text-[14px] leading-snug text-[var(--ink)]/90">
                   <span className="font-medium">{g.companyName}</span>
                   {isRepeatProspect ? (
                     <span className="tabular shrink-0 rounded-full bg-[var(--clay)]/15 px-1.5 py-0.5 text-[9px] uppercase tracking-[0.22em] text-[var(--clay)]">
                       gentaget
+                    </span>
+                  ) : null}
+                  {knownPeople.length > 0 ? (
+                    <span className="tabular shrink-0 rounded-full border border-[var(--forest)]/30 bg-[var(--forest)]/10 px-1.5 py-0.5 text-[9px] uppercase tracking-[0.22em] text-[var(--forest)]">
+                      {knownPeople.length} kendt{knownPeople.length === 1 ? "" : "e"}
+                      {inPipelineCount > 0 ? ` · ${inPipelineCount} i pipeline` : ""}
                     </span>
                   ) : null}
                 </div>
@@ -1727,6 +1821,44 @@ function SignalerTab({ signals, busyLead, identity, onMarkHandled, onScoutPhones
 
             {expanded ? (
               <div className="border-t border-[var(--ink)]/8 px-4 py-3 sm:px-5">
+                {knownPeople.length > 0 ? (
+                  <>
+                    <p className="text-[10px] uppercase tracking-[0.22em] text-[var(--forest)]">
+                      Kendte personer ({knownPeople.length})
+                    </p>
+                    <ul className="mt-2 mb-4 flex flex-col gap-2">
+                      {knownPeople.map((p) => {
+                        const fullName = [p.first_name, p.last_name].filter(Boolean).join(" ").trim() || p.contact_email;
+                        const pipelineBadge = p.in_pipeline
+                          ? p.pipeline_last_reply_at
+                            ? { label: "Svaret", cls: "border-[var(--clay)]/40 bg-[var(--clay)]/10 text-[var(--clay)]" }
+                            : p.pipeline_sent_at
+                              ? { label: "Sendt", cls: "border-[var(--forest)]/30 bg-[var(--forest)]/5 text-[var(--forest)]" }
+                              : { label: p.pipeline_status ?? "I pipeline", cls: "border-[var(--ink)]/20 bg-[var(--ink)]/5 text-[var(--ink)]/65" }
+                          : { label: "Lead-DB", cls: "border-[var(--ink)]/15 text-[var(--ink)]/50" };
+                        return (
+                          <li key={p.contact_email} className="flex flex-wrap items-baseline gap-2 rounded-sm border border-[var(--ink)]/8 bg-[var(--cream)]/40 px-3 py-2">
+                            <span className="text-[13px] font-medium text-[var(--ink)]/90">{fullName}</span>
+                            {p.title ? (
+                              <span className="text-[12px] text-[var(--ink)]/60">{p.title}</span>
+                            ) : null}
+                            <span className={`tabular shrink-0 rounded-full border px-1.5 py-0.5 text-[9px] uppercase tracking-[0.22em] ${pipelineBadge.cls}`}>
+                              {pipelineBadge.label}
+                            </span>
+                            <span className="flex-1" />
+                            {p.linkedin_url ? (
+                              <a href={p.linkedin_url} target="_blank" rel="noreferrer"
+                                className="tabular text-[10px] uppercase tracking-[0.22em] text-[var(--forest)] underline-offset-[4px] hover:underline">
+                                LinkedIn ↗
+                              </a>
+                            ) : null}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </>
+                ) : null}
+
                 <p className="text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/45">Besøgshistorik</p>
                 <ul className="mt-1 flex flex-col gap-1 text-[12px] text-[var(--ink)]/80">
                   {g.visits.map((v) => {
