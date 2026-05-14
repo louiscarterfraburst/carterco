@@ -287,6 +287,20 @@ function signalSmsHref(phone: string | null, name: string | null, identity: Iden
   return `sms:${phone}?&body=${encodeURIComponent(buildSignalSmsBody(name, identity, companyName))}`;
 }
 
+// LinkedIn people-search URL for a signal company. Prefers the company's
+// /people/ subpage (most reliable, lists actual employees) and falls back to
+// the global people-search keyword query. Used as the manual escape hatch
+// when SendPilot's lead-DB has no coverage for the company.
+function linkedinPeopleSearchUrl(companyLinkedinUrl: string | null, companyName: string | null): string | null {
+  if (companyLinkedinUrl && /linkedin\.com\/company\//i.test(companyLinkedinUrl)) {
+    return companyLinkedinUrl.replace(/\/+$/, "") + "/people/";
+  }
+  if (companyName) {
+    return `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(companyName)}`;
+  }
+  return null;
+}
+
 export default function OutreachPage() {
   const supabase = useMemo(() => createClient(), []);
   const [user, setUser] = useState<User | null>(null);
@@ -1905,6 +1919,7 @@ function SignalerTab({ signals, busyLead, identity, leadMatches, altContacts, on
                   const pending = g.altSearchStatus === "pending";
                   const empty = g.altSearchStatus === "empty";
                   const failed = g.altSearchStatus === "failed";
+                  const linkedinManualUrl = linkedinPeopleSearchUrl(g.companyLinkedinUrl, g.companyName);
 
                   if (candidates.length > 0) {
                     return (
@@ -1932,24 +1947,56 @@ function SignalerTab({ signals, busyLead, identity, leadMatches, altContacts, on
                   return (
                     <div className="mb-4 rounded-sm border border-dashed border-[var(--ink)]/15 bg-[var(--cream)]/30 px-3 py-3 text-[12px]">
                       {pending ? (
-                        <p className="text-[var(--ink)]/65">Søger personer hos <strong>{g.companyName}</strong> via SendPilot… kandidater dukker op om ~2 minutter.</p>
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-[var(--ink)]/65">Søger personer hos <strong>{g.companyName}</strong> via SendPilot… ~2 minutter.</p>
+                          {linkedinManualUrl ? (
+                            <a href={linkedinManualUrl} target="_blank" rel="noreferrer"
+                              className="tabular shrink-0 text-[10px] uppercase tracking-[0.22em] text-[var(--forest)] underline-offset-[4px] hover:underline">
+                              Research selv ↗
+                            </a>
+                          ) : null}
+                        </div>
                       ) : empty ? (
-                        <p className="text-[var(--ink)]/65">Ingen kandidater fundet hos {g.companyName}. Ledig til at vælges fra LinkedIn manuelt.</p>
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-[var(--ink)]/65">SendPilot fandt ingen — research selv på LinkedIn.</p>
+                          {linkedinManualUrl ? (
+                            <a href={linkedinManualUrl} target="_blank" rel="noreferrer"
+                              className="focus-cream tabular rounded-sm border border-[var(--forest)]/30 bg-[var(--forest)]/5 px-3 py-1.5 text-[10px] uppercase tracking-[0.22em] text-[var(--forest)] hover:border-[var(--forest)]/60">
+                              Åbn LinkedIn ↗
+                            </a>
+                          ) : null}
+                        </div>
                       ) : failed ? (
                         <div className="flex items-center justify-between gap-3">
                           <p className="text-[var(--clay)]">SendPilot-søgning fejlede.</p>
-                          <button type="button" onClick={() => onSearchPeople(g.latestId)} disabled={busy}
-                            className="focus-cream tabular rounded-sm border border-[var(--clay)]/40 px-2.5 py-1 text-[10px] uppercase tracking-[0.22em] text-[var(--clay)] hover:border-[var(--clay)]/60 disabled:opacity-40">
-                            Prøv igen
-                          </button>
+                          <div className="flex items-center gap-2">
+                            {linkedinManualUrl ? (
+                              <a href={linkedinManualUrl} target="_blank" rel="noreferrer"
+                                className="tabular text-[10px] uppercase tracking-[0.22em] text-[var(--forest)] underline-offset-[4px] hover:underline">
+                                Research selv ↗
+                              </a>
+                            ) : null}
+                            <button type="button" onClick={() => onSearchPeople(g.latestId)} disabled={busy}
+                              className="focus-cream tabular rounded-sm border border-[var(--clay)]/40 px-2.5 py-1 text-[10px] uppercase tracking-[0.22em] text-[var(--clay)] hover:border-[var(--clay)]/60 disabled:opacity-40">
+                              Prøv igen
+                            </button>
+                          </div>
                         </div>
                       ) : (
                         <div className="flex items-center justify-between gap-3">
                           <p className="text-[var(--ink)]/70">Vi kender ingen hos {g.companyName} endnu.</p>
-                          <button type="button" onClick={() => onSearchPeople(g.latestId)} disabled={busy}
-                            className="focus-cream tabular rounded-sm border border-[var(--forest)]/30 bg-[var(--forest)]/5 px-3 py-1.5 text-[10px] uppercase tracking-[0.22em] text-[var(--forest)] hover:border-[var(--forest)]/60 disabled:opacity-40">
-                            {busy ? "Starter…" : "Find personer"}
-                          </button>
+                          <div className="flex items-center gap-2">
+                            {linkedinManualUrl ? (
+                              <a href={linkedinManualUrl} target="_blank" rel="noreferrer"
+                                className="tabular text-[10px] uppercase tracking-[0.22em] text-[var(--forest)] underline-offset-[4px] hover:underline">
+                                Research selv ↗
+                              </a>
+                            ) : null}
+                            <button type="button" onClick={() => onSearchPeople(g.latestId)} disabled={busy}
+                              className="focus-cream tabular rounded-sm border border-[var(--forest)]/30 bg-[var(--forest)]/5 px-3 py-1.5 text-[10px] uppercase tracking-[0.22em] text-[var(--forest)] hover:border-[var(--forest)]/60 disabled:opacity-40">
+                              {busy ? "Starter…" : "Find personer"}
+                            </button>
+                          </div>
                         </div>
                       )}
                     </div>
