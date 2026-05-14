@@ -1732,6 +1732,14 @@ function SignalerTab({ signals, busyLead, identity, leadMatches, altContacts, on
     // visit that has an alt_search_id set.
     altSearchStatus: "pending" | "completed" | "empty" | "failed" | null;
     altContactsForCompany: AltContact[];
+    // Velocity-weighted recency score for sorting hot prospects to the top.
+    // Higher = more pageviews packed into less time + more recent.
+    heatScore: number;
+    // Plain-Danish velocity description for the meta line ("5 sider på 12 min",
+    // "3 sider i dag", "2 sider · 8 dage"). Hides the magic number behind a
+    // human-readable cue.
+    velocityLabel: string;
+    firstVisitAt: string;
   };
 
   const groups: CompanyGroup[] = (() => {
@@ -1770,6 +1778,33 @@ function SignalerTab({ signals, busyLead, identity, leadMatches, altContacts, on
       );
       const searchedVisit = sorted.find((s) => s.alt_search_status !== null);
       const altSearchStatus = searchedVisit?.alt_search_status ?? null;
+
+      // Velocity: how many pageviews compressed into how short a window. Hot
+      // prospects load /pricing and /demo in the same session; cold ones drift
+      // back once a week. Score = pageviews per hour over the visit window,
+      // capped so a single super-old visit doesn't dominate. Recency boost so
+      // a fresh signal beats a stale one with the same density.
+      const firstVisitAt = sorted[sorted.length - 1].identified_at;
+      const firstMs = new Date(firstVisitAt).getTime();
+      const lastMs = new Date(latest.identified_at).getTime();
+      const windowHours = Math.max(0.25, (lastMs - firstMs) / 3_600_000);
+      const viewsPerHour = totalPageViews / windowHours;
+      const hoursSinceLast = Math.max(0.1, (Date.now() - lastMs) / 3_600_000);
+      const recencyMultiplier = 1 / Math.log2(hoursSinceLast + 2); // ~1 if just now, ~0.3 a week out
+      const heatScore = viewsPerHour * recencyMultiplier;
+
+      const velocityLabel = (() => {
+        const minutes = Math.round((lastMs - firstMs) / 60_000);
+        const pv = totalPageViews;
+        const pvWord = `${pv} side${pv === 1 ? "" : "r"}`;
+        if (pv === 1) return `1 side · ${fmtWhen(latest.identified_at).toLowerCase()}`;
+        if (minutes < 60) return `${pvWord} på ${minutes || "<1"} min`;
+        const hours = Math.round(minutes / 60);
+        if (hours < 24) return `${pvWord} på ${hours} t`;
+        const days = Math.round(hours / 24);
+        return `${pvWord} · ${days} ${days === 1 ? "dag" : "dage"}`;
+      })();
+
       return {
         key,
         companyName: (latest.company_name ?? latest.company_domain ?? "(ukendt firma)") as string,
@@ -1795,10 +1830,11 @@ function SignalerTab({ signals, busyLead, identity, leadMatches, altContacts, on
         latestId: latest.id,
         altSearchStatus,
         altContactsForCompany,
+        heatScore,
+        velocityLabel,
+        firstVisitAt,
       };
-    }).sort((a, b) =>
-      new Date(b.lastVisitAt).getTime() - new Date(a.lastVisitAt).getTime(),
-    );
+    }).sort((a, b) => b.heatScore - a.heatScore);
   })();
 
   return (
@@ -1809,6 +1845,9 @@ function SignalerTab({ signals, busyLead, identity, leadMatches, altContacts, on
         const isRepeatProspect = visitCount > 1 || g.totalPageViews > 1;
         const knownPeople = (g.companyDomain ? leadMatches[g.companyDomain] : null) ?? [];
         const inPipelineCount = knownPeople.filter((p) => p.in_pipeline).length;
+        // Hot = high heat score + recent. Used to bump the velocity label
+        // visually so the card grabs the eye when it warrants action now.
+        const isHot = g.heatScore > 1.5;
         const sublineParts = [
           g.companyIndustry,
           g.companySize ? `${g.companySize} ansatte` : null,
@@ -1817,37 +1856,37 @@ function SignalerTab({ signals, busyLead, identity, leadMatches, altContacts, on
         const metaParts = [
           g.companyDomain,
           g.location,
-          `${g.totalPageViews} sidevisning${g.totalPageViews === 1 ? "" : "er"}`,
-          `Sidst ${fmtWhen(g.lastVisitAt).toLowerCase()}`,
+          isRepeatProspect ? "genbesøg" : null,
         ].filter(Boolean) as string[];
 
         return (
           <li key={g.key} className="group rounded-sm border border-[var(--ink)]/12 bg-[var(--cream)]/30 transition">
             <button type="button" onClick={() => setExpandedKey(expanded ? null : g.key)}
               className="flex w-full items-start gap-3 px-4 py-3 text-left sm:px-5">
-              <span className="tabular shrink-0 rounded-full border border-[var(--forest)]/30 bg-[var(--forest)]/5 px-2 py-0.5 text-[9px] uppercase tracking-[0.22em] text-[var(--forest)]">
-                RB2B
-              </span>
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-baseline gap-2 text-[14px] leading-snug text-[var(--ink)]/90">
                   <span className="font-medium">{g.companyName}</span>
-                  {isRepeatProspect ? (
-                    <span className="tabular shrink-0 rounded-full bg-[var(--clay)]/15 px-1.5 py-0.5 text-[9px] uppercase tracking-[0.22em] text-[var(--clay)]">
-                      gentaget
+                  {inPipelineCount > 0 ? (
+                    <span className="tabular shrink-0 rounded-full border border-[var(--clay)]/40 bg-[var(--clay)]/15 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.18em] text-[var(--clay)]">
+                      {inPipelineCount} i pipeline
                     </span>
-                  ) : null}
-                  {knownPeople.length > 0 ? (
-                    <span className="tabular shrink-0 rounded-full border border-[var(--forest)]/30 bg-[var(--forest)]/10 px-1.5 py-0.5 text-[9px] uppercase tracking-[0.22em] text-[var(--forest)]">
+                  ) : knownPeople.length > 0 ? (
+                    <span className="tabular shrink-0 rounded-full border border-[var(--forest)]/25 bg-[var(--forest)]/8 px-1.5 py-0.5 text-[9px] uppercase tracking-[0.22em] text-[var(--forest)]">
                       {knownPeople.length} kendt{knownPeople.length === 1 ? "" : "e"}
-                      {inPipelineCount > 0 ? ` · ${inPipelineCount} i pipeline` : ""}
                     </span>
                   ) : null}
                 </div>
                 {sublineParts.length ? (
                   <div className="text-[12px] text-[var(--ink)]/65">{sublineParts.join(" · ")}</div>
                 ) : null}
-                <div className="tabular mt-1 text-[11px] text-[var(--ink)]/55">
-                  {metaParts.join(" · ")}
+                <div className="tabular mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-[var(--ink)]/55">
+                  <span className={isHot ? "font-medium text-[var(--clay)]" : ""}>
+                    {isHot ? "🔥 " : ""}{g.velocityLabel}
+                  </span>
+                  {metaParts.length ? <span className="text-[var(--ink)]/30">·</span> : null}
+                  {metaParts.map((p, i) => (
+                    <span key={i}>{p}{i < metaParts.length - 1 ? <span className="text-[var(--ink)]/30"> · </span> : null}</span>
+                  ))}
                 </div>
               </div>
               <span className="tabular shrink-0 self-center text-[10px] text-[var(--ink)]/35">
@@ -2032,7 +2071,7 @@ function SignalerTab({ signals, busyLead, identity, leadMatches, altContacts, on
                   );
                 })()}
 
-                <div className="mt-4 flex flex-wrap gap-3">
+                <div className="mt-4 flex flex-wrap items-center gap-3">
                   {g.latestPersonLinkedinUrl ? (
                     <a href={g.latestPersonLinkedinUrl} target="_blank" rel="noreferrer"
                       className="tabular text-[11px] uppercase tracking-[0.22em] text-[var(--forest)] underline-offset-[6px] hover:underline">
@@ -2052,11 +2091,12 @@ function SignalerTab({ signals, busyLead, identity, leadMatches, altContacts, on
                   ) : null}
                   <button type="button" onClick={() => onScoutPhones(g.latestId)}
                     disabled={busyLead === `signal:${g.latestId}`}
-                    className="focus-cream tabular rounded-sm border border-[var(--forest)]/30 px-3 py-1.5 text-[10px] uppercase tracking-[0.22em] text-[var(--forest)] hover:border-[var(--forest)]/60 disabled:opacity-40">
+                    className="focus-cream tabular rounded-sm border border-[var(--forest)]/30 bg-[var(--forest)]/5 px-3 py-1.5 text-[10px] font-medium uppercase tracking-[0.22em] text-[var(--forest)] hover:border-[var(--forest)]/60 disabled:opacity-40">
                     {busyLead === `signal:${g.latestId}` ? "Søger…" : g.phoneScoutedAt ? "Søg igen" : "Find telefon"}
                   </button>
+                  <span className="flex-1" />
                   <button type="button" onClick={() => onMarkHandled(g.visits.map((v) => v.id))}
-                    className="focus-cream tabular rounded-sm border border-[var(--ink)]/15 px-3 py-1.5 text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/65 hover:border-[var(--ink)]/35 hover:text-[var(--ink)]">
+                    className="focus-cream tabular rounded-sm border border-[var(--ink)]/12 px-2.5 py-1 text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/50 hover:border-[var(--ink)]/25 hover:text-[var(--ink)]/80">
                     Markér behandlet
                   </button>
                 </div>
