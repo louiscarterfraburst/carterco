@@ -34,6 +34,13 @@ type PipelineRow = {
   alt_search_id: string;
 };
 
+type SignalRow = {
+  id: string;
+  workspace_id: string;
+  company_name: string | null;
+  alt_search_id: string;
+};
+
 type SpLead = {
   id?: string;
   first_name?: string;
@@ -71,14 +78,114 @@ Deno.serve(async (request) => {
     .not("alt_search_id", "is", null)
     .limit(50);
   if (error) return json({ error: error.message }, 500);
-  if (!rows || rows.length === 0) return json({ ok: true, polled: 0 });
+
+  // Signal-driven searches: same SendPilot search machinery, results land
+  // on outreach_alt_contacts with signal_id (no pipeline_lead_id).
+  const { data: signalRows, error: sigErr } = await supabase
+    .from("outreach_signals")
+    .select("id, workspace_id, company_name, alt_search_id")
+    .eq("alt_search_status", "pending")
+    .not("alt_search_id", "is", null)
+    .limit(50);
+  if (sigErr) return json({ error: sigErr.message }, 500);
 
   const summary: Array<Record<string, unknown>> = [];
-  for (const row of rows as PipelineRow[]) {
+  for (const row of (rows ?? []) as PipelineRow[]) {
     summary.push(await pollOne(row));
+  }
+  for (const row of (signalRows ?? []) as SignalRow[]) {
+    summary.push(await pollSignal(row));
   }
   return json({ ok: true, polled: summary.length, summary });
 });
+
+async function pollSignal(row: SignalRow): Promise<Record<string, unknown>> {
+  const statusRes = await fetch(`${SP_SEARCH_BASE}/${row.alt_search_id}/status`, {
+    headers: { "X-API-Key": SP_API_KEY },
+  });
+  if (!statusRes.ok) {
+    return { signal: row.id, error: `status http ${statusRes.status}` };
+  }
+  const statusBody = await statusRes.json().catch(() => null) as { status?: string } | null;
+  const sStatus = statusBody?.status;
+
+  if (sStatus === "pending" || sStatus === "processing") {
+    return { signal: row.id, sendpilot_status: sStatus, action: "still_pending" };
+  }
+
+  if (sStatus === "failed") {
+    await supabase.from("outreach_signals")
+      .update({ alt_search_status: "failed" })
+      .eq("id", row.id);
+    return { signal: row.id, action: "marked_failed" };
+  }
+
+  if (sStatus !== "completed") {
+    return { signal: row.id, sendpilot_status: sStatus, action: "unknown_status" };
+  }
+
+  const resRes = await fetch(`${SP_SEARCH_BASE}/${row.alt_search_id}/results`, {
+    headers: { "X-API-Key": SP_API_KEY },
+  });
+  if (!resRes.ok) {
+    return { signal: row.id, error: `results http ${resRes.status}` };
+  }
+  const resBody = await resRes.json().catch(() => null) as { leads?: SpLead[] } | null;
+  const leads = (resBody?.leads ?? []) as SpLead[];
+
+  if (leads.length === 0) {
+    await supabase.from("outreach_signals")
+      .update({ alt_search_status: "empty" })
+      .eq("id", row.id);
+    return { signal: row.id, action: "marked_empty" };
+  }
+
+  const origCompany = (row.company_name ?? "").toLowerCase().trim();
+
+  let inserted = 0;
+  for (const l of leads) {
+    const linkedinUrl = (l.linkedin_url ?? "").trim();
+    if (!linkedinUrl) continue;
+    const fullName = (l.full_name ?? `${l.first_name ?? ""} ${l.last_name ?? ""}`).trim();
+    if (!fullName) continue;
+
+    const altCompany = (l.company ?? "").toLowerCase().trim();
+    if (origCompany && altCompany && !companiesMatch(origCompany, altCompany)) {
+      continue;
+    }
+
+    const { error: insErr } = await supabase.from("outreach_alt_contacts").insert({
+      workspace_id: row.workspace_id,
+      pipeline_lead_id: null,
+      signal_id: row.id,
+      name: fullName,
+      linkedin_url: linkedinUrl,
+      title: l.job_title ?? null,
+      seniority: l.seniority ?? null,
+      employees: l.employees ?? null,
+      company: l.company ?? null,
+      source: "signal",
+      sendpilot_lead_db_id: l.id ?? null,
+    });
+    if (insErr && !`${insErr.message}`.includes("duplicate key")) {
+      console.error("alt_contact insert (signal) error", insErr);
+      continue;
+    }
+    if (!insErr) inserted++;
+  }
+
+  const finalStatus = inserted > 0 ? "completed" : "empty";
+  await supabase.from("outreach_signals")
+    .update({ alt_search_status: finalStatus })
+    .eq("id", row.id);
+
+  return {
+    signal: row.id,
+    action: finalStatus,
+    inserted,
+    returned: leads.length,
+  };
+}
 
 async function pollOne(row: PipelineRow): Promise<Record<string, unknown>> {
   const statusRes = await fetch(`${SP_SEARCH_BASE}/${row.alt_search_id}/status`, {

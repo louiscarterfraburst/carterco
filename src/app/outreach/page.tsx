@@ -112,14 +112,15 @@ type PipelineRow = {
 
 type AltContact = {
   id: string;
-  pipeline_lead_id: string;
+  pipeline_lead_id: string | null;
+  signal_id: string | null;
   name: string;
   linkedin_url: string;
   title: string | null;
   seniority: string | null;
   employees: string | null;
   company: string | null;
-  source: "sendpilot" | "team_page" | "reply_referral";
+  source: "sendpilot" | "team_page" | "reply_referral" | "signal";
   surfaced_at: string;
   acted_on_at: string | null;
   error: string | null;
@@ -189,6 +190,8 @@ type Signal = {
   phone_office: string | null;
   phone_source: string | null;
   phone_scouted_at: string | null;
+  alt_search_id: string | null;
+  alt_search_status: "pending" | "completed" | "empty" | "failed" | null;
 };
 
 type Tab = "opgaver" | "signaler" | "inbox" | "replies" | "sent" | "all" | "icp_rejected" | "icp";
@@ -528,6 +531,7 @@ export default function OutreachPage() {
       .on("postgres_changes", { event: "*", schema: "public", table: "outreach_pipeline", filter }, () => scheduleReload())
       .on("postgres_changes", { event: "*", schema: "public", table: "outreach_replies",  filter }, () => scheduleReload())
       .on("postgres_changes", { event: "*", schema: "public", table: "outreach_alt_contacts", filter }, () => scheduleReload())
+      .on("postgres_changes", { event: "*", schema: "public", table: "outreach_signals",      filter }, () => scheduleReload())
       .subscribe();
     return () => { void supabase.removeChannel(ch); };
   }, [user, activeWorkspaceId, supabase, scheduleReload]);
@@ -685,6 +689,19 @@ export default function OutreachPage() {
       .update({ handled: true, handled_at: new Date().toISOString(), handled_by: user?.email ?? null })
       .in("id", signalIds);
     if (error) setErr(error.message); else await load();
+  }
+
+  async function searchSignalPeople(signalId: string) {
+    setErr(null); setInfo(null);
+    setBusyLead(`signal-search:${signalId}`);
+    const { data, error } = await supabase.functions.invoke("signal-search-people", {
+      body: { signalId },
+    });
+    setBusyLead(null);
+    if (error) { setErr(error.message ?? String(error)); return; }
+    if (data?.error) { setErr(`${data.error}${data.details ? `: ${data.details}` : ""}`); return; }
+    setInfo("Søgning startet via SendPilot — kandidater dukker op om ~2 minutter.");
+    await load();
   }
 
   async function scoutSignalPhones(signalId: string) {
@@ -850,6 +867,7 @@ export default function OutreachPage() {
   const altByLead = useMemo(() => {
     const m = new Map<string, AltContact[]>();
     for (const a of altContacts) {
+      if (!a.pipeline_lead_id) continue;
       const arr = m.get(a.pipeline_lead_id) ?? [];
       arr.push(a);
       m.set(a.pipeline_lead_id, arr);
@@ -865,6 +883,7 @@ export default function OutreachPage() {
     const m = new Map<string, AltContact[]>();
     for (const a of altContacts) {
       if (a.source !== "reply_referral") continue;
+      if (!a.pipeline_lead_id) continue;
       const arr = m.get(a.pipeline_lead_id) ?? [];
       arr.push(a);
       m.set(a.pipeline_lead_id, arr);
@@ -1048,8 +1067,10 @@ export default function OutreachPage() {
             busyLead={busyLead}
             identity={identity}
             leadMatches={signalLeadMatches}
+            altContacts={altContacts}
             onMarkHandled={(ids) => void markSignalsHandled(ids)}
             onScoutPhones={(id) => void scoutSignalPhones(id)}
+            onSearchPeople={(id) => void searchSignalPeople(id)}
           />
         ) : tab === "inbox" ? (
           <InboxTab
@@ -1651,13 +1672,15 @@ function OpgaverTab({ tasks, onMarkHandled }: {
   );
 }
 
-function SignalerTab({ signals, busyLead, identity, leadMatches, onMarkHandled, onScoutPhones }: {
+function SignalerTab({ signals, busyLead, identity, leadMatches, altContacts, onMarkHandled, onScoutPhones, onSearchPeople }: {
   signals: Signal[];
   busyLead: string | null;
   identity: Identity;
   leadMatches: Record<string, SignalLeadMatch[]>;
+  altContacts: AltContact[];
   onMarkHandled: (ids: string[]) => void;
   onScoutPhones: (id: string) => void;
+  onSearchPeople: (id: string) => void;
 }) {
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
 
@@ -1705,6 +1728,10 @@ function SignalerTab({ signals, busyLead, identity, leadMatches, onMarkHandled, 
     phoneSource: string | null;
     phoneScoutedAt: string | null;
     latestId: string;
+    // SendPilot alt-contact search state — derived from the most-recent
+    // visit that has an alt_search_id set.
+    altSearchStatus: "pending" | "completed" | "empty" | "failed" | null;
+    altContactsForCompany: AltContact[];
   };
 
   const groups: CompanyGroup[] = (() => {
@@ -1736,6 +1763,13 @@ function SignalerTab({ signals, busyLead, identity, leadMatches, onMarkHandled, 
       const scouted = sorted.find((s) => s.phone_scouted_at !== null);
       const geo = latest.geo as { raw?: string; city?: string; country?: string } | null;
       const location = geo?.raw ?? ([geo?.city, geo?.country].filter(Boolean).join(", ") || null);
+      // Alt-search state — pick the latest signal that has any search activity.
+      const visitIds = new Set(sorted.map((s) => s.id));
+      const altContactsForCompany = altContacts.filter(
+        (ac) => ac.signal_id !== null && visitIds.has(ac.signal_id),
+      );
+      const searchedVisit = sorted.find((s) => s.alt_search_status !== null);
+      const altSearchStatus = searchedVisit?.alt_search_status ?? null;
       return {
         key,
         companyName: (latest.company_name ?? latest.company_domain ?? "(ukendt firma)") as string,
@@ -1759,6 +1793,8 @@ function SignalerTab({ signals, busyLead, identity, leadMatches, onMarkHandled, 
         phoneSource: scouted?.phone_source ?? null,
         phoneScoutedAt: scouted?.phone_scouted_at ?? null,
         latestId: latest.id,
+        altSearchStatus,
+        altContactsForCompany,
       };
     }).sort((a, b) =>
       new Date(b.lastVisitAt).getTime() - new Date(a.lastVisitAt).getTime(),
@@ -1821,6 +1857,66 @@ function SignalerTab({ signals, busyLead, identity, leadMatches, onMarkHandled, 
 
             {expanded ? (
               <div className="border-t border-[var(--ink)]/8 px-4 py-3 sm:px-5">
+                {(() => {
+                  // SendPilot lead-DB search panel — only shown when we don't
+                  // already know people at this company (otherwise it's noise).
+                  if (knownPeople.length > 0) return null;
+                  const candidates = g.altContactsForCompany;
+                  const busy = busyLead === `signal-search:${g.latestId}`;
+                  const pending = g.altSearchStatus === "pending";
+                  const empty = g.altSearchStatus === "empty";
+                  const failed = g.altSearchStatus === "failed";
+
+                  if (candidates.length > 0) {
+                    return (
+                      <>
+                        <p className="text-[10px] uppercase tracking-[0.22em] text-[var(--forest)]">
+                          Forslag fra SendPilot ({candidates.length})
+                        </p>
+                        <ul className="mt-2 mb-4 flex flex-col gap-2">
+                          {candidates.map((c) => (
+                            <li key={c.id} className="flex flex-wrap items-baseline gap-2 rounded-sm border border-[var(--ink)]/8 bg-[var(--cream)]/40 px-3 py-2">
+                              <span className="text-[13px] font-medium text-[var(--ink)]/90">{c.name}</span>
+                              {c.title ? <span className="text-[12px] text-[var(--ink)]/60">{c.title}</span> : null}
+                              {c.seniority ? <span className="tabular text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/45">{c.seniority}</span> : null}
+                              <span className="flex-1" />
+                              <a href={c.linkedin_url} target="_blank" rel="noreferrer"
+                                className="tabular text-[10px] uppercase tracking-[0.22em] text-[var(--forest)] underline-offset-[4px] hover:underline">
+                                LinkedIn ↗
+                              </a>
+                            </li>
+                          ))}
+                        </ul>
+                      </>
+                    );
+                  }
+                  return (
+                    <div className="mb-4 rounded-sm border border-dashed border-[var(--ink)]/15 bg-[var(--cream)]/30 px-3 py-3 text-[12px]">
+                      {pending ? (
+                        <p className="text-[var(--ink)]/65">Søger personer hos <strong>{g.companyName}</strong> via SendPilot… kandidater dukker op om ~2 minutter.</p>
+                      ) : empty ? (
+                        <p className="text-[var(--ink)]/65">Ingen kandidater fundet hos {g.companyName}. Ledig til at vælges fra LinkedIn manuelt.</p>
+                      ) : failed ? (
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-[var(--clay)]">SendPilot-søgning fejlede.</p>
+                          <button type="button" onClick={() => onSearchPeople(g.latestId)} disabled={busy}
+                            className="focus-cream tabular rounded-sm border border-[var(--clay)]/40 px-2.5 py-1 text-[10px] uppercase tracking-[0.22em] text-[var(--clay)] hover:border-[var(--clay)]/60 disabled:opacity-40">
+                            Prøv igen
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-[var(--ink)]/70">Vi kender ingen hos {g.companyName} endnu.</p>
+                          <button type="button" onClick={() => onSearchPeople(g.latestId)} disabled={busy}
+                            className="focus-cream tabular rounded-sm border border-[var(--forest)]/30 bg-[var(--forest)]/5 px-3 py-1.5 text-[10px] uppercase tracking-[0.22em] text-[var(--forest)] hover:border-[var(--forest)]/60 disabled:opacity-40">
+                            {busy ? "Starter…" : "Find personer"}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
                 {knownPeople.length > 0 ? (
                   <>
                     <p className="text-[10px] uppercase tracking-[0.22em] text-[var(--forest)]">
