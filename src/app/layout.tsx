@@ -1,14 +1,20 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono, Homemade_Apple, Caveat } from "next/font/google";
+import { Manrope, Geist_Mono, Homemade_Apple, Caveat } from "next/font/google";
 import Script from "next/script";
 import { PwaRegistrar } from "./pwa-registrar";
 import "./globals.css";
 
 const SITE_URL = "https://carterco.dk";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+// Display: Georgia, system-installed everywhere. Classical newspaper-masthead
+// proportions with strong baseline contrast that holds up at hero size.
+// No web-font load needed.
+
+// Body: Manrope, humanist sans for all UI and prose.
+const manrope = Manrope({
+  variable: "--font-manrope",
   subsets: ["latin"],
+  display: "swap",
 });
 
 const geistMono = Geist_Mono({
@@ -80,7 +86,7 @@ export default function RootLayout({
   return (
     <html
       lang="da"
-      className={`${geistSans.variable} ${geistMono.variable} ${homemadeApple.variable} ${caveat.variable} h-full antialiased`}
+      className={`${manrope.variable} ${geistMono.variable} ${homemadeApple.variable} ${caveat.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
         <Script

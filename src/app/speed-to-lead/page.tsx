@@ -219,8 +219,8 @@ const outboundCards = [
 
 const pipelineColumns = [
   { key: "ny", label: "Ny", count: 12, accent: "bg-[var(--cream)]/40" },
-  { key: "kontaktet", label: "Kontaktet", count: 7, accent: "bg-[var(--flame-50)]" },
-  { key: "booket", label: "Booket", count: 4, accent: "bg-[var(--flame-500)]" },
+  { key: "kontaktet", label: "Kontaktet", count: 7, accent: "bg-[#ffb86b]" },
+  { key: "booket", label: "Booket", count: 4, accent: "bg-[#ff6b2c]" },
   { key: "vundet", label: "Vundet", count: 2, accent: "bg-[var(--forest)]" },
 ] as const;
 
@@ -720,7 +720,7 @@ export default function Home() {
   }
 
   return (
-    <main className="relative flex min-h-screen flex-col bg-[var(--ember)] text-[var(--cream)]">
+    <main className="relative flex min-h-screen flex-col bg-[#0f0d0a] text-[var(--cream)]">
       <section className="relative flex min-h-screen flex-col overflow-hidden lg:min-h-[min(100vh,860px)]">
         <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_75%_60%,rgba(218,96,34,0.32),transparent_55%),radial-gradient(ellipse_at_15%_10%,rgba(25,70,58,0.28),transparent_50%)]" />
         <div
@@ -733,7 +733,7 @@ export default function Home() {
 
         <nav className="mx-auto flex w-full max-w-[1400px] items-center justify-between px-8 pt-8 sm:px-12">
         <div className="flex items-center gap-3">
-          <span className="h-2 w-2 animate-pulse rounded-full bg-[var(--flame-500)] shadow-[0_0_12px_rgba(255,107,44,0.9)]" />
+          <span className="h-2 w-2 animate-pulse rounded-full bg-[#ff6b2c] shadow-[0_0_12px_rgba(255,107,44,0.9)]" />
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="/logo.png"
@@ -757,24 +757,69 @@ export default function Home() {
       </nav>
 
       <div className="mx-auto flex w-full max-w-[1400px] flex-1 flex-col justify-center px-8 pt-16 sm:px-12 sm:pt-20">
-        <h1 className="font-display leading-[0.88] tracking-[-0.04em]">
-          {/* Title — large flame-gradient italic, the headline anchor.
-              Wraps onto its own line via the explicit <br> so the descriptor
-              underneath always reads as a separate beat. */}
-          <span className="relative inline-block text-[14vw] sm:text-[12vw] lg:text-[clamp(5rem,9.5vw,9rem)]">
+        <h1 className="font-display text-[14vw] leading-[0.82] tracking-[-0.05em] sm:text-[12vw] lg:text-[clamp(5rem,10vw,9.5rem)]">
+          <span className="relative inline-block">
+            Smed
             <span
-              aria-hidden
-              className="pointer-events-none absolute inset-0 -z-10 scale-125 bg-[radial-gradient(ellipse_at_center,rgba(255,107,44,0.45),transparent_65%)] blur-2xl"
-            />
-            <span className="bg-gradient-to-b from-[var(--flame-50)] via-[var(--flame-500)] to-[var(--flame-700)] bg-clip-text italic text-transparent">
-              Salgsinfrastruktur
+              className="pointer-events-none absolute left-[8%] bottom-full mb-[0.05em] hidden items-center gap-[0.2em] whitespace-nowrap text-[0.28em] font-normal leading-none tracking-normal text-[var(--cream)]/95 sm:inline-flex"
+              style={{
+                fontFamily: "var(--font-handwritten)",
+                transform: "translate(1.4em, 0.6em) rotate(-4deg)",
+              }}
+            >
+              Sælg
+              <span
+                aria-hidden
+                className="inline-block h-[0.8em] w-[0.8em] shrink-0 bg-[#ff6b2c]"
+                style={{
+                  maskImage: "url(/annotation-arrow.png)",
+                  maskSize: "contain",
+                  maskRepeat: "no-repeat",
+                  maskPosition: "center",
+                  WebkitMaskImage: "url(/annotation-arrow.png)",
+                  WebkitMaskSize: "contain",
+                  WebkitMaskRepeat: "no-repeat",
+                  WebkitMaskPosition: "center",
+                  transform: "translate(0.12em, 0.24em)",
+                }}
+              />
             </span>
-          </span>
+          </span>{" "}
+          mens
           <br />
-          {/* Descriptor — ~55% of title size, muted cream for editorial
-              hierarchy. Spacing tuned so the two lines read as a unit. */}
-          <span className="mt-4 inline-block text-[8vw] leading-[1.05] text-[var(--cream)]/55 sm:mt-6 sm:text-[6.5vw] lg:text-[clamp(2.5rem,5.25vw,5rem)]">
-            til ambitiøse B2B teams
+          <span className="relative inline-block">
+            jernet
+            <span
+              className="pointer-events-none absolute left-[12%] top-full mt-[0.05em] hidden items-center gap-[0.2em] whitespace-nowrap text-[0.28em] font-normal leading-none tracking-normal text-[var(--cream)]/95 sm:inline-flex"
+              style={{
+                fontFamily: "var(--font-handwritten)",
+                transform: "rotate(-3deg)",
+              }}
+            >
+              leadet
+              <span
+                aria-hidden
+                className="inline-block h-[0.8em] w-[0.8em] shrink-0 bg-[#ff6b2c]"
+                style={{
+                  maskImage: "url(/annotation-arrow.png)",
+                  maskSize: "contain",
+                  maskRepeat: "no-repeat",
+                  maskPosition: "center",
+                  WebkitMaskImage: "url(/annotation-arrow.png)",
+                  WebkitMaskSize: "contain",
+                  WebkitMaskRepeat: "no-repeat",
+                  WebkitMaskPosition: "center",
+                  transform: "scaleY(-1)",
+                }}
+              />
+            </span>
+          </span>{" "}
+          er{" "}
+          <span className="relative inline-block">
+            <span className="absolute inset-0 -z-10 scale-125 bg-[radial-gradient(ellipse_at_center,rgba(255,107,44,0.45),transparent_65%)] blur-2xl" />
+            <span className="bg-gradient-to-b from-[#ffb86b] via-[#ff6b2c] to-[#c93c0a] bg-clip-text italic text-transparent">
+              varmt.
+            </span>
           </span>
         </h1>
 
@@ -805,7 +850,7 @@ export default function Home() {
               <button
                 type="button"
                 onClick={() => setQuizOpen(true)}
-                className="group inline-flex items-center gap-4 rounded-full bg-[var(--flame-500)] px-8 py-5 text-sm font-bold uppercase tracking-[0.25em] text-[var(--ember)] shadow-[0_18px_60px_rgba(255,107,44,0.35)] transition hover:-translate-y-1 hover:bg-[var(--flame-400)] hover:shadow-[0_24px_80px_rgba(255,107,44,0.5)]"
+                className="group inline-flex items-center gap-4 rounded-full bg-[#ff6b2c] px-8 py-5 text-sm font-bold uppercase tracking-[0.25em] text-[#0f0d0a] shadow-[0_18px_60px_rgba(255,107,44,0.35)] transition hover:-translate-y-1 hover:bg-[#ff8244] hover:shadow-[0_24px_80px_rgba(255,107,44,0.5)]"
               >
                 <span>Tag lead-quizzen</span>
                 <span className="text-lg">→</span>
@@ -816,7 +861,7 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="relative border-t border-[var(--cream)]/5 bg-[var(--ember)] py-16 sm:py-20">
+      <section className="relative border-t border-[var(--cream)]/5 bg-[#0f0d0a] py-16 sm:py-20">
         <p className="text-center text-[10px] font-bold uppercase tracking-[0.3em] text-[var(--clay)]">
           Bag systemet hos
         </p>
@@ -849,44 +894,44 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="relative overflow-hidden bg-[var(--sand)] py-28 text-[var(--ink)] sm:py-36">
+      <section className="relative overflow-hidden bg-[#f6efe4] py-28 text-[#29261f] sm:py-36">
         <div aria-hidden className="paper-grain" />
 
         {/* EmberSpark — top: bridges down from dark marquee */}
         <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-10 bg-[linear-gradient(180deg,rgba(255,107,44,0.18),transparent)]" />
-        <div aria-hidden className="pointer-events-none absolute left-1/2 top-0 h-[2px] w-[min(680px,60%)] -translate-x-1/2 bg-[linear-gradient(90deg,transparent,var(--flame-500)_30%,var(--flame-500)_70%,transparent)] shadow-[0_0_28px_rgba(255,107,44,0.7)]" />
+        <div aria-hidden className="pointer-events-none absolute left-1/2 top-0 h-[2px] w-[min(680px,60%)] -translate-x-1/2 bg-[linear-gradient(90deg,transparent,#ff6b2c_30%,#ff6b2c_70%,transparent)] shadow-[0_0_28px_rgba(255,107,44,0.7)]" />
 
         {/* EmberSpark — bottom: bridges up to dark process */}
         <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-[linear-gradient(0deg,rgba(255,107,44,0.18),transparent)]" />
-        <div aria-hidden className="pointer-events-none absolute bottom-0 left-1/2 h-[2px] w-[min(680px,60%)] -translate-x-1/2 bg-[linear-gradient(90deg,transparent,var(--flame-500)_30%,var(--flame-500)_70%,transparent)] shadow-[0_0_28px_rgba(255,107,44,0.7)]" />
+        <div aria-hidden className="pointer-events-none absolute bottom-0 left-1/2 h-[2px] w-[min(680px,60%)] -translate-x-1/2 bg-[linear-gradient(90deg,transparent,#ff6b2c_30%,#ff6b2c_70%,transparent)] shadow-[0_0_28px_rgba(255,107,44,0.7)]" />
 
         <div className="relative z-[1] mx-auto w-full max-w-[1400px] px-8 sm:px-12">
-          <h2 className="text-center font-display text-[10vw] leading-[0.9] tracking-[-0.04em] text-[var(--ink)] sm:text-6xl lg:text-7xl">
+          <h2 className="text-center font-display text-[10vw] leading-[0.9] tracking-[-0.04em] text-[#29261f] sm:text-6xl lg:text-7xl">
             Forskellige brancher.
             <br />
             <span className="italic text-[var(--clay)]">Samme retning.</span>
           </h2>
 
-          <div className="mt-16 grid gap-px overflow-hidden rounded-2xl border border-[var(--ink)]/12 bg-[var(--ink)]/12 sm:mt-20 sm:grid-cols-3">
+          <div className="mt-16 grid gap-px overflow-hidden rounded-2xl border border-[#29261f]/12 bg-[#29261f]/12 sm:mt-20 sm:grid-cols-3">
             {cases.map((c) => (
               <article
                 key={c.client}
-                className="group relative flex flex-col gap-6 bg-[var(--sand)] p-10 transition hover:bg-[#efe6d6] sm:p-12"
+                className="group relative flex flex-col gap-6 bg-[#f6efe4] p-10 transition hover:bg-[#efe6d6] sm:p-12"
               >
                 <div className="flex flex-col gap-2">
                   <span className="relative inline-block whitespace-nowrap font-display text-6xl italic leading-none tracking-tight sm:text-7xl">
                     <span
-                      className={
+                      className={`bg-clip-text text-transparent ${
                         c.kind === "won"
-                          ? "text-[var(--forest)]"
-                          : "text-[var(--flame-500)]"
-                      }
+                          ? "bg-gradient-to-b from-[#3d8a6c] via-[#19463a] to-[#0c2a22]"
+                          : "bg-gradient-to-b from-[#ffb86b] via-[#ff6b2c] to-[#c93c0a]"
+                      }`}
                     >
                       {c.metric}
                     </span>
                     {c.annotation && (
                       <span
-                        className="pointer-events-none absolute left-[40%] bottom-full mb-[0.1em] inline-flex items-center gap-[0.2em] whitespace-nowrap text-[0.3em] font-normal not-italic leading-none tracking-normal text-[var(--flame-700)]"
+                        className="pointer-events-none absolute left-[40%] bottom-full mb-[0.1em] inline-flex items-center gap-[0.2em] whitespace-nowrap text-[0.3em] font-normal not-italic leading-none tracking-normal text-[#c93c0a]"
                         style={{
                           fontFamily: "var(--font-handwritten)",
                           transform: "translateX(60px) rotate(-4deg)",
@@ -895,7 +940,7 @@ export default function Home() {
                         ({c.annotation})
                         <span
                           aria-hidden
-                          className="inline-block h-[1.1em] w-[1.1em] shrink-0 bg-[var(--flame-700)]"
+                          className="inline-block h-[1.1em] w-[1.1em] shrink-0 bg-[#c93c0a]"
                           style={{
                             maskImage: "url(/annotation-arrow.png)",
                             maskSize: "contain",
@@ -911,20 +956,20 @@ export default function Home() {
                       </span>
                     )}
                   </span>
-                  <span className="text-[11px] font-bold uppercase tracking-[0.25em] text-[var(--ink)]/60">
+                  <span className="text-[11px] font-bold uppercase tracking-[0.25em] text-[#29261f]/60">
                     {c.metricLabel}
                   </span>
                 </div>
 
-                <p className="text-base leading-relaxed text-[var(--ink)]/75">
+                <p className="text-base leading-relaxed text-[#29261f]/75">
                   {c.copy}
                 </p>
 
                 {c.quote ? (
-                  <blockquote className="border-l-2 border-[var(--clay)]/45 pl-4 text-[15px] italic leading-relaxed text-[var(--ink)]/85">
+                  <blockquote className="border-l-2 border-[var(--clay)]/45 pl-4 text-[15px] italic leading-relaxed text-[#29261f]/85">
                     &ldquo;{c.quote}&rdquo;
                     {c.quoteAttribution ? (
-                      <footer className="mt-2 not-italic text-[10px] font-bold uppercase tracking-[0.25em] text-[var(--ink)]/55">
+                      <footer className="mt-2 not-italic text-[10px] font-bold uppercase tracking-[0.25em] text-[#29261f]/55">
                         — {c.quoteAttribution}
                       </footer>
                     ) : null}
@@ -948,7 +993,7 @@ export default function Home() {
                           className={`${c.logoClass ?? "h-7"} w-auto`}
                           style={{ filter: "brightness(0)" }}
                         />
-                        <span className="text-[12px] text-[var(--ink)]/55 transition group-hover/link:text-[var(--ink)]">↗</span>
+                        <span className="text-[12px] text-[#29261f]/55 transition group-hover/link:text-[#29261f]">↗</span>
                       </a>
                     ) : (
                       /* eslint-disable-next-line @next/next/no-img-element */
@@ -964,17 +1009,17 @@ export default function Home() {
                       href={c.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="font-display text-lg italic text-[var(--ink)] decoration-[var(--clay)] decoration-2 underline-offset-4 transition hover:underline"
+                      className="font-display text-lg italic text-[#29261f] decoration-[var(--clay)] decoration-2 underline-offset-4 transition hover:underline"
                     >
                       {c.client} ↗
                     </a>
                   ) : (
-                    <span className="font-display text-lg italic text-[var(--ink)]">
+                    <span className="font-display text-lg italic text-[#29261f]">
                       {c.client}
                     </span>
                   )}
                   {c.industry && (
-                    <span className="text-[10px] font-bold uppercase tracking-[0.3em] text-[var(--ink)]/50">
+                    <span className="text-[10px] font-bold uppercase tracking-[0.3em] text-[#29261f]/50">
                       {c.industry}
                     </span>
                   )}
@@ -985,11 +1030,11 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="relative overflow-hidden bg-[var(--ember-deep)] py-32 sm:py-40">
+      <section className="relative overflow-hidden bg-[#0a0907] py-32 sm:py-40">
         {/* Atmospheric backdrop */}
         <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
           <div className="absolute left-1/2 top-[12%] h-[700px] w-[900px] -translate-x-1/2 rounded-full bg-[radial-gradient(ellipse_at_center,rgba(255,107,44,0.10),transparent_65%)] blur-2xl" />
-          <div className="absolute bottom-0 left-0 right-0 h-[40%] bg-[linear-gradient(180deg,transparent,var(--ember-deep))]" />
+          <div className="absolute bottom-0 left-0 right-0 h-[40%] bg-[linear-gradient(180deg,transparent,#0a0907)]" />
         </div>
 
         <div className="mx-auto w-full max-w-[1400px] px-8 sm:px-12">
@@ -1014,7 +1059,7 @@ export default function Home() {
               className="absolute left-[5px] top-0 hidden h-full w-[2px] sm:block"
               style={{ ["--wire-length" as string]: "100%" }}
             >
-              <span className="wire-travel block h-2 w-2 -translate-x-[3px] rounded-full bg-[var(--flame-500)] shadow-[0_0_18px_3px_rgba(255,107,44,0.55)]" />
+              <span className="wire-travel block h-2 w-2 -translate-x-[3px] rounded-full bg-[#ff6b2c] shadow-[0_0_18px_3px_rgba(255,107,44,0.55)]" />
             </div>
 
             <div className="flex flex-col gap-28 sm:gap-36">
@@ -1028,11 +1073,11 @@ export default function Home() {
                     {/* Rail node — centered on the wire (x), vertically centered on the stage (y) */}
                     <span
                       aria-hidden
-                      className="absolute left-2 top-1/2 hidden h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[var(--flame-500)] ring-4 ring-[var(--ember-deep)] sm:block"
+                      className="absolute left-2 top-1/2 hidden h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#ff6b2c] ring-4 ring-[#0a0907] sm:block"
                     />
                     <span
                       aria-hidden
-                      className="glow-pulse absolute left-2 top-1/2 hidden h-7 w-7 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[var(--flame-500)]/30 blur-md sm:block"
+                      className="glow-pulse absolute left-2 top-1/2 hidden h-7 w-7 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#ff6b2c]/30 blur-md sm:block"
                     />
 
                     {/* Ghost numeral */}
@@ -1047,9 +1092,11 @@ export default function Home() {
                     <div
                       className={`relative ${isReverse ? "sm:col-span-5 sm:col-start-7" : "sm:col-span-5 sm:col-start-2"} flex flex-col`}
                     >
-                      <span className="font-display text-6xl italic leading-none tracking-tight text-[var(--flame-500)] sm:text-7xl">
-                        {stage.verb}
-                        <span>.</span>
+                      <span className="font-display text-6xl italic leading-none tracking-tight sm:text-7xl">
+                        <span className="bg-gradient-to-b from-[#ffb86b] via-[#ff6b2c] to-[#c93c0a] bg-clip-text text-transparent">
+                          {stage.verb}
+                        </span>
+                        <span className="text-[#ff6b2c]">.</span>
                       </span>
 
                       <h3 className="mt-7 font-display text-3xl leading-[1.08] tracking-tight sm:text-4xl lg:text-[2.75rem]">
@@ -1078,10 +1125,10 @@ export default function Home() {
                                   href={stage.proof.noteHref}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  className="underline decoration-[var(--flame-500)]/60 decoration-2 underline-offset-4 transition hover:text-[var(--cream)]/85 hover:decoration-[var(--flame-500)]"
+                                  className="underline decoration-[#ff6b2c]/60 decoration-2 underline-offset-4 transition hover:text-[var(--cream)]/85 hover:decoration-[#ff6b2c]"
                                 >
                                   {stage.proof.note}
-                                  <sup className="ml-0.5 text-[10px] font-bold text-[var(--flame-500)]">↗</sup>
+                                  <sup className="ml-0.5 text-[10px] font-bold text-[#ff6b2c]">↗</sup>
                                 </a>
                               ) : (
                                 stage.proof.note
@@ -1106,17 +1153,17 @@ export default function Home() {
                               animationDelay: "1.5s",
                             }}
                           >
-                            <div className="overflow-hidden rounded-2xl border border-[var(--ink)]/12 bg-[var(--cream)] shadow-[0_40px_80px_-30px_rgba(0,0,0,0.55)]">
-                              <div className="flex items-center justify-between border-b border-[var(--ink)]/10 px-4 py-2.5">
+                            <div className="overflow-hidden rounded-2xl border border-[#29261f]/12 bg-[#fff8ea] shadow-[0_40px_80px_-30px_rgba(0,0,0,0.55)]">
+                              <div className="flex items-center justify-between border-b border-[#29261f]/10 px-4 py-2.5">
                                 <div className="flex items-center gap-2">
                                   <div className="grid h-7 w-7 place-items-center rounded-full bg-[linear-gradient(135deg,#1877f2,#42a5f5)] text-[10px] font-bold text-white">
                                     f
                                   </div>
-                                  <div className="text-[11px] text-[var(--ink)]/60">
+                                  <div className="text-[11px] text-[#29261f]/60">
                                     {outboundCards[1].sponsor}
                                   </div>
                                 </div>
-                                <span className="text-[var(--ink)]/35">···</span>
+                                <span className="text-[#29261f]/35">···</span>
                               </div>
                               <div className="relative aspect-[3/2] overflow-hidden bg-[#14110d]">
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -1128,15 +1175,15 @@ export default function Home() {
                                 />
                               </div>
                               <div className="px-4 py-3.5">
-                                <div className="text-[13px] font-semibold text-[var(--ink)]">
+                                <div className="text-[13px] font-semibold text-[#29261f]">
                                   {outboundCards[1].headline}
                                 </div>
-                                <div className="mt-0.5 text-[11px] text-[var(--ink)]/60">
+                                <div className="mt-0.5 text-[11px] text-[#29261f]/60">
                                   {outboundCards[1].body}
                                 </div>
                                 <button
                                   type="button"
-                                  className="mt-3 w-full rounded-md bg-[var(--ink)]/8 py-2 text-[11px] font-semibold text-[var(--ink)] transition hover:bg-[var(--ink)]/12"
+                                  className="mt-3 w-full rounded-md bg-[#29261f]/8 py-2 text-[11px] font-semibold text-[#29261f] transition hover:bg-[#29261f]/12"
                                 >
                                   {outboundCards[1].cta}  →
                                 </button>
@@ -1149,16 +1196,16 @@ export default function Home() {
                             className="subtle-float-slow absolute right-0 top-0 w-[80%] origin-bottom-left"
                             style={{ ["--float-base" as string]: "rotate(-2.5deg)" }}
                           >
-                            <div className="rounded-2xl border border-[var(--ink)]/12 bg-[var(--cream)]/98 p-5 shadow-[0_40px_80px_-30px_rgba(0,0,0,0.55)] backdrop-blur-sm">
+                            <div className="rounded-2xl border border-[#29261f]/12 bg-[#fff8ea]/98 p-5 shadow-[0_40px_80px_-30px_rgba(0,0,0,0.55)] backdrop-blur-sm">
                               <div className="flex items-center gap-3">
-                                <div className="grid h-10 w-10 place-items-center rounded-full bg-[linear-gradient(135deg,#3a4654,#525e6c)] font-display text-sm text-[var(--cream)]">
+                                <div className="grid h-10 w-10 place-items-center rounded-full bg-[linear-gradient(135deg,#3a4654,#525e6c)] font-display text-sm text-[#fff8ea]">
                                   {outboundCards[0].initials}
                                 </div>
                                 <div className="min-w-0 flex-1">
-                                  <div className="truncate text-sm text-[var(--ink)]">
+                                  <div className="truncate text-sm text-[#29261f]">
                                     {outboundCards[0].name}
                                   </div>
-                                  <div className="truncate text-[11px] text-[var(--ink)]/55">
+                                  <div className="truncate text-[11px] text-[#29261f]/55">
                                     {outboundCards[0].title}
                                   </div>
                                 </div>
@@ -1166,7 +1213,7 @@ export default function Home() {
                                   in · {outboundCards[0].chip}
                                 </span>
                               </div>
-                              <p className="mt-4 text-[13px] leading-relaxed text-[var(--ink)]/80">
+                              <p className="mt-4 text-[13px] leading-relaxed text-[#29261f]/80">
                                 {(outboundCards[0]?.preview ?? "")
                                   .split(/(\([^)]+\))/g)
                                   .map((part, i) =>
@@ -1185,13 +1232,13 @@ export default function Home() {
                               <div className="mt-4 flex gap-2">
                                 <button
                                   type="button"
-                                  className="rounded-full border border-[var(--ink)]/15 bg-[var(--ink)]/5 px-4 py-1.5 text-[11px] font-semibold text-[var(--ink)]/80"
+                                  className="rounded-full border border-[#29261f]/15 bg-[#29261f]/5 px-4 py-1.5 text-[11px] font-semibold text-[#29261f]/80"
                                 >
                                   Profil
                                 </button>
                                 <button
                                   type="button"
-                                  className="rounded-full bg-[var(--clay)] px-4 py-1.5 text-[11px] font-semibold text-[var(--cream)]"
+                                  className="rounded-full bg-[var(--clay)] px-4 py-1.5 text-[11px] font-semibold text-[#fff8ea]"
                                 >
                                   Send besked
                                 </button>
@@ -1205,18 +1252,18 @@ export default function Home() {
                         <div className="relative w-full max-w-[30rem]">
                           {/* Flow builder card */}
                           <div className="w-full">
-                            <div className="rounded-2xl border border-[var(--ink)]/12 bg-[var(--cream)] p-4 shadow-[0_40px_80px_-30px_rgba(0,0,0,0.55)] sm:p-5">
+                            <div className="rounded-2xl border border-[#29261f]/12 bg-[#fff8ea] p-4 shadow-[0_40px_80px_-30px_rgba(0,0,0,0.55)] sm:p-5">
                               {/* Header */}
-                              <div className="flex items-center justify-between border-b border-[var(--ink)]/10 pb-3">
+                              <div className="flex items-center justify-between border-b border-[#29261f]/10 pb-3">
                                 <div className="flex items-center gap-2.5">
-                                  <div className="grid h-7 w-7 place-items-center rounded-md bg-[var(--flame-500)]/15">
-                                    <span className="h-1.5 w-1.5 rounded-full bg-[var(--flame-500)] dot-pulse" />
+                                  <div className="grid h-7 w-7 place-items-center rounded-md bg-[#ff6b2c]/15">
+                                    <span className="h-1.5 w-1.5 rounded-full bg-[#ff6b2c] dot-pulse" />
                                   </div>
                                   <div>
-                                    <div className="text-[11px] font-semibold text-[var(--ink)]">
+                                    <div className="text-[11px] font-semibold text-[#29261f]">
                                       Flow · Nurture varme leads
                                     </div>
-                                    <div className="text-[9px] uppercase tracking-[0.18em] text-[var(--ink)]/55">
+                                    <div className="text-[9px] uppercase tracking-[0.18em] text-[#29261f]/55">
                                       412 aktive · live
                                     </div>
                                   </div>
@@ -1234,57 +1281,57 @@ export default function Home() {
                                     <span className="grid h-5 w-5 place-items-center rounded-md bg-[var(--clay)]/25 text-[9px] font-bold text-[var(--clay)]">
                                       T
                                     </span>
-                                    <span className="text-[11px] font-semibold text-[var(--ink)]">
+                                    <span className="text-[11px] font-semibold text-[#29261f]">
                                       Trigger · Lead opted in
                                     </span>
                                   </div>
                                 </div>
-                                <div aria-hidden className="ml-[14px] h-2.5 w-px bg-[var(--ink)]/20" />
+                                <div aria-hidden className="ml-[14px] h-2.5 w-px bg-[#29261f]/20" />
 
                                 {/* Email */}
-                                <div className="rounded-lg border border-[var(--ink)]/12 bg-[var(--sand)] px-3 py-2">
+                                <div className="rounded-lg border border-[#29261f]/12 bg-[#f6efe4] px-3 py-2">
                                   <div className="flex items-center gap-2">
-                                    <span className="grid h-5 w-5 place-items-center rounded-md bg-[var(--ink)]/12 text-[9px] font-bold text-[var(--ink)]/70">
+                                    <span className="grid h-5 w-5 place-items-center rounded-md bg-[#29261f]/12 text-[9px] font-bold text-[#29261f]/70">
                                       E
                                     </span>
-                                    <span className="text-[11px] font-semibold text-[var(--ink)]">
+                                    <span className="text-[11px] font-semibold text-[#29261f]">
                                       Email · Velkomst
                                     </span>
                                   </div>
                                 </div>
-                                <div aria-hidden className="ml-[14px] h-2.5 w-px bg-[var(--ink)]/20" />
+                                <div aria-hidden className="ml-[14px] h-2.5 w-px bg-[#29261f]/20" />
 
                                 {/* Wait */}
-                                <div className="rounded-lg border border-dashed border-[var(--ink)]/18 px-3 py-2">
+                                <div className="rounded-lg border border-dashed border-[#29261f]/18 px-3 py-2">
                                   <div className="flex items-center gap-2">
-                                    <span className="grid h-5 w-5 place-items-center rounded-md text-[10px] text-[var(--ink)]/45">
+                                    <span className="grid h-5 w-5 place-items-center rounded-md text-[10px] text-[#29261f]/45">
                                       ◷
                                     </span>
-                                    <span className="text-[11px] text-[var(--ink)]/65">Vent 2 dage</span>
+                                    <span className="text-[11px] text-[#29261f]/65">Vent 2 dage</span>
                                   </div>
                                 </div>
-                                <div aria-hidden className="ml-[14px] h-2.5 w-px bg-[var(--ink)]/20" />
+                                <div aria-hidden className="ml-[14px] h-2.5 w-px bg-[#29261f]/20" />
 
                                 {/* SMS */}
-                                <div className="rounded-lg border border-[var(--ink)]/12 bg-[var(--sand)] px-3 py-2">
+                                <div className="rounded-lg border border-[#29261f]/12 bg-[#f6efe4] px-3 py-2">
                                   <div className="flex items-center gap-2">
-                                    <span className="grid h-5 w-5 place-items-center rounded-md bg-[var(--ink)]/12 text-[9px] font-bold text-[var(--ink)]/70">
+                                    <span className="grid h-5 w-5 place-items-center rounded-md bg-[#29261f]/12 text-[9px] font-bold text-[#29261f]/70">
                                       S
                                     </span>
-                                    <span className="text-[11px] font-semibold text-[var(--ink)]">
+                                    <span className="text-[11px] font-semibold text-[#29261f]">
                                       SMS · Tjek-ind
                                     </span>
                                   </div>
                                 </div>
-                                <div aria-hidden className="ml-[14px] h-2.5 w-px bg-[var(--ink)]/20" />
+                                <div aria-hidden className="ml-[14px] h-2.5 w-px bg-[#29261f]/20" />
 
                                 {/* Last step · trigger an outbound call to the lead */}
-                                <div className="rounded-lg border border-[var(--flame-500)]/45 bg-[var(--flame-500)]/10 px-3 py-2">
+                                <div className="rounded-lg border border-[#ff6b2c]/45 bg-[#ff6b2c]/10 px-3 py-2">
                                   <div className="flex items-center gap-2">
-                                    <span className="grid h-5 w-5 place-items-center rounded-md bg-[var(--flame-500)]/25 text-[10px] font-bold text-[var(--flame-500)]">
+                                    <span className="grid h-5 w-5 place-items-center rounded-md bg-[#ff6b2c]/25 text-[10px] font-bold text-[#ff6b2c]">
                                       ☎
                                     </span>
-                                    <span className="text-[11px] font-semibold text-[var(--ink)]">
+                                    <span className="text-[11px] font-semibold text-[#29261f]">
                                       Opfølgende opkald
                                     </span>
                                   </div>
@@ -1298,7 +1345,7 @@ export default function Home() {
                                       <span className="grid h-5 w-5 place-items-center rounded-md bg-[var(--forest)]/25 text-[10px] font-bold text-[var(--forest)]">
                                         ✓
                                       </span>
-                                      <span className="text-[11px] font-semibold text-[var(--ink)]">
+                                      <span className="text-[11px] font-semibold text-[#29261f]">
                                         Møde · i morgen 10:00
                                       </span>
                                       <span className="ml-auto rounded-full border border-[var(--forest)]/35 bg-[var(--forest)]/15 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-[0.18em] text-[var(--forest)]">
@@ -1316,7 +1363,7 @@ export default function Home() {
                                       <span className="grid h-5 w-5 place-items-center rounded-md bg-[var(--forest)]/25 text-[10px] font-bold text-[var(--forest)]">
                                         ✓
                                       </span>
-                                      <span className="text-[11px] font-semibold text-[var(--ink)]">
+                                      <span className="text-[11px] font-semibold text-[#29261f]">
                                         Kontrakt sendt · 32.500 kr
                                       </span>
                                       <span className="ml-auto rounded-full border border-[var(--forest)]/35 bg-[var(--forest)]/15 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-[0.18em] text-[var(--forest)]">
@@ -1334,7 +1381,7 @@ export default function Home() {
                                       <span className="grid h-5 w-5 place-items-center rounded-md bg-[var(--forest)]/25 text-[10px] font-bold text-[var(--forest)]">
                                         ✓
                                       </span>
-                                      <span className="text-[11px] font-semibold text-[var(--ink)]">
+                                      <span className="text-[11px] font-semibold text-[#29261f]">
                                         Onboarding · næste mandag
                                       </span>
                                       <span className="ml-auto rounded-full border border-[var(--forest)]/35 bg-[var(--forest)]/15 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-[0.18em] text-[var(--forest)]">
@@ -1347,37 +1394,37 @@ export default function Home() {
                                 {/* Lead chip — refined avatar that travels through the nodes */}
                                 <div
                                   aria-hidden
-                                  className="lead-glide pointer-events-none absolute right-2 top-[6px] grid h-8 w-8 place-items-center rounded-full bg-gradient-to-br from-[#3a342a] to-[var(--ember)] shadow-[0_10px_24px_-8px_rgba(0,0,0,0.55)] ring-2 ring-[var(--cream)]"
+                                  className="lead-glide pointer-events-none absolute right-2 top-[6px] grid h-8 w-8 place-items-center rounded-full bg-gradient-to-br from-[#3a342a] to-[#0f0d0a] shadow-[0_10px_24px_-8px_rgba(0,0,0,0.55)] ring-2 ring-[#fff8ea]"
                                 >
-                                  <span className="font-display text-[11px] italic font-semibold text-[var(--flame-50)]">
+                                  <span className="font-display text-[11px] italic font-semibold text-[#ffb86b]">
                                     MS
                                   </span>
                                 </div>
                               </div>
 
                               {/* Lead-status — separate from the flow nodes */}
-                              <div className="mt-4 rounded-lg bg-[var(--ink)]/[0.04] px-3 py-2.5">
+                              <div className="mt-4 rounded-lg bg-[#29261f]/[0.04] px-3 py-2.5">
                                 <div className="flex items-center justify-between gap-2">
                                   <div className="flex min-w-0 items-center gap-2">
-                                    <span className="grid h-6 w-6 place-items-center rounded-full bg-[var(--ink)]/10 text-[8px] font-bold text-[var(--ink)]/75">
+                                    <span className="grid h-6 w-6 place-items-center rounded-full bg-[#29261f]/10 text-[8px] font-bold text-[#29261f]/75">
                                       MS
                                     </span>
                                     <div className="min-w-0 leading-tight">
-                                      <div className="truncate text-[10px] font-semibold text-[var(--ink)]">
+                                      <div className="truncate text-[10px] font-semibold text-[#29261f]">
                                         Mette Sørensen
                                       </div>
-                                      <div className="text-[8px] uppercase tracking-[0.18em] text-[var(--ink)]/50">
+                                      <div className="text-[8px] uppercase tracking-[0.18em] text-[#29261f]/50">
                                         Lead-status
                                       </div>
                                     </div>
                                   </div>
                                   <span className="relative h-[18px] min-w-[10rem]">
-                                    <span className="status-pill-tilmeldt absolute inset-0 flex items-center justify-end gap-1.5 whitespace-nowrap text-[9px] font-semibold uppercase tracking-[0.12em] text-[var(--ink)]/75">
-                                      <span className="h-1.5 w-1.5 rounded-full bg-[var(--flame-50)]" />
+                                    <span className="status-pill-tilmeldt absolute inset-0 flex items-center justify-end gap-1.5 whitespace-nowrap text-[9px] font-semibold uppercase tracking-[0.12em] text-[#29261f]/75">
+                                      <span className="h-1.5 w-1.5 rounded-full bg-[#ffb86b]" />
                                       Tilmeldt
                                     </span>
-                                    <span className="status-pill-booket absolute inset-0 flex items-center justify-end gap-1.5 whitespace-nowrap text-[9px] font-semibold uppercase tracking-[0.12em] text-[var(--ink)]">
-                                      <span className="h-1.5 w-1.5 rounded-full bg-[var(--flame-500)] dot-pulse" />
+                                    <span className="status-pill-booket absolute inset-0 flex items-center justify-end gap-1.5 whitespace-nowrap text-[9px] font-semibold uppercase tracking-[0.12em] text-[#29261f]">
+                                      <span className="h-1.5 w-1.5 rounded-full bg-[#ff6b2c] dot-pulse" />
                                       Møde booket · 10:00
                                     </span>
                                     <span className="status-pill-vundet absolute inset-0 flex items-center justify-end gap-1.5 whitespace-nowrap text-[9px] font-semibold uppercase tracking-[0.12em] text-[var(--forest)]">
@@ -1389,7 +1436,7 @@ export default function Home() {
                               </div>
 
                               {/* Footer */}
-                              <div className="mt-4 flex items-center justify-end border-t border-[var(--ink)]/10 pt-3 text-[9px] text-[var(--ink)]/55">
+                              <div className="mt-4 flex items-center justify-end border-t border-[#29261f]/10 pt-3 text-[9px] text-[#29261f]/55">
                                 <span className="tabular">+38 denne uge</span>
                               </div>
                             </div>
@@ -1399,22 +1446,22 @@ export default function Home() {
 
                       {stage.visual === "pipeline" && (
                         <div className="w-full max-w-[34rem]">
-                          <div className="rounded-2xl border border-[var(--ink)]/12 bg-[var(--cream)] p-5 shadow-[0_50px_100px_-40px_rgba(0,0,0,0.55)] sm:p-6">
+                          <div className="rounded-2xl border border-[#29261f]/12 bg-[#fff8ea] p-5 shadow-[0_50px_100px_-40px_rgba(0,0,0,0.55)] sm:p-6">
                             <div className="mb-5 flex items-center justify-between">
                               <div className="flex items-center gap-3">
-                                <div className="grid h-7 w-7 place-items-center rounded-md bg-[var(--flame-500)]/15">
-                                  <span className="h-2 w-2 rounded-full bg-[var(--flame-500)] dot-pulse" />
+                                <div className="grid h-7 w-7 place-items-center rounded-md bg-[#ff6b2c]/15">
+                                  <span className="h-2 w-2 rounded-full bg-[#ff6b2c] dot-pulse" />
                                 </div>
                                 <div>
-                                  <div className="text-[12px] font-semibold text-[var(--ink)]">
+                                  <div className="text-[12px] font-semibold text-[#29261f]">
                                     Pipeline · København
                                   </div>
-                                  <div className="text-[10px] uppercase tracking-[0.2em] text-[var(--ink)]/55">
+                                  <div className="text-[10px] uppercase tracking-[0.2em] text-[#29261f]/55">
                                     25 åbne · live
                                   </div>
                                 </div>
                               </div>
-                              <span className="tabular text-[10px] text-[var(--ink)]/55">
+                              <span className="tabular text-[10px] text-[#29261f]/55">
                                 opdateret 14:32
                               </span>
                             </div>
@@ -1428,16 +1475,16 @@ export default function Home() {
                                 aria-hidden
                                 className="pipeline-glide pointer-events-none absolute bottom-0 left-0 z-10 w-[calc(25%-0.5625rem)]"
                               >
-                                <div className="rounded-lg border border-[var(--flame-500)]/45 bg-[#fff3df] p-2.5 shadow-[0_20px_40px_-15px_rgba(255,107,44,0.30)]">
+                                <div className="rounded-lg border border-[#ff6b2c]/45 bg-[#fff3df] p-2.5 shadow-[0_20px_40px_-15px_rgba(255,107,44,0.30)]">
                                   <div className="flex items-center gap-2">
-                                    <div className="grid h-5 w-5 place-items-center rounded-full bg-[var(--flame-500)]/20 text-[9px] font-bold text-[var(--flame-500)]">
+                                    <div className="grid h-5 w-5 place-items-center rounded-full bg-[#ff6b2c]/20 text-[9px] font-bold text-[#ff6b2c]">
                                       KH
                                     </div>
-                                    <div className="text-[10px] text-[var(--ink)]">
+                                    <div className="text-[10px] text-[#29261f]">
                                       Karen Hjort
                                     </div>
                                   </div>
-                                  <div className="mt-1 text-[9px] text-[var(--ink)]/55">
+                                  <div className="mt-1 text-[9px] text-[#29261f]/55">
                                     Tagteam Aps
                                   </div>
                                 </div>
@@ -1448,11 +1495,11 @@ export default function Home() {
                                   <div className="mb-2 flex items-center justify-between">
                                     <div className="flex items-center gap-1.5">
                                       <span className={`h-1.5 w-1.5 rounded-full ${col.accent}`} />
-                                      <span className="text-[9px] font-bold uppercase tracking-[0.18em] text-[var(--ink)]/65">
+                                      <span className="text-[9px] font-bold uppercase tracking-[0.18em] text-[#29261f]/65">
                                         {col.label}
                                       </span>
                                     </div>
-                                    <span className="tabular text-[9px] text-[var(--ink)]/45">
+                                    <span className="tabular text-[9px] text-[#29261f]/45">
                                       {col.count}
                                     </span>
                                   </div>
@@ -1462,22 +1509,22 @@ export default function Home() {
                                       .map((card, ki) => (
                                         <div
                                           key={card.name}
-                                          className="ledger-row rounded-lg border border-[var(--ink)]/10 bg-[var(--sand)] p-2.5 transition hover:border-[var(--ink)]/18"
+                                          className="ledger-row rounded-lg border border-[#29261f]/10 bg-[#f6efe4] p-2.5 transition hover:border-[#29261f]/18"
                                           style={{ animationDelay: `${(ci * 2 + ki) * 0.08}s` }}
                                         >
                                           <div className="flex items-center gap-1.5">
-                                            <div className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-[var(--ink)]/10 text-[9px] font-bold text-[var(--ink)]/75">
+                                            <div className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-[#29261f]/10 text-[9px] font-bold text-[#29261f]/75">
                                               {card.initials}
                                             </div>
-                                            <div className="min-w-0 flex-1 truncate text-[10px] text-[var(--ink)]">
+                                            <div className="min-w-0 flex-1 truncate text-[10px] text-[#29261f]">
                                               {card.name}
                                             </div>
                                           </div>
-                                          <div className="mt-1 truncate text-[9px] text-[var(--ink)]/55">
+                                          <div className="mt-1 truncate text-[9px] text-[#29261f]/55">
                                             {card.company}
                                           </div>
                                           {card.note && (
-                                            <div className={`mt-1.5 truncate text-[9px] ${ci === 3 ? "tabular text-[var(--forest)]" : "text-[var(--flame-500)]"}`}>
+                                            <div className={`mt-1.5 truncate text-[9px] ${ci === 3 ? "tabular text-[var(--forest)]" : "text-[#ff6b2c]"}`}>
                                               {ci === 3 ? "✓ " : "→ "}
                                               {card.note}
                                             </div>
@@ -1489,7 +1536,7 @@ export default function Home() {
                               ))}
                             </div>
 
-                            <div className="mt-5 flex items-center justify-between border-t border-[var(--ink)]/10 pt-4 text-[10px] text-[var(--ink)]/55">
+                            <div className="mt-5 flex items-center justify-between border-t border-[#29261f]/10 pt-4 text-[10px] text-[#29261f]/55">
                               <span className="flex items-center gap-2">
                                 <span className="h-1.5 w-1.5 rounded-full bg-[var(--forest)] dot-pulse" />
                                 Fordeling aktiv · Postnr. 1000–2999
@@ -1513,14 +1560,14 @@ export default function Home() {
                               the displayed lead actually changes — i.e. after the call screen
                               finishes on cycle 2+). That's how the toast can overlay the
                               previous lead's settled SMS chat instead of an empty backdrop. */}
-                          <div className="relative w-[19rem] rounded-[2.5rem] border border-[var(--ink)]/15 bg-gradient-to-b from-[var(--cream)] to-[var(--sand)] p-2 shadow-[0_60px_120px_-40px_rgba(0,0,0,0.55)]">
-                            <div className="relative h-[34rem] overflow-hidden rounded-[2rem] bg-[var(--cream)]">
+                          <div className="relative w-[19rem] rounded-[2.5rem] border border-[#29261f]/15 bg-gradient-to-b from-[#fff8ea] to-[#f6efe4] p-2 shadow-[0_60px_120px_-40px_rgba(0,0,0,0.55)]">
+                            <div className="relative h-[34rem] overflow-hidden rounded-[2rem] bg-[#fff8ea]">
                               {/* Persistent status bar across phases */}
-                              <div className="absolute inset-x-0 top-0 z-20 flex items-center justify-between px-5 pt-3 text-[10px] text-[var(--ink)]/65">
+                              <div className="absolute inset-x-0 top-0 z-20 flex items-center justify-between px-5 pt-3 text-[10px] text-[#29261f]/65">
                                 <span className="tabular">14:30</span>
                                 <span className="flex items-center gap-1">
-                                  <span className="h-1.5 w-1.5 rounded-full bg-[var(--ink)]/65" />
-                                  <span className="h-2 w-3 rounded-sm border border-[var(--ink)]/55" />
+                                  <span className="h-1.5 w-1.5 rounded-full bg-[#29261f]/65" />
+                                  <span className="h-2 w-3 rounded-sm border border-[#29261f]/55" />
                                 </span>
                               </div>
 
@@ -1533,42 +1580,42 @@ export default function Home() {
                                     className="pointer-events-none absolute inset-0 -z-10"
                                     style={{
                                       background:
-                                        "radial-gradient(ellipse at 20% 25%, rgba(255,107,44,0.18), transparent 55%), radial-gradient(ellipse at 75% 80%, rgba(25,70,58,0.20), transparent 55%), linear-gradient(180deg, var(--cream), #efe6d6)",
+                                        "radial-gradient(ellipse at 20% 25%, rgba(255,107,44,0.18), transparent 55%), radial-gradient(ellipse at 75% 80%, rgba(25,70,58,0.20), transparent 55%), linear-gradient(180deg, #fff8ea, #efe6d6)",
                                     }}
                                   />
                                   {/* Big wallpaper clock */}
                                   <div className="mt-10 text-center">
-                                    <div className="font-display text-[3.5rem] leading-none tracking-tight text-[var(--ink)]/85">
+                                    <div className="font-display text-[3.5rem] leading-none tracking-tight text-[#29261f]/85">
                                       14:30
                                     </div>
-                                    <div className="mt-1 text-[10px] uppercase tracking-[0.3em] text-[var(--ink)]/55">
+                                    <div className="mt-1 text-[10px] uppercase tracking-[0.3em] text-[#29261f]/55">
                                       Tirsdag · 28. apr
                                     </div>
                                   </div>
 
                                   {/* Incoming notification — drops in at 0.2s */}
                                   <div
-                                    className="notification-drop relative mx-1 mt-10 rounded-2xl border border-[var(--ink)]/12 bg-[var(--cream)]/95 p-3.5 shadow-[0_30px_60px_-25px_rgba(0,0,0,0.55)] backdrop-blur-sm"
+                                    className="notification-drop relative mx-1 mt-10 rounded-2xl border border-[#29261f]/12 bg-[#fff8ea]/95 p-3.5 shadow-[0_30px_60px_-25px_rgba(0,0,0,0.55)] backdrop-blur-sm"
                                     style={{ animationDelay: "0.25s" }}
                                   >
-                                    <div className="flex items-center gap-2 text-[9px] font-bold uppercase tracking-[0.2em] text-[var(--ink)]/55">
-                                      <span className="grid h-4 w-4 place-items-center rounded-[5px] bg-[var(--flame-500)] text-[8px] font-bold text-[var(--cream)]">
+                                    <div className="flex items-center gap-2 text-[9px] font-bold uppercase tracking-[0.2em] text-[#29261f]/55">
+                                      <span className="grid h-4 w-4 place-items-center rounded-[5px] bg-[#ff6b2c] text-[8px] font-bold text-[#fff8ea]">
                                         C
                                       </span>
                                       Carter &amp; Co
-                                      <span className="ml-auto tabular text-[var(--ink)]/40">nu</span>
+                                      <span className="ml-auto tabular text-[#29261f]/40">nu</span>
                                     </div>
-                                    <div className="mt-2 text-[12px] font-semibold leading-tight text-[var(--ink)]">
+                                    <div className="mt-2 text-[12px] font-semibold leading-tight text-[#29261f]">
                                       Nyt lead · {currentLead.name}
                                     </div>
-                                    <div className="mt-0.5 text-[11px] text-[var(--ink)]/65">
+                                    <div className="mt-0.5 text-[11px] text-[#29261f]/65">
                                       {currentLead.company} · {currentLead.source}
                                     </div>
 
                                     {/* Tap ripple — fires just before screen swap */}
                                     <span
                                       aria-hidden
-                                      className="tap-ripple pointer-events-none absolute right-6 top-1/2 h-9 w-9 -translate-y-1/2 rounded-full bg-[var(--flame-500)]/55"
+                                      className="tap-ripple pointer-events-none absolute right-6 top-1/2 h-9 w-9 -translate-y-1/2 rounded-full bg-[#ff6b2c]/55"
                                     />
                                   </div>
                                 </div>
@@ -1584,7 +1631,7 @@ export default function Home() {
                                 }}
                               >
                                 {/* Top context — outgoing call from /leads */}
-                                <div className="flex items-center gap-2 text-[9px] font-bold uppercase tracking-[0.3em] text-[var(--cream)]/65">
+                                <div className="flex items-center gap-2 text-[9px] font-bold uppercase tracking-[0.3em] text-[#fff8ea]/65">
                                   <span aria-hidden>↗</span>
                                   Udgående · /leads
                                 </div>
@@ -1610,39 +1657,39 @@ export default function Home() {
                                       className="call-ring-pulse absolute inset-0 rounded-full border border-[var(--cream)]/35"
                                       style={{ animationDelay: "1.1s" }}
                                     />
-                                    <div className="relative grid h-24 w-24 place-items-center rounded-full bg-[#1a3a32] font-display text-3xl text-[var(--cream)] ring-2 ring-[var(--cream)]/15">
+                                    <div className="relative grid h-24 w-24 place-items-center rounded-full bg-[#1a3a32] font-display text-3xl text-[#fff8ea] ring-2 ring-[var(--cream)]/15">
                                       {currentLead.initials}
                                     </div>
                                   </div>
-                                  <div className="mt-5 font-display text-[1.4rem] tracking-tight text-[var(--cream)]">
+                                  <div className="mt-5 font-display text-[1.4rem] tracking-tight text-[#fff8ea]">
                                     {currentLead.name}
                                   </div>
-                                  <div className="mt-1 text-[10px] uppercase tracking-[0.3em] text-[var(--cream)]/60">
+                                  <div className="mt-1 text-[10px] uppercase tracking-[0.3em] text-[#fff8ea]/60">
                                     {currentLead.company}
                                   </div>
-                                  <div className="mt-3 flex items-center gap-1 text-[11px] text-[var(--cream)]/75">
+                                  <div className="mt-3 flex items-center gap-1 text-[11px] text-[#fff8ea]/75">
                                     Ringer op
-                                    <span className="typing-dot inline-block h-1 w-1 rounded-full bg-[var(--cream)]/75" style={{ animationDelay: "0s" }} />
-                                    <span className="typing-dot inline-block h-1 w-1 rounded-full bg-[var(--cream)]/75" style={{ animationDelay: "0.18s" }} />
-                                    <span className="typing-dot inline-block h-1 w-1 rounded-full bg-[var(--cream)]/75" style={{ animationDelay: "0.36s" }} />
+                                    <span className="typing-dot inline-block h-1 w-1 rounded-full bg-[#fff8ea]/75" style={{ animationDelay: "0s" }} />
+                                    <span className="typing-dot inline-block h-1 w-1 rounded-full bg-[#fff8ea]/75" style={{ animationDelay: "0.18s" }} />
+                                    <span className="typing-dot inline-block h-1 w-1 rounded-full bg-[#fff8ea]/75" style={{ animationDelay: "0.36s" }} />
                                   </div>
                                 </div>
 
                                 {/* Call controls — abstract, evocative */}
                                 <div className="flex items-center justify-center gap-5">
-                                  <span aria-hidden className="grid h-11 w-11 place-items-center rounded-full bg-[var(--cream)]/10 text-[var(--cream)]/80">
+                                  <span aria-hidden className="grid h-11 w-11 place-items-center rounded-full bg-[#fff8ea]/10 text-[#fff8ea]/80">
                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
                                       <path d="M5 9.5h2.5l1.5-2h6l1.5 2H19a1.5 1.5 0 0 1 1.5 1.5v6A1.5 1.5 0 0 1 19 18.5H5A1.5 1.5 0 0 1 3.5 17v-6A1.5 1.5 0 0 1 5 9.5Z" />
                                       <circle cx="12" cy="14" r="2.5" />
                                     </svg>
                                   </span>
                                   {/* Hang-up button */}
-                                  <span aria-hidden className="grid h-12 w-12 place-items-center rounded-full bg-[#d63b2c] text-[var(--cream)] shadow-[0_8px_24px_-6px_rgba(214,59,44,0.6)]">
+                                  <span aria-hidden className="grid h-12 w-12 place-items-center rounded-full bg-[#d63b2c] text-[#fff8ea] shadow-[0_8px_24px_-6px_rgba(214,59,44,0.6)]">
                                     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
                                       <path d="M12 8c-3.5 0-6.7 1.1-9.3 3a1.5 1.5 0 0 0-.5 1.7l1 2.4c.3.7 1 1.1 1.7 1l3.4-.5c.6-.1 1.1-.6 1.2-1.2l.3-1.7c1.4-.5 2.8-.7 4.2-.7 1.4 0 2.8.2 4.2.7l.3 1.7c.1.6.6 1.1 1.2 1.2l3.4.5c.7.1 1.4-.3 1.7-1l1-2.4a1.5 1.5 0 0 0-.5-1.7C18.7 9.1 15.5 8 12 8Z" transform="rotate(135 12 12)" />
                                     </svg>
                                   </span>
-                                  <span aria-hidden className="grid h-11 w-11 place-items-center rounded-full bg-[var(--cream)]/10 text-[var(--cream)]/80">
+                                  <span aria-hidden className="grid h-11 w-11 place-items-center rounded-full bg-[#fff8ea]/10 text-[#fff8ea]/80">
                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
                                       <path d="M9 4.5h2v15H9zM13 7.5h2v9h-2z" />
                                     </svg>
@@ -1658,20 +1705,20 @@ export default function Home() {
                               {!isFirstCycle && (
                                 <div
                                   key={`toast-${smsCycle}`}
-                                  className="inapp-toast pointer-events-none absolute left-3 right-3 top-7 z-30 rounded-2xl border border-[var(--ink)]/12 bg-[var(--cream)]/95 p-3 shadow-[0_30px_60px_-25px_rgba(0,0,0,0.55)] backdrop-blur-sm"
+                                  className="inapp-toast pointer-events-none absolute left-3 right-3 top-7 z-30 rounded-2xl border border-[#29261f]/12 bg-[#fff8ea]/95 p-3 shadow-[0_30px_60px_-25px_rgba(0,0,0,0.55)] backdrop-blur-sm"
                                   style={{ animationDelay: "0.2s" }}
                                 >
-                                  <div className="flex items-center gap-2 text-[8.5px] font-bold uppercase tracking-[0.2em] text-[var(--ink)]/55">
-                                    <span className="grid h-3.5 w-3.5 place-items-center rounded-[4px] bg-[var(--flame-500)] text-[7px] font-bold text-[var(--cream)]">
+                                  <div className="flex items-center gap-2 text-[8.5px] font-bold uppercase tracking-[0.2em] text-[#29261f]/55">
+                                    <span className="grid h-3.5 w-3.5 place-items-center rounded-[4px] bg-[#ff6b2c] text-[7px] font-bold text-[#fff8ea]">
                                       C
                                     </span>
                                     Carter &amp; Co
-                                    <span className="ml-auto tabular text-[var(--ink)]/40">nu</span>
+                                    <span className="ml-auto tabular text-[#29261f]/40">nu</span>
                                   </div>
-                                  <div className="mt-1.5 text-[11px] font-semibold leading-tight text-[var(--ink)]">
+                                  <div className="mt-1.5 text-[11px] font-semibold leading-tight text-[#29261f]">
                                     Nyt lead · {currentLead.name}
                                   </div>
-                                  <div className="mt-0.5 text-[10px] text-[var(--ink)]/60">
+                                  <div className="mt-0.5 text-[10px] text-[#29261f]/60">
                                     {currentLead.company} · {currentLead.source}
                                   </div>
                                 </div>
@@ -1683,7 +1730,7 @@ export default function Home() {
                                 className="phone-screen-in absolute inset-0 flex flex-col px-4 pb-5 pt-9"
                               >
                                 {/* App chrome — back arrow + route */}
-                                <div className="mb-2 flex items-center text-[9px] uppercase tracking-[0.25em] text-[var(--ink)]/55">
+                                <div className="mb-2 flex items-center text-[9px] uppercase tracking-[0.25em] text-[#29261f]/55">
                                   <span className="flex items-center gap-1.5">
                                     <span aria-hidden>←</span>
                                     /leads
@@ -1691,15 +1738,15 @@ export default function Home() {
                                 </div>
 
                                 {/* Lead header */}
-                                <div className="mb-3 flex items-center gap-3 border-b border-[var(--ink)]/10 pb-3">
-                                  <div className="grid h-9 w-9 place-items-center rounded-full bg-[var(--ink)]/10 font-display text-xs text-[var(--ink)]/75">
+                                <div className="mb-3 flex items-center gap-3 border-b border-[#29261f]/10 pb-3">
+                                  <div className="grid h-9 w-9 place-items-center rounded-full bg-[#29261f]/10 font-display text-xs text-[#29261f]/75">
                                     {displayedLead.initials}
                                   </div>
                                   <div className="min-w-0 flex-1">
-                                    <div className="text-[12px] text-[var(--ink)]">
+                                    <div className="text-[12px] text-[#29261f]">
                                       {displayedLead.name}
                                     </div>
-                                    <div className="text-[9px] uppercase tracking-[0.2em] text-[var(--ink)]/50">
+                                    <div className="text-[9px] uppercase tracking-[0.2em] text-[#29261f]/50">
                                       {displayedLead.company} · {displayedLead.source}
                                     </div>
                                   </div>
@@ -1713,23 +1760,23 @@ export default function Home() {
                                     <>
                                   {/* Sælger ringer chip — appears first */}
                                   <div
-                                    className="bubble-in flex items-center gap-2 self-stretch rounded-xl border border-[var(--ink)]/12 bg-[var(--ink)]/[0.04] px-3 py-2"
+                                    className="bubble-in flex items-center gap-2 self-stretch rounded-xl border border-[#29261f]/12 bg-[#29261f]/[0.04] px-3 py-2"
                                     style={{ animationDelay: `${phase3Base + 0.5}s` }}
                                   >
-                                    <span className="relative grid h-5 w-5 shrink-0 place-items-center rounded-full bg-[var(--forest)] text-[var(--cream)]">
+                                    <span className="relative grid h-5 w-5 shrink-0 place-items-center rounded-full bg-[var(--forest)] text-[#fff8ea]">
                                       <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
                                         <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z" />
                                       </svg>
                                     </span>
                                     <div className="min-w-0 flex-1">
-                                      <div className="text-[10px] text-[var(--ink)]">
+                                      <div className="text-[10px] text-[#29261f]">
                                         Sælger ringede · ingen svar
                                       </div>
-                                      <div className="text-[9px] text-[var(--ink)]/55">
+                                      <div className="text-[9px] text-[#29261f]/55">
                                         23 sek &middot; SMS-flow tager over
                                       </div>
                                     </div>
-                                    <span className="tabular text-[9px] text-[var(--ink)]/45">{displayedLead.callDoneAt}</span>
+                                    <span className="tabular text-[9px] text-[#29261f]/45">{displayedLead.callDoneAt}</span>
                                   </div>
 
                                   {/* Calendar-check automation — compact slot picker.
@@ -1754,12 +1801,12 @@ export default function Home() {
                                       <span className="font-mono text-[8.5px] font-bold uppercase tracking-[0.25em] text-[var(--clay)]">
                                         Agent
                                       </span>
-                                      <span className="truncate font-mono text-[8.5px] text-[var(--ink)]/55">
-                                        <span className="text-[var(--ink)]/40">·</span>{" "}
-                                        <span className="text-[var(--ink)]/70">cal.check</span>
-                                        <span className="text-[var(--ink)]/35">{"("}</span>
+                                      <span className="truncate font-mono text-[8.5px] text-[#29261f]/55">
+                                        <span className="text-[#29261f]/40">·</span>{" "}
+                                        <span className="text-[#29261f]/70">cal.check</span>
+                                        <span className="text-[#29261f]/35">{"("}</span>
                                         <span className="text-[var(--clay)]">{`"${displayedLead.automationDate}"`}</span>
-                                        <span className="text-[var(--ink)]/35">{")"}</span>
+                                        <span className="text-[#29261f]/35">{")"}</span>
                                       </span>
                                       <span className="dot-pulse ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--forest)]" />
                                     </div>
@@ -1780,7 +1827,7 @@ export default function Home() {
                                             <span
                                               aria-hidden
                                               className={`text-[9px] leading-none ${
-                                                slot.available ? "text-[var(--forest)]" : "text-[var(--ink)]/35"
+                                                slot.available ? "text-[var(--forest)]" : "text-[#29261f]/35"
                                               }`}
                                             >
                                               {slot.available ? "✓" : "×"}
@@ -1789,7 +1836,7 @@ export default function Home() {
                                               className={`tabular text-[9.5px] leading-none ${
                                                 slot.available
                                                   ? "font-bold text-[var(--forest)]"
-                                                  : "text-[var(--ink)]/35 line-through"
+                                                  : "text-[#29261f]/35 line-through"
                                               }`}
                                             >
                                               {slot.t}
@@ -1828,13 +1875,13 @@ export default function Home() {
                                       <div
                                         className={`max-w-[82%] rounded-2xl px-3 py-2 text-[12px] leading-snug ${
                                           m.from === "us"
-                                            ? "bg-[var(--forest)] text-[var(--cream)]"
-                                            : "bg-[var(--ink)]/10 text-[var(--ink)]"
+                                            ? "bg-[var(--forest)] text-[#fff8ea]"
+                                            : "bg-[#29261f]/10 text-[#29261f]"
                                         }`}
                                       >
                                         {m.text}
                                       </div>
-                                      <span className="mt-0.5 px-1 text-[9px] tabular text-[var(--ink)]/45">
+                                      <span className="mt-0.5 px-1 text-[9px] tabular text-[#29261f]/45">
                                         {m.time}
                                       </span>
                                     </div>
@@ -1846,23 +1893,23 @@ export default function Home() {
                                           automation + SMS chain on the answered path. Same
                                           chip shell as sælger ringede, different copy. */}
                                       <div
-                                        className="bubble-in flex items-center gap-2 self-stretch rounded-xl border border-[var(--ink)]/12 bg-[var(--ink)]/[0.04] px-3 py-2"
+                                        className="bubble-in flex items-center gap-2 self-stretch rounded-xl border border-[#29261f]/12 bg-[#29261f]/[0.04] px-3 py-2"
                                         style={{ animationDelay: `${phase3Base + 0.5}s` }}
                                       >
-                                        <span className="relative grid h-5 w-5 shrink-0 place-items-center rounded-full bg-[var(--forest)] text-[var(--cream)]">
+                                        <span className="relative grid h-5 w-5 shrink-0 place-items-center rounded-full bg-[var(--forest)] text-[#fff8ea]">
                                           <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
                                             <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z" />
                                           </svg>
                                         </span>
                                         <div className="min-w-0 flex-1">
-                                          <div className="text-[10px] text-[var(--ink)]">
+                                          <div className="text-[10px] text-[#29261f]">
                                             Sælger talte med {displayedLead.name.split(" ")[0]}
                                           </div>
-                                          <div className="text-[9px] text-[var(--ink)]/55">
+                                          <div className="text-[9px] text-[#29261f]/55">
                                             {displayedLead.callDuration} &middot; aftale lukket på opkald
                                           </div>
                                         </div>
-                                        <span className="tabular text-[9px] text-[var(--ink)]/45">{displayedLead.callDoneAt}</span>
+                                        <span className="tabular text-[9px] text-[#29261f]/45">{displayedLead.callDoneAt}</span>
                                       </div>
                                     </>
                                   )}
@@ -1901,7 +1948,7 @@ export default function Home() {
                                       <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-[var(--forest)]">
                                         {displayedLead.outcome === "customer" ? "Kunde" : "Booket"}
                                       </div>
-                                      <div className="text-[11px] text-[var(--ink)]">
+                                      <div className="text-[11px] text-[#29261f]">
                                         {displayedLead.outcome === "customer"
                                           ? `Aftale lukket · ${displayedLead.bookingLabel}`
                                           : displayedLead.bookingLabel}
@@ -1927,32 +1974,32 @@ export default function Home() {
       </section>
 
       {/* ─────── Section: Before / After (cream) ─────── */}
-      <section className="relative overflow-hidden bg-[var(--sand)] py-28 text-[var(--ink)] sm:py-36">
+      <section className="relative overflow-hidden bg-[#f6efe4] py-28 text-[#29261f] sm:py-36">
         <div aria-hidden className="paper-grain" />
 
         {/* EmberSpark — top: bridges down from dark offer */}
         <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-10 bg-[linear-gradient(180deg,rgba(255,107,44,0.18),transparent)]" />
-        <div aria-hidden className="pointer-events-none absolute left-1/2 top-0 h-[2px] w-[min(680px,60%)] -translate-x-1/2 bg-[linear-gradient(90deg,transparent,var(--flame-500)_30%,var(--flame-500)_70%,transparent)] shadow-[0_0_28px_rgba(255,107,44,0.7)]" />
+        <div aria-hidden className="pointer-events-none absolute left-1/2 top-0 h-[2px] w-[min(680px,60%)] -translate-x-1/2 bg-[linear-gradient(90deg,transparent,#ff6b2c_30%,#ff6b2c_70%,transparent)] shadow-[0_0_28px_rgba(255,107,44,0.7)]" />
 
         {/* EmberSpark — bottom: bridges up to dark process */}
         <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-[linear-gradient(0deg,rgba(255,107,44,0.18),transparent)]" />
-        <div aria-hidden className="pointer-events-none absolute bottom-0 left-1/2 h-[2px] w-[min(680px,60%)] -translate-x-1/2 bg-[linear-gradient(90deg,transparent,var(--flame-500)_30%,var(--flame-500)_70%,transparent)] shadow-[0_0_28px_rgba(255,107,44,0.7)]" />
+        <div aria-hidden className="pointer-events-none absolute bottom-0 left-1/2 h-[2px] w-[min(680px,60%)] -translate-x-1/2 bg-[linear-gradient(90deg,transparent,#ff6b2c_30%,#ff6b2c_70%,transparent)] shadow-[0_0_28px_rgba(255,107,44,0.7)]" />
 
         <div className="relative z-[1] mx-auto w-full max-w-[1280px] px-8 sm:px-12">
-          <h2 className="ml-auto max-w-3xl text-right font-display text-[10vw] leading-[0.92] tracking-[-0.04em] text-[var(--ink)] sm:text-6xl lg:text-7xl">
+          <h2 className="ml-auto max-w-3xl text-right font-display text-[10vw] leading-[0.92] tracking-[-0.04em] text-[#29261f] sm:text-6xl lg:text-7xl">
             Det her er forskellen.
           </h2>
 
           <div className="mt-16 grid gap-6 sm:mt-20 sm:grid-cols-2 sm:gap-10">
             {/* FØR — faded, monochrome */}
-            <div className="relative rounded-2xl border border-[var(--ink)]/15 bg-[#efe6d6]/70 p-8 sm:p-10">
-              <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-[var(--ink)]/55">
+            <div className="relative rounded-2xl border border-[#29261f]/15 bg-[#efe6d6]/70 p-8 sm:p-10">
+              <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-[#29261f]/55">
                 Før · som det plejer
               </p>
-              <h3 className="mt-3 font-display text-3xl italic leading-tight tracking-tight text-[var(--ink)]/70 sm:text-[2.25rem]">
+              <h3 className="mt-3 font-display text-3xl italic leading-tight tracking-tight text-[#29261f]/70 sm:text-[2.25rem]">
                 Leads i en delt indbakke.
               </h3>
-              <ul className="mt-7 flex flex-col gap-3.5 text-[15px] leading-relaxed text-[var(--ink)]/65">
+              <ul className="mt-7 flex flex-col gap-3.5 text-[15px] leading-relaxed text-[#29261f]/65">
                 {[
                   "Leads lander i en delt indbakke ingen ejer.",
                   "Sælger ringer to dage senere — leadet er kølet af.",
@@ -1962,7 +2009,7 @@ export default function Home() {
                   <li key={line} className="flex items-start gap-3">
                     <span
                       aria-hidden
-                      className="mt-2 inline-block h-px w-3 shrink-0 bg-[var(--ink)]/35"
+                      className="mt-2 inline-block h-px w-3 shrink-0 bg-[#29261f]/35"
                     />
                     <span>{line}</span>
                   </li>
@@ -1971,14 +2018,16 @@ export default function Home() {
             </div>
 
             {/* EFTER — vibrant */}
-            <div className="relative rounded-2xl border border-[var(--clay)]/40 bg-[var(--cream)] p-8 shadow-[0_30px_80px_-30px_rgba(218,96,34,0.35)] sm:p-10">
-              <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-[var(--flame-500)]">
+            <div className="relative rounded-2xl border border-[var(--clay)]/40 bg-[#fff8ea] p-8 shadow-[0_30px_80px_-30px_rgba(218,96,34,0.35)] sm:p-10">
+              <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-[#ff6b2c]">
                 Efter · med systemet
               </p>
-              <h3 className="mt-3 font-display text-3xl italic leading-tight tracking-tight text-[var(--flame-500)] sm:text-[2.25rem]">
-                Ringet op før leadet køler.
+              <h3 className="mt-3 font-display text-3xl italic leading-tight tracking-tight sm:text-[2.25rem]">
+                <span className="bg-gradient-to-b from-[#ffb86b] via-[#ff6b2c] to-[#c93c0a] bg-clip-text text-transparent">
+                  Ringet op før leadet køler.
+                </span>
               </h3>
-              <ul className="mt-7 flex flex-col gap-3.5 text-[15px] leading-relaxed text-[var(--ink)]/82">
+              <ul className="mt-7 flex flex-col gap-3.5 text-[15px] leading-relaxed text-[#29261f]/82">
                 {[
                   "Lead fanget — kilde, kontekst, ejer fra første sekund.",
                   "Sælger har leadet på telefonen samme sekund det lander.",
@@ -1988,7 +2037,7 @@ export default function Home() {
                   <li key={line} className="flex items-start gap-3">
                     <span
                       aria-hidden
-                      className="mt-2 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--flame-500)]"
+                      className="mt-2 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-[#ff6b2c]"
                     />
                     <span>{line}</span>
                   </li>
@@ -2006,15 +2055,15 @@ export default function Home() {
         when content is ready. See cases array for analogous structure.
       */}
       {false && (
-      <section className="relative overflow-hidden bg-[var(--ember-deep)] py-28 sm:py-36">
+      <section className="relative overflow-hidden bg-[#0a0907] py-28 sm:py-36">
         <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
           <div className="absolute left-1/2 top-[20%] h-[420px] w-[720px] -translate-x-1/2 rounded-full bg-[radial-gradient(ellipse_at_center,rgba(255,107,44,0.07),transparent_60%)] blur-2xl" />
         </div>
 
         <div className="mx-auto w-full max-w-[1280px] px-8 sm:px-12">
           <div className="flex items-center gap-3">
-            <span aria-hidden className="h-px w-10 bg-[var(--flame-500)]" />
-            <p className="text-[10px] font-bold uppercase tracking-[0.4em] text-[var(--flame-500)]">
+            <span aria-hidden className="h-px w-10 bg-[#ff6b2c]" />
+            <p className="text-[10px] font-bold uppercase tracking-[0.4em] text-[#ff6b2c]">
               Hvad kunderne siger
             </p>
           </div>
@@ -2022,7 +2071,7 @@ export default function Home() {
             Folk der har bygget <span className="italic text-[var(--clay)]">maskinen</span> sammen med mig.
           </h2>
           <p className="mt-5 max-w-xl text-[15px] leading-relaxed text-[var(--cream)]/55">
-            <span className="font-mono text-[10px] uppercase tracking-[0.25em] text-[var(--flame-500)]/80">
+            <span className="font-mono text-[10px] uppercase tracking-[0.25em] text-[#ff6b2c]/80">
               Placeholder ·
             </span>{" "}
             Konkrete kundecitater landes her når de er klar — jeg opfinder ikke proof.
@@ -2079,7 +2128,7 @@ export default function Home() {
                       key={i}
                       className="relative flex flex-col gap-5 rounded-2xl border border-dashed border-[var(--cream)]/20 bg-[var(--cream)]/[0.03] p-6 sm:p-7"
                     >
-                      <span className="absolute -top-2.5 left-4 inline-flex items-center gap-1.5 rounded-full border border-dashed border-[var(--cream)]/30 bg-[var(--ember-deep)] px-2.5 py-0.5 font-mono text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--cream)]/55">
+                      <span className="absolute -top-2.5 left-4 inline-flex items-center gap-1.5 rounded-full border border-dashed border-[var(--cream)]/30 bg-[#0a0907] px-2.5 py-0.5 font-mono text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--cream)]/55">
                         Placeholder
                       </span>
 
@@ -2124,14 +2173,14 @@ export default function Home() {
         </div>
       </section>
       )}
-      <section className="relative overflow-hidden bg-[var(--ember-deep)] py-32 text-[var(--cream)] sm:py-44">
+      <section className="relative overflow-hidden bg-[#0a0907] py-32 text-[var(--cream)] sm:py-44">
         {/* EmberSpark — top */}
         <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-10 bg-[linear-gradient(180deg,rgba(255,107,44,0.18),transparent)]" />
-        <div aria-hidden className="pointer-events-none absolute left-1/2 top-0 h-[2px] w-[min(680px,60%)] -translate-x-1/2 bg-[linear-gradient(90deg,transparent,var(--flame-500)_30%,var(--flame-500)_70%,transparent)] shadow-[0_0_28px_rgba(255,107,44,0.7)]" />
+        <div aria-hidden className="pointer-events-none absolute left-1/2 top-0 h-[2px] w-[min(680px,60%)] -translate-x-1/2 bg-[linear-gradient(90deg,transparent,#ff6b2c_30%,#ff6b2c_70%,transparent)] shadow-[0_0_28px_rgba(255,107,44,0.7)]" />
 
         {/* EmberSpark — bottom: bridges up to dark founder */}
         <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-[linear-gradient(0deg,rgba(255,107,44,0.18),transparent)]" />
-        <div aria-hidden className="pointer-events-none absolute bottom-0 left-1/2 h-[2px] w-[min(680px,60%)] -translate-x-1/2 bg-[linear-gradient(90deg,transparent,var(--flame-500)_30%,var(--flame-500)_70%,transparent)] shadow-[0_0_28px_rgba(255,107,44,0.7)]" />
+        <div aria-hidden className="pointer-events-none absolute bottom-0 left-1/2 h-[2px] w-[min(680px,60%)] -translate-x-1/2 bg-[linear-gradient(90deg,transparent,#ff6b2c_30%,#ff6b2c_70%,transparent)] shadow-[0_0_28px_rgba(255,107,44,0.7)]" />
 
         <div className="relative z-[1] mx-auto h-[min(820px,90vh)] w-full max-w-[1280px] px-8 sm:px-12">
           {/* Centered headline + CTA — anchors the scatter */}
@@ -2148,7 +2197,7 @@ export default function Home() {
               <button
                 type="button"
                 onClick={() => setQuizOpen(true)}
-                className="inline-flex items-center gap-3 rounded-full bg-[var(--forest)] px-8 py-4 text-xs font-bold uppercase tracking-[0.25em] text-[var(--cream)] shadow-[0_18px_50px_-16px_rgba(25,70,58,0.5)] transition hover:-translate-y-0.5 hover:shadow-[0_24px_60px_-16px_rgba(25,70,58,0.6)]"
+                className="inline-flex items-center gap-3 rounded-full bg-[var(--forest)] px-8 py-4 text-xs font-bold uppercase tracking-[0.25em] text-[#fff8ea] shadow-[0_18px_50px_-16px_rgba(25,70,58,0.5)] transition hover:-translate-y-0.5 hover:shadow-[0_24px_60px_-16px_rgba(25,70,58,0.6)]"
               >
                 Tag lead-quizzen <span aria-hidden>→</span>
               </button>
@@ -2214,7 +2263,7 @@ export default function Home() {
       </section>
 
       {/* ─────── Section: Founder card — Værksteds-kortet ─────── */}
-      <section className="relative overflow-hidden bg-[var(--sand)] py-24 text-[var(--ink)] sm:py-32 lg:py-40">
+      <section className="relative overflow-hidden bg-[#f6efe4] py-24 text-[#29261f] sm:py-32 lg:py-40">
         <div aria-hidden className="paper-grain" />
 
         {/* Atmospheric backdrop — soft warm glow on paper */}
@@ -2234,26 +2283,23 @@ export default function Home() {
                 <h2 className="font-display text-[14vw] leading-[0.92] tracking-[-0.045em] sm:text-[7vw] lg:text-[5.5rem]">
                   Hej.
                   <br />
-                  <span className="bg-gradient-to-b from-[var(--flame-400)] via-[var(--flame-500)] to-[var(--flame-700)] bg-clip-text italic text-transparent">
+                  <span className="bg-gradient-to-b from-[#ff8244] via-[#ff6b2c] to-[#c93c0a] bg-clip-text italic text-transparent">
                     Det er mig der bygger.
                   </span>
                 </h2>
 
                 {/* Body — positive Hormozy beats: craft, mechanism, commitment, phone */}
-                <div className="mt-8 max-w-md space-y-5 text-[15px] leading-[1.7] text-[var(--ink)]/85 sm:mt-10 sm:text-[16px]">
+                <div className="mt-8 max-w-md space-y-5 text-[15px] leading-[1.7] text-[#29261f]/85 sm:mt-10 sm:text-[16px]">
                   <p>
-                    <span className="font-semibold text-[var(--ink)]">
+                    <span className="font-semibold text-[#29261f]">
                       Hvert system bygges hands-on.
                     </span>
-                  </p>
-                  <p>
-                    Fractional GTM-ingeniør. Få kunder ad gangen. 3-6 måneder fra design til selvkørende system.
                   </p>
                   <p>
                     Fra første dag til den dag den kører selv.
                   </p>
                   <p>
-                    Du har mig fra dag ét. Du beholder systemet bagefter.
+                    Du har mig fra dag ét. Du beholder mig efter overdragelsen.
                   </p>
                   <p>
                     Tag quizzen — oplev flowet fra kundens side, og se hvad dit eget system mangler.
@@ -2262,7 +2308,7 @@ export default function Home() {
                     <button
                       type="button"
                       onClick={() => setQuizOpen(true)}
-                      className="inline-flex items-center gap-3 rounded-full bg-[var(--forest)] px-7 py-3.5 text-xs font-bold uppercase tracking-[0.25em] text-[var(--cream)] shadow-[0_18px_50px_-16px_rgba(25,70,58,0.5)] transition hover:-translate-y-0.5 hover:shadow-[0_24px_60px_-16px_rgba(25,70,58,0.6)]"
+                      className="inline-flex items-center gap-3 rounded-full bg-[var(--forest)] px-7 py-3.5 text-xs font-bold uppercase tracking-[0.25em] text-[#fff8ea] shadow-[0_18px_50px_-16px_rgba(25,70,58,0.5)] transition hover:-translate-y-0.5 hover:shadow-[0_24px_60px_-16px_rgba(25,70,58,0.6)]"
                     >
                       Tag lead-quizzen <span aria-hidden>→</span>
                     </button>
@@ -2273,7 +2319,7 @@ export default function Home() {
                 <div className="mt-10 sm:mt-12">
                   <a
                     href="mailto:louis@carterco.dk"
-                    className="group inline-flex items-center gap-2 font-display text-base italic text-[var(--ink)]/85 transition hover:text-[var(--flame-700)] sm:text-lg"
+                    className="group inline-flex items-center gap-2 font-display text-base italic text-[#29261f]/85 transition hover:text-[#c93c0a] sm:text-lg"
                   >
                     louis@carterco.dk
                     <span aria-hidden className="inline-block transition group-hover:translate-x-1">
@@ -2290,20 +2336,20 @@ export default function Home() {
                   <img
                     src="/louis.jpeg"
                     alt="Louis Carter"
-                    className="aspect-[3/4] w-full rounded-lg object-cover shadow-[0_30px_60px_-25px_rgba(0,0,0,0.35)] ring-1 ring-[var(--ink)]/10"
+                    className="aspect-[3/4] w-full rounded-lg object-cover shadow-[0_30px_60px_-25px_rgba(0,0,0,0.35)] ring-1 ring-[#29261f]/10"
                     draggable={false}
                   />
 
                   {/* Archive caption */}
-                  <div className="mt-3 flex items-center gap-2 font-mono text-[9px] font-bold uppercase tracking-[0.3em] text-[var(--ink)]/55">
+                  <div className="mt-3 flex items-center gap-2 font-mono text-[9px] font-bold uppercase tracking-[0.3em] text-[#29261f]/55">
                     <span>Louis Carter</span>
-                    <span aria-hidden className="h-px flex-1 bg-[var(--ink)]/20" />
+                    <span aria-hidden className="h-px flex-1 bg-[#29261f]/20" />
                     <span>København</span>
                   </div>
 
                   {/* Handwritten arrow + caption — points at photo */}
                   <div
-                    className="pointer-events-none absolute right-full top-10 mr-2 hidden items-center gap-1 whitespace-nowrap text-[var(--ink)] sm:flex"
+                    className="pointer-events-none absolute right-full top-10 mr-2 hidden items-center gap-1 whitespace-nowrap text-[#29261f] sm:flex"
                     style={{
                       fontFamily: "var(--font-handwritten)",
                       fontSize: "1.1rem",
@@ -2317,7 +2363,7 @@ export default function Home() {
                     </span>
                     <span
                       aria-hidden
-                      className="ml-1 inline-block h-[1.4em] w-[1.4em] shrink-0 bg-[var(--flame-500)]"
+                      className="ml-1 inline-block h-[1.4em] w-[1.4em] shrink-0 bg-[#ff6b2c]"
                       style={{
                         maskImage: "url(/annotation-arrow.png)",
                         maskSize: "contain",
@@ -2386,10 +2432,9 @@ export default function Home() {
                 type="button"
                 aria-label="Luk"
                 onClick={() => setOpen(false)}
-                className="rounded-full border border-[var(--cream)]/15 p-2 text-[var(--cream)]/50 transition hover:border-[var(--flame-500)] hover:text-[var(--flame-500)]"
+                className="rounded-full border border-[var(--cream)]/15 p-2 text-[var(--cream)]/50 transition hover:border-[#ff6b2c] hover:text-[#ff6b2c]"
               >
                 <svg
-                  aria-hidden
                   width="14"
                   height="14"
                   viewBox="0 0 16 16"
@@ -2405,7 +2450,7 @@ export default function Home() {
             <div className="mt-4 px-8">
               <div className="h-1 overflow-hidden rounded-full bg-[var(--cream)]/10">
                 <div
-                  className="h-full bg-gradient-to-r from-[var(--flame-50)] via-[var(--flame-500)] to-[var(--flame-700)] transition-all duration-500 ease-out"
+                  className="h-full bg-gradient-to-r from-[#ffb86b] via-[#ff6b2c] to-[#c93c0a] transition-all duration-500 ease-out"
                   style={{ width: `${progress}%` }}
                 />
               </div>
@@ -2465,23 +2510,23 @@ export default function Home() {
                     }
                     className={`w-full border-b bg-transparent pb-3 text-2xl text-[var(--cream)] placeholder:text-[var(--cream)]/25 focus:outline-none sm:text-3xl ${
                       currentError
-                        ? "border-[var(--flame-500)] focus:border-[var(--flame-500)]"
-                        : "border-[var(--cream)]/20 focus:border-[var(--flame-500)]"
+                        ? "border-[#ff6b2c] focus:border-[#ff6b2c]"
+                        : "border-[var(--cream)]/20 focus:border-[#ff6b2c]"
                     }`}
                   />
 
                   {currentError ? (
                     <p
                       id={`${step.key}-error`}
-                      className="-mt-4 text-sm leading-relaxed text-[var(--flame-50)]"
+                      className="-mt-4 text-sm leading-relaxed text-[#ffb86b]"
                     >
                       {currentError}
                     </p>
                   ) : null}
 
                   {submitError ? (
-                    <div className="rounded-xl border border-[var(--flame-500)]/40 bg-[var(--flame-500)]/10 p-4 text-sm leading-relaxed text-[var(--cream)]/80">
-                      <p className="font-bold text-[var(--flame-50)]">
+                    <div className="rounded-xl border border-[#ff6b2c]/40 bg-[#ff6b2c]/10 p-4 text-sm leading-relaxed text-[var(--cream)]/80">
+                      <p className="font-bold text-[#ffb86b]">
                         Supabase kunne ikke gemme leadet.
                       </p>
                       <p className="mt-2 break-words font-mono text-xs text-[var(--cream)]/65">
@@ -2491,7 +2536,7 @@ export default function Home() {
                         href={calendlyUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="mt-3 inline-flex text-xs font-bold uppercase tracking-[0.25em] text-[var(--flame-50)] underline decoration-[var(--flame-500)]/70 underline-offset-4"
+                        className="mt-3 inline-flex text-xs font-bold uppercase tracking-[0.25em] text-[#ffb86b] underline decoration-[#ff6b2c]/70 underline-offset-4"
                       >
                         Fortsæt til kalender →
                       </a>
@@ -2512,7 +2557,7 @@ export default function Home() {
                   <button
                     type="submit"
                     disabled={!canAdvance || submitting}
-                    className="inline-flex items-center gap-3 rounded-full bg-[var(--flame-500)] px-6 py-3 text-xs font-bold uppercase tracking-[0.25em] text-[var(--ember)] shadow-[0_18px_50px_rgba(255,107,44,0.35)] transition hover:-translate-y-0.5 hover:bg-[var(--flame-400)] disabled:cursor-not-allowed disabled:bg-[var(--cream)]/10 disabled:text-[var(--cream)]/30 disabled:shadow-none disabled:hover:translate-y-0"
+                    className="inline-flex items-center gap-3 rounded-full bg-[#ff6b2c] px-6 py-3 text-xs font-bold uppercase tracking-[0.25em] text-[#0f0d0a] shadow-[0_18px_50px_rgba(255,107,44,0.35)] transition hover:-translate-y-0.5 hover:bg-[#ff8244] disabled:cursor-not-allowed disabled:bg-[var(--cream)]/10 disabled:text-[var(--cream)]/30 disabled:shadow-none disabled:hover:translate-y-0"
                   >
                     {submitting ? "Gemmer" : isLast ? "Book" : "Næste"}
                     <span>→</span>
@@ -2528,7 +2573,7 @@ export default function Home() {
                   href={calendlyUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-xs font-bold uppercase tracking-[0.3em] text-[var(--cream)]/60 underline decoration-[var(--flame-500)] hover:text-[var(--cream)]"
+                  className="text-xs font-bold uppercase tracking-[0.3em] text-[var(--cream)]/60 underline decoration-[#ff6b2c] hover:text-[var(--cream)]"
                 >
                   Åbn kalender →
                 </a>

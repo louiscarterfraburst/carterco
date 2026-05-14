@@ -3,20 +3,38 @@
 :root {
   --background: #f6efe4;
   --foreground: #29261f;
+
+  /* Light surfaces */
   --sand: #f6efe4;
   --cream: #fff8ea;
+
+  /* Ink */
   --ink: #29261f;
   --muted: #6c6254;
+
+  /* Sand-side accents */
   --clay: #b97041;
   --forest: #19463a;
-  --font-display: "Fraunces", "Canela", "Georgia", serif;
-  --font-body: "Manrope", "Avenir Next", "Helvetica Neue", sans-serif;
+
+  /* Dark surfaces */
+  --ember: #0f0d0a;
+  --ember-deep: #0a0907;
+
+  /* Flame accent ramp */
+  --flame-50: #ffb86b;
+  --flame-400: #ff8244;
+  --flame-500: #ff6b2c;
+  --flame-700: #c93c0a;
+  --flame-grad: linear-gradient(180deg, var(--flame-50), var(--flame-500), var(--flame-700));
+
+  --font-display: Georgia, "Times New Roman", serif;
+  --font-body: var(--font-manrope), "Avenir Next", "Helvetica Neue", sans-serif;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-manrope);
   --font-mono: var(--font-geist-mono);
 }
 
@@ -45,11 +63,6 @@ body {
 }
 
 /* ─── /leads tool styling ──────────────────────────────── */
-
-.font-display {
-  font-optical-sizing: auto;
-  font-variation-settings: "SOFT" 50, "WONK" 0;
-}
 
 .tabular {
   font-variant-numeric: tabular-nums;
@@ -427,4 +440,31 @@ body {
 @media (prefers-reduced-motion: no-preference) {
   .testimonial-marquee-up   { animation: testimonial-marquee-up   45s linear infinite; }
   .testimonial-marquee-down { animation: testimonial-marquee-down 45s linear infinite; }
+}
+
+/* Hero entry reveal — staggered fade-up for homepage headline + supporting copy.
+   Wrapped in motion-safe so prefers-reduced-motion users get instant render. */
+@keyframes hero-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .hero-reveal {
+    opacity: 0;
+    animation: hero-reveal 0.7s cubic-bezier(0.2, 0.65, 0.3, 1) both;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-reveal {
+    opacity: 1;
+    transform: none;
+  }
 }
