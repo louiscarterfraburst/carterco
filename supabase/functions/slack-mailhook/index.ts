@@ -67,6 +67,11 @@ Deno.serve(async (request) => {
     pickString(payload, "message_id", "message-id") ??
     headers["message-id"] ?? headers["Message-Id"] ?? null;
 
+  // Skip Slack housekeeping + RB2B onboarding noise before doing any DB work
+  if (!isVisitorSignal(body)) {
+    return json({ ok: true, skipped: "non-visitor noise" });
+  }
+
   const extracted = parseRb2bBody(body);
 
   const { data: ws } = await supabase.rpc("carterco_workspace_id");
@@ -77,7 +82,7 @@ Deno.serve(async (request) => {
     workspace_id: workspaceId,
     source: "rb2b_via_slack_email",
     external_id: messageId,
-    signal_type: subject || "visitor.identified",
+    signal_type: extracted.isRepeat ? "visitor.repeat" : "visitor.identified",
     identified_at: new Date().toISOString(),
     person_name: extracted.personName,
     person_title: extracted.personTitle,
@@ -85,9 +90,9 @@ Deno.serve(async (request) => {
     person_email: extracted.personEmail,
     company_name: extracted.companyName,
     company_domain: extracted.companyDomain,
-    company_linkedin_url: null,
-    company_industry: null,
-    company_size: null,
+    company_linkedin_url: extracted.companyLinkedinUrl,
+    company_industry: extracted.companyIndustry,
+    company_size: extracted.companySize,
     geo: extracted.geo,
     page_views: extracted.pageViews,
     payload: {
@@ -95,6 +100,8 @@ Deno.serve(async (request) => {
       raw_body: body,
       from: envelope.from ?? headers.from ?? null,
       to: envelope.to ?? headers.to ?? null,
+      company_revenue: extracted.companyRevenue,
+      is_repeat: extracted.isRepeat,
     },
   };
 
@@ -118,32 +125,85 @@ Deno.serve(async (request) => {
 //   "🎯 New visitor: John Doe (VP Marketing at Acme Corp)
 //    https://linkedin.com/in/johndoe — example.com"
 // We pull whatever we can find and leave the rest in raw_body.
+// Filters out RB2B / Slack noise: channel joins, integration adds, RB2B's onboarding
+// "Adam from RB2B" test message. Returns true if this body is a real visitor signal.
+function isVisitorSignal(text: string): boolean {
+  if (/has joined the channel/i.test(text)) return false;
+  if (/added an integration to this channel/i.test(text)) return false;
+  if (/Hey there.*it'?s Adam from RB2B/i.test(text)) return false;
+  // Real signals always have these markers
+  return /\*Company\*:|REPEAT VISITOR SIGNAL/i.test(text);
+}
+
+// RB2B's Slack message format (free tier, company-level identification):
+//
+//   Vela Wood *Company*: Vela Wood
+//   *LinkedIn*: https://www.linkedin.com/company/vela-wood
+//   *Location*: Copenhagen, 84 Vela Wood First identified visiting *<https://carterco.dk/outreach>*
+//   on *May 13, 2026 at 05:42AM EDT* Connect on LinkedIn  :linkedin: button More Details...
+//   *About <https://velawood.com |Vela Wood>* *Website:* <https://velawood.com >
+//   *Est. Employees:* 51-200 *Industry:* Professional And Business Services *Est. Revenue:* $5M - $10M
+//
+// Repeat visit format prepends ":repeat: REPEAT VISITOR SIGNAL" and includes a page count.
+// Note: free tier returns /company/ LinkedIn URLs (company-level). Person-level returns
+// /in/ URLs — parser handles both.
 function parseRb2bBody(text: string) {
-  const linkedinMatch = text.match(/https?:\/\/(?:www\.)?linkedin\.com\/in\/[A-Za-z0-9\-_%]+/i);
-  const personLinkedinUrl = linkedinMatch ? linkedinMatch[0] : null;
+  const isRepeat = /REPEAT VISITOR SIGNAL/i.test(text);
 
-  const emailMatch = text.match(/[\w.+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+/);
-  const personEmail = emailMatch && !emailMatch[0].includes("cloudmailin") && !emailMatch[0].includes("slack") ? emailMatch[0] : null;
+  // *Company*: <Name>
+  const cn = text.match(/\*Company\*:\s*([^\n*]+?)(?=\n|\s*\*)/);
+  const companyName = cn ? cn[1].trim() : null;
 
-  const titleAtMatch = text.match(/([A-Z][\w.&,'\- ]{1,80}?)\s+(?:at|@|hos|i)\s+([\w.&,'\- ]{2,80})/i);
-  const personTitle = titleAtMatch ? titleAtMatch[1].trim() : null;
-  const companyName = titleAtMatch ? titleAtMatch[2].trim() : null;
+  // *LinkedIn*: <url> — /company/ slug for company-level, /in/ slug for person-level
+  const li = text.match(/\*LinkedIn\*:\s*(https?:\/\/(?:www\.)?linkedin\.com\/(?:company|in)\/[^\s*<>|]+)/i);
+  const liUrl = li ? li[1] : null;
+  const isPersonLevel = liUrl ? /\/in\//.test(liUrl) : false;
 
-  const domainMatch = text.match(/\b(?!linkedin\.com)([a-z0-9-]+(?:\.[a-z0-9-]+)+)\b/i);
-  const companyDomain = domainMatch ? domainMatch[1] : null;
+  // *Location*: City, Region — followed by junk (the company name repeats, then "First
+  // identified visiting" or "has visited"). Strip the trailing junk by stopping at those.
+  const loc = text.match(/\*Location\*:\s*([^\n*]+?)(?=\s+\S+\s+(?:First identified|has visited)|\s+\*[A-Z]|\n|$)/i);
+  const locationRaw = loc ? loc[1].trim() : null;
+  // Strip the company name when it appears at the end of the location string
+  let location = locationRaw;
+  if (location && companyName && location.toLowerCase().endsWith(companyName.toLowerCase())) {
+    location = location.slice(0, location.length - companyName.length).trim().replace(/[,\s]+$/, "");
+  }
 
-  const nameMatch = text.match(/(?:visitor|lead|new)[^\n:]*?[:—–-]?\s*([A-ZÆØÅ][\w'’\-]+(?:\s+[A-ZÆØÅ][\w'’\-]+){1,3})/);
-  const personName = nameMatch ? nameMatch[1].trim() : null;
+  // Website from *About <URL|Name>* or *Website:* <URL>
+  const aboutUrl = text.match(/\*About\s*<\s*(https?:\/\/[^\s|>]+)/i)?.[1]
+    ?? text.match(/\*Website:?\*?\s*<\s*(https?:\/\/[^\s|>]+)/i)?.[1]
+    ?? null;
+  let companyDomain: string | null = null;
+  if (aboutUrl) {
+    try {
+      companyDomain = new URL(aboutUrl.trim()).hostname.replace(/^www\./, "");
+    } catch { /* ignore */ }
+  }
+
+  // Firmographics — bolded labels followed by free text, terminated by the next bold label
+  const industryMatch = text.match(/\*Industry:?\*\s*([^\n*]+?)(?=\s*\*[A-Z]|\n|$)/);
+  const employeesMatch = text.match(/\*Est\.\s*Employees:?\*\s*([^\n*]+?)(?=\s*\*[A-Z]|\n|$)/);
+  const revenueMatch = text.match(/\*Est\.\s*Revenue:?\*\s*([^\n*]+?)(?=\s*\*[A-Z]|\n|$)/);
+
+  // Visited URL (first-time visit) or implicit URL (repeat visit just says "has visited X pages")
+  const visitedUrl = text.match(/First identified visiting\s*\*?\s*<?(https?:\/\/[^\s|>*]+)/i)?.[1] ?? null;
+  const pageCount = text.match(/has visited\s*\*?(\d+)\*?\s*pages/i)?.[1] ?? null;
 
   return {
-    personName,
-    personTitle,
-    personLinkedinUrl,
-    personEmail,
+    // When LinkedIn is /in/ the displayed name IS the person; when /company/ it's company-level only
+    personName: isPersonLevel ? companyName : null,
+    personTitle: null,
+    personLinkedinUrl: isPersonLevel ? liUrl : null,
+    personEmail: null,
     companyName,
     companyDomain,
-    geo: null,
-    pageViews: null,
+    companyLinkedinUrl: isPersonLevel ? null : liUrl,
+    companyIndustry: industryMatch ? industryMatch[1].trim() : null,
+    companySize: employeesMatch ? employeesMatch[1].trim() : null,
+    companyRevenue: revenueMatch ? revenueMatch[1].trim() : null,
+    geo: location ? { raw: location } : null,
+    pageViews: visitedUrl ? [{ url: visitedUrl, count: pageCount ? Number(pageCount) : 1 }] : null,
+    isRepeat,
   };
 }
 

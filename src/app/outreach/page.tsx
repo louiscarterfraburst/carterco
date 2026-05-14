@@ -210,6 +210,53 @@ type IcpProposal = {
 type SortKey = "queued_oldest" | "queued_newest" | "name";
 type ColdFilter = "all" | "cold" | "warm";
 
+// Identity drives the click-to-handoff message templates on Signaler cards
+// (sms:, mailto:, vCard). Same shape as /leads; sourced from user_settings.
+type Identity = {
+  displayName: string;
+  companyName: string;
+  calendlyUrl: string;
+  signoff: string;
+};
+
+function firstName(name: string | null) {
+  if (!name) return "der";
+  return name.trim().split(/\s+/)[0] ?? name;
+}
+
+// Cold opener — assumes you've just dialled and got no answer, or you're
+// reaching out shortly after seeing the visit. Refine per workspace later.
+function buildSignalSmsBody(name: string | null, identity: Identity, companyName: string | null) {
+  const where = companyName ? `fra ${companyName} ` : "";
+  return `Hej ${firstName(name)}, det er ${identity.displayName} fra ${identity.companyName} – så I ${where}kiggede på vores side. Kort snak om jeres flow? /${identity.signoff}`;
+}
+
+function buildSignalEmailDraft(name: string | null, identity: Identity, companyName: string | null) {
+  const where = companyName ? `hos ${companyName}` : "i jeres team";
+  const subject = `Hilsen efter jeres besøg på ${identity.companyName}`;
+  const body = `Hej ${firstName(name)},
+
+Det er ${identity.displayName} fra ${identity.companyName}. Jeg så I ${where} kiggede på vores side – formentlig fordi noget af det vi gør er relevant lige nu.
+
+Har du 20 minutter til en kort snak om, hvordan vi kan gøre jeres leads varme hurtigere?
+
+Du kan også booke direkte her: ${identity.calendlyUrl}
+
+/${identity.signoff}`;
+  return { subject, body };
+}
+
+function signalMailtoHref(email: string | null, name: string | null, identity: Identity, companyName: string | null) {
+  if (!email) return "#";
+  const { subject, body } = buildSignalEmailDraft(name, identity, companyName);
+  return `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
+
+function signalSmsHref(phone: string | null, name: string | null, identity: Identity, companyName: string | null) {
+  if (!phone) return "#";
+  return `sms:${phone}?&body=${encodeURIComponent(buildSignalSmsBody(name, identity, companyName))}`;
+}
+
 export default function OutreachPage() {
   const supabase = useMemo(() => createClient(), []);
   const [user, setUser] = useState<User | null>(null);
@@ -225,6 +272,12 @@ export default function OutreachPage() {
   const [altContacts, setAltContacts] = useState<AltContact[]>([]);
   const [activeIcp, setActiveIcp] = useState<IcpVersion | null>(null);
   const [icpProposals, setIcpProposals] = useState<IcpProposal[]>([]);
+  const [identity, setIdentity] = useState<Identity>({
+    displayName: "Louis",
+    companyName: "Carter & Co",
+    calendlyUrl: "https://calendly.com/louis-carter/30min",
+    signoff: "Louis",
+  });
   const [loading, setLoading] = useState(true);
   const [busyLead, setBusyLead] = useState<string | null>(null);
   const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null);
@@ -268,6 +321,29 @@ export default function OutreachPage() {
     });
     return () => { mounted = false; subscription.unsubscribe(); };
   }, [supabase]);
+
+  // Identity: pulled from user_settings, used by the click-to-handoff message
+  // templates on Signaler. Same shape as /leads — when /leads moves to a
+  // shared util this duplication goes away.
+  useEffect(() => {
+    if (!user?.email) return;
+    let cancelled = false;
+    (async () => {
+      const { data: settings } = await supabase
+        .from("user_settings")
+        .select("display_name, company_name, calendly_url, signoff")
+        .eq("user_email", user.email)
+        .maybeSingle();
+      if (cancelled || !settings) return;
+      setIdentity({
+        displayName: settings.display_name?.trim() || "Louis",
+        companyName: settings.company_name?.trim() || "Carter & Co",
+        calendlyUrl: settings.calendly_url?.trim() || "https://calendly.com/louis-carter/30min",
+        signoff: settings.signoff?.trim() || settings.display_name?.trim() || "Louis",
+      });
+    })();
+    return () => { cancelled = true; };
+  }, [user, supabase]);
 
   // ---------- data load ----------
   const load = useCallback(async () => {
@@ -518,11 +594,12 @@ export default function OutreachPage() {
     if (error) setErr(error.message); else await load();
   }
 
-  async function markSignalHandled(signalId: string) {
+  async function markSignalsHandled(signalIds: string[]) {
+    if (signalIds.length === 0) return;
     const { error } = await supabase
       .from("outreach_signals")
       .update({ handled: true, handled_at: new Date().toISOString(), handled_by: user?.email ?? null })
-      .eq("id", signalId);
+      .in("id", signalIds);
     if (error) setErr(error.message); else await load();
   }
 
@@ -885,7 +962,8 @@ export default function OutreachPage() {
           <SignalerTab
             signals={unhandledSignals}
             busyLead={busyLead}
-            onMarkHandled={(id) => void markSignalHandled(id)}
+            identity={identity}
+            onMarkHandled={(ids) => void markSignalsHandled(ids)}
             onScoutPhones={(id) => void scoutSignalPhones(id)}
           />
         ) : tab === "inbox" ? (
@@ -1488,13 +1566,14 @@ function OpgaverTab({ tasks, onMarkHandled }: {
   );
 }
 
-function SignalerTab({ signals, busyLead, onMarkHandled, onScoutPhones }: {
+function SignalerTab({ signals, busyLead, identity, onMarkHandled, onScoutPhones }: {
   signals: Signal[];
   busyLead: string | null;
-  onMarkHandled: (id: string) => void;
+  identity: Identity;
+  onMarkHandled: (ids: string[]) => void;
   onScoutPhones: (id: string) => void;
 }) {
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [expandedKey, setExpandedKey] = useState<string | null>(null);
 
   if (signals.length === 0) {
     return (
@@ -1515,37 +1594,130 @@ function SignalerTab({ signals, busyLead, onMarkHandled, onScoutPhones }: {
     return d.toLocaleDateString("da-DK", { day: "numeric", month: "short" }) + " " + time;
   }
 
-  function sourceLabel(src: string): string {
-    if (src.startsWith("rb2b")) return "RB2B";
-    return src;
-  }
+  // Group signals by company so multiple visits from the same prospect collapse
+  // into a single card with a visit timeline. Key prefers company_name, falls
+  // back to company_domain so missing-name rows still group correctly.
+  type CompanyGroup = {
+    key: string;
+    companyName: string;
+    companyDomain: string | null;
+    companyLinkedinUrl: string | null;
+    companyIndustry: string | null;
+    companySize: string | null;
+    companyRevenue: string | null;
+    location: string | null;
+    visits: Signal[];          // sorted desc
+    totalPageViews: number;     // sum of count across visits
+    lastVisitAt: string;
+    inPipeline: boolean;       // future: lead-matching lookup
+    latestPersonName: string | null;
+    latestPersonEmail: string | null;
+    latestPersonLinkedinUrl: string | null;
+    // Phone fields derived from the latest signal that has been scouted
+    phoneDirect: string | null;
+    phoneOffice: string | null;
+    phoneSource: string | null;
+    phoneScoutedAt: string | null;
+    latestId: string;
+  };
+
+  const groups: CompanyGroup[] = (() => {
+    const map = new Map<string, Signal[]>();
+    for (const s of signals) {
+      const key = (s.company_name ?? s.company_domain ?? s.id).toLowerCase();
+      const list = map.get(key) ?? [];
+      list.push(s);
+      map.set(key, list);
+    }
+    return Array.from(map.entries()).map(([key, list]) => {
+      const sorted = [...list].sort((a, b) =>
+        new Date(b.identified_at).getTime() - new Date(a.identified_at).getTime(),
+      );
+      const latest = sorted[0];
+      const pickNonNull = <K extends keyof Signal>(k: K): Signal[K] | null => {
+        for (const s of sorted) {
+          const v = s[k];
+          if (v !== null && v !== undefined && v !== "") return v;
+        }
+        return null;
+      };
+      const totalPageViews = sorted.reduce((acc, s) => {
+        const pv = s.page_views as Array<{ count?: number }> | null;
+        if (!pv) return acc;
+        return acc + pv.reduce((sum, p) => sum + (p.count ?? 1), 0);
+      }, 0);
+      // Phone fields: use the most-recently-scouted signal across the group
+      const scouted = sorted.find((s) => s.phone_scouted_at !== null);
+      const geo = latest.geo as { raw?: string; city?: string; country?: string } | null;
+      const location = geo?.raw ?? ([geo?.city, geo?.country].filter(Boolean).join(", ") || null);
+      return {
+        key,
+        companyName: (latest.company_name ?? latest.company_domain ?? "(ukendt firma)") as string,
+        companyDomain: latest.company_domain,
+        companyLinkedinUrl: latest.payload && (latest.payload as { company_linkedin_url?: string }).company_linkedin_url
+          ? (latest.payload as { company_linkedin_url?: string }).company_linkedin_url!
+          : null,
+        companyIndustry: pickNonNull("company_industry") as string | null,
+        companySize: pickNonNull("company_size") as string | null,
+        companyRevenue: (latest.payload as { company_revenue?: string } | null)?.company_revenue ?? null,
+        location,
+        visits: sorted,
+        totalPageViews,
+        lastVisitAt: latest.identified_at,
+        inPipeline: false,
+        latestPersonName: pickNonNull("person_name") as string | null,
+        latestPersonEmail: pickNonNull("person_email") as string | null,
+        latestPersonLinkedinUrl: pickNonNull("person_linkedin_url") as string | null,
+        phoneDirect: scouted?.phone_direct ?? null,
+        phoneOffice: scouted?.phone_office ?? null,
+        phoneSource: scouted?.phone_source ?? null,
+        phoneScoutedAt: scouted?.phone_scouted_at ?? null,
+        latestId: latest.id,
+      };
+    }).sort((a, b) =>
+      new Date(b.lastVisitAt).getTime() - new Date(a.lastVisitAt).getTime(),
+    );
+  })();
 
   return (
     <ul className="mt-2 flex flex-col gap-2">
-      {signals.map((s) => {
-        const expanded = expandedId === s.id;
-        const name = s.person_name ?? "(ukendt person)";
-        const titleCompany = [s.person_title, s.company_name].filter(Boolean).join(" hos ");
-        const geo = s.geo as { city?: string; country?: string } | null;
-        const location = geo ? [geo.city, geo.country].filter(Boolean).join(", ") : "";
-        const rawBody = (s.payload as { raw_body?: string } | null)?.raw_body ?? null;
+      {groups.map((g) => {
+        const expanded = expandedKey === g.key;
+        const visitCount = g.visits.length;
+        const isRepeatProspect = visitCount > 1 || g.totalPageViews > 1;
+        const sublineParts = [
+          g.companyIndustry,
+          g.companySize ? `${g.companySize} ansatte` : null,
+          g.companyRevenue,
+        ].filter(Boolean);
+        const metaParts = [
+          g.companyDomain,
+          g.location,
+          `${g.totalPageViews} sidevisning${g.totalPageViews === 1 ? "" : "er"}`,
+          `Sidst ${fmtWhen(g.lastVisitAt).toLowerCase()}`,
+        ].filter(Boolean) as string[];
 
         return (
-          <li key={s.id} className="group rounded-sm border border-[var(--ink)]/12 bg-[var(--cream)]/30 transition">
-            <button type="button" onClick={() => setExpandedId(expanded ? null : s.id)}
+          <li key={g.key} className="group rounded-sm border border-[var(--ink)]/12 bg-[var(--cream)]/30 transition">
+            <button type="button" onClick={() => setExpandedKey(expanded ? null : g.key)}
               className="flex w-full items-start gap-3 px-4 py-3 text-left sm:px-5">
               <span className="tabular shrink-0 rounded-full border border-[var(--forest)]/30 bg-[var(--forest)]/5 px-2 py-0.5 text-[9px] uppercase tracking-[0.22em] text-[var(--forest)]">
-                {sourceLabel(s.source)}
+                RB2B
               </span>
               <div className="min-w-0 flex-1">
-                <div className="text-[14px] leading-snug text-[var(--ink)]/90">
-                  <span className="font-medium">{name}</span>
-                  {titleCompany ? <span className="text-[var(--ink)]/65"> · {titleCompany}</span> : null}
+                <div className="flex items-baseline gap-2 text-[14px] leading-snug text-[var(--ink)]/90">
+                  <span className="font-medium">{g.companyName}</span>
+                  {isRepeatProspect ? (
+                    <span className="tabular shrink-0 rounded-full bg-[var(--clay)]/15 px-1.5 py-0.5 text-[9px] uppercase tracking-[0.22em] text-[var(--clay)]">
+                      gentaget
+                    </span>
+                  ) : null}
                 </div>
+                {sublineParts.length ? (
+                  <div className="text-[12px] text-[var(--ink)]/65">{sublineParts.join(" · ")}</div>
+                ) : null}
                 <div className="tabular mt-1 text-[11px] text-[var(--ink)]/55">
-                  <span>{fmtWhen(s.identified_at)}</span>
-                  {location ? <span> · {location}</span> : null}
-                  {s.company_domain ? <span> · {s.company_domain}</span> : null}
+                  {metaParts.join(" · ")}
                 </div>
               </div>
               <span className="tabular shrink-0 self-center text-[10px] text-[var(--ink)]/35">
@@ -1555,65 +1727,107 @@ function SignalerTab({ signals, busyLead, onMarkHandled, onScoutPhones }: {
 
             {expanded ? (
               <div className="border-t border-[var(--ink)]/8 px-4 py-3 sm:px-5">
-                <dl className="grid grid-cols-1 gap-x-6 gap-y-1 text-[12px] sm:grid-cols-2">
-                  {s.person_email ? (
-                    <div><dt className="tabular text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/45">Email</dt><dd className="text-[var(--ink)]/85">{s.person_email}</dd></div>
-                  ) : null}
-                  {s.company_industry ? (
-                    <div><dt className="tabular text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/45">Branche</dt><dd className="text-[var(--ink)]/85">{s.company_industry}</dd></div>
-                  ) : null}
-                  {s.company_size ? (
-                    <div><dt className="tabular text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/45">Størrelse</dt><dd className="text-[var(--ink)]/85">{s.company_size}</dd></div>
-                  ) : null}
-                  {s.icp_score !== null ? (
-                    <div><dt className="tabular text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/45">ICP-score</dt><dd className="text-[var(--ink)]/85">{s.icp_score}</dd></div>
-                  ) : null}
-                </dl>
+                <p className="text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/45">Besøgshistorik</p>
+                <ul className="mt-1 flex flex-col gap-1 text-[12px] text-[var(--ink)]/80">
+                  {g.visits.map((v) => {
+                    const pv = v.page_views as Array<{ url?: string; count?: number }> | null;
+                    const pages = pv?.[0];
+                    const isRepeatVisit = v.signal_type === "visitor.repeat";
+                    return (
+                      <li key={v.id} className="tabular flex flex-wrap items-center gap-x-2">
+                        <span className="text-[var(--ink)]/55">{fmtWhen(v.identified_at)}</span>
+                        <span className="text-[var(--ink)]/30">·</span>
+                        {pages?.url ? (
+                          <a href={pages.url} target="_blank" rel="noreferrer"
+                            className="text-[var(--forest)] underline-offset-[4px] hover:underline">
+                            {new URL(pages.url).pathname || "/"}
+                          </a>
+                        ) : pages?.count ? (
+                          <span>{pages.count} sider</span>
+                        ) : (
+                          <span className="text-[var(--ink)]/45">—</span>
+                        )}
+                        {isRepeatVisit ? (
+                          <span className="tabular ml-1 rounded-full bg-[var(--clay)]/10 px-1.5 py-0.5 text-[9px] uppercase tracking-[0.22em] text-[var(--clay)]">
+                            genbesøg
+                          </span>
+                        ) : null}
+                      </li>
+                    );
+                  })}
+                </ul>
 
-                {rawBody ? (
-                  <>
-                    <p className="mt-4 text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/45">Original notifikation</p>
-                    <p className="mt-1 whitespace-pre-wrap text-[12px] leading-relaxed text-[var(--ink)]/70">{rawBody}</p>
-                  </>
-                ) : null}
-
-                {(s.phone_direct || s.phone_office) ? (
+                {(g.phoneDirect || g.phoneOffice) ? (
                   <div className="mt-4 rounded-sm border border-[var(--forest)]/20 bg-[var(--forest)]/5 p-3">
                     <p className="tabular text-[10px] uppercase tracking-[0.22em] text-[var(--forest)]">Telefon</p>
-                    {s.phone_direct ? (
+                    {g.phoneDirect ? (
                       <p className="mt-1 text-[13px] text-[var(--ink)]/90">
-                        <a href={`tel:${s.phone_direct}`} className="font-medium underline-offset-[4px] hover:underline">{s.phone_direct}</a>
-                        <span className="tabular ml-2 text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/45">direkte · {s.phone_source ?? "?"}</span>
+                        <a href={`tel:${g.phoneDirect}`} className="font-medium underline-offset-[4px] hover:underline">{g.phoneDirect}</a>
+                        <span className="tabular ml-2 text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/45">direkte · {g.phoneSource ?? "?"}</span>
                       </p>
                     ) : null}
-                    {s.phone_office ? (
+                    {g.phoneOffice ? (
                       <p className="mt-1 text-[13px] text-[var(--ink)]/75">
-                        <a href={`tel:${s.phone_office}`} className="underline-offset-[4px] hover:underline">{s.phone_office}</a>
+                        <a href={`tel:${g.phoneOffice}`} className="underline-offset-[4px] hover:underline">{g.phoneOffice}</a>
                         <span className="tabular ml-2 text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/45">hovednummer</span>
                       </p>
                     ) : null}
                   </div>
                 ) : null}
 
+                {(() => {
+                  const callable = g.phoneDirect ?? g.phoneOffice;
+                  const smsable = g.phoneDirect;
+                  const emailable = g.latestPersonEmail;
+                  if (!callable && !smsable && !emailable) return null;
+                  return (
+                    <div className="mt-4 grid gap-2 sm:grid-cols-3">
+                      {callable ? (
+                        <a href={`tel:${callable}`}
+                          className="focus-cream tabular flex items-center justify-center gap-2 rounded-sm border border-[var(--forest)]/30 bg-[var(--forest)]/5 px-3 py-2 text-[11px] uppercase tracking-[0.22em] text-[var(--forest)] hover:border-[var(--forest)]/60">
+                          Ring {g.phoneDirect ? "direkte" : "hovednr."}
+                        </a>
+                      ) : null}
+                      {smsable ? (
+                        <a href={signalSmsHref(smsable, g.latestPersonName, identity, g.companyName)}
+                          className="focus-cream tabular flex items-center justify-center gap-2 rounded-sm border border-[var(--ink)]/20 px-3 py-2 text-[11px] uppercase tracking-[0.22em] text-[var(--ink)]/75 hover:border-[var(--ink)]/40 hover:text-[var(--ink)]">
+                          SMS
+                        </a>
+                      ) : null}
+                      {emailable ? (
+                        <a href={signalMailtoHref(emailable, g.latestPersonName, identity, g.companyName)}
+                          className="focus-cream tabular flex items-center justify-center gap-2 rounded-sm border border-[var(--ink)]/20 px-3 py-2 text-[11px] uppercase tracking-[0.22em] text-[var(--ink)]/75 hover:border-[var(--ink)]/40 hover:text-[var(--ink)]">
+                          Mail
+                        </a>
+                      ) : null}
+                    </div>
+                  );
+                })()}
+
                 <div className="mt-4 flex flex-wrap gap-3">
-                  {s.person_linkedin_url ? (
-                    <a href={s.person_linkedin_url} target="_blank" rel="noreferrer"
+                  {g.latestPersonLinkedinUrl ? (
+                    <a href={g.latestPersonLinkedinUrl} target="_blank" rel="noreferrer"
+                      className="tabular text-[11px] uppercase tracking-[0.22em] text-[var(--forest)] underline-offset-[6px] hover:underline">
+                      Åbn LinkedIn (person) ↗
+                    </a>
+                  ) : g.companyLinkedinUrl ? (
+                    <a href={g.companyLinkedinUrl} target="_blank" rel="noreferrer"
                       className="tabular text-[11px] uppercase tracking-[0.22em] text-[var(--forest)] underline-offset-[6px] hover:underline">
                       Åbn LinkedIn ↗
                     </a>
                   ) : null}
-                  {s.company_domain ? (
-                    <a href={`https://${s.company_domain}`} target="_blank" rel="noreferrer"
+                  {g.companyDomain ? (
+                    <a href={`https://${g.companyDomain}`} target="_blank" rel="noreferrer"
                       className="tabular text-[11px] uppercase tracking-[0.22em] text-[var(--forest)] underline-offset-[6px] hover:underline">
                       Åbn website ↗
                     </a>
                   ) : null}
-                  <button type="button" onClick={() => onScoutPhones(s.id)}
-                    disabled={busyLead === `signal:${s.id}`}
+                  <button type="button" onClick={() => onScoutPhones(g.latestId)}
+                    disabled={busyLead === `signal:${g.latestId}`}
                     className="focus-cream tabular rounded-sm border border-[var(--forest)]/30 px-3 py-1.5 text-[10px] uppercase tracking-[0.22em] text-[var(--forest)] hover:border-[var(--forest)]/60 disabled:opacity-40">
-                    {busyLead === `signal:${s.id}` ? "Søger…" : s.phone_scouted_at ? "Søg igen" : "Find telefon"}
+                    {busyLead === `signal:${g.latestId}` ? "Søger…" : g.phoneScoutedAt ? "Søg igen" : "Find telefon"}
                   </button>
-                  <button type="button" onClick={() => onMarkHandled(s.id)}
+                  <button type="button" onClick={() => onMarkHandled(g.visits.map((v) => v.id))}
                     className="focus-cream tabular rounded-sm border border-[var(--ink)]/15 px-3 py-1.5 text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/65 hover:border-[var(--ink)]/35 hover:text-[var(--ink)]">
                     Markér behandlet
                   </button>
