@@ -757,20 +757,15 @@ export default function Home() {
       </nav>
 
       <div className="mx-auto flex w-full max-w-[1400px] flex-1 flex-col justify-center px-8 pt-16 sm:px-12 sm:pt-20">
-        <h1 className="font-display leading-[0.88] tracking-[-0.04em]">
-          <span className="relative inline-block text-[14vw] sm:text-[12vw] lg:text-[clamp(5rem,9.5vw,9rem)]">
-            <span
-              aria-hidden
-              className="pointer-events-none absolute inset-0 -z-10 scale-125 bg-[radial-gradient(ellipse_at_center,rgba(255,107,44,0.45),transparent_65%)] blur-2xl"
-            />
+        <h1 className="font-display text-[14vw] leading-[0.82] tracking-[-0.05em] sm:text-[12vw] lg:text-[clamp(5rem,10vw,9.5rem)]">
+          <span className="relative inline-block">
+            <span className="absolute inset-0 -z-10 scale-125 bg-[radial-gradient(ellipse_at_center,rgba(255,107,44,0.45),transparent_65%)] blur-2xl" />
             <span className="bg-gradient-to-b from-[#ffb86b] via-[#ff6b2c] to-[#c93c0a] bg-clip-text italic text-transparent">
               Salgsinfrastruktur
             </span>
           </span>
           <br />
-          <span className="mt-4 inline-block text-[8vw] leading-[1.05] text-[var(--cream)]/55 sm:mt-6 sm:text-[6.5vw] lg:text-[clamp(2.5rem,5.25vw,5rem)]">
-            til ambitiøse B2B teams
-          </span>
+          til ambitiøse B2B teams
         </h1>
 
         <div className="mt-16 flex flex-col gap-14 pb-10 sm:mt-20 lg:mt-24">
