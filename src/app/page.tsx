@@ -757,7 +757,7 @@ export default function Home() {
       </nav>
 
       <div className="mx-auto flex w-full max-w-[1400px] flex-1 flex-col justify-center px-8 pt-16 sm:px-12 sm:pt-20">
-        <h1 className="font-display text-[14vw] leading-[0.82] tracking-[-0.05em] sm:text-[12vw] lg:text-[clamp(5rem,10vw,9.5rem)]">
+        <h1 className="font-display text-[11.2vw] leading-[0.82] tracking-[-0.05em] sm:text-[9.6vw] lg:text-[clamp(4rem,8vw,7.6rem)]">
           <span className="relative inline-block">
             <span className="absolute inset-0 -z-10 scale-125 bg-[radial-gradient(ellipse_at_center,rgba(255,107,44,0.45),transparent_65%)] blur-2xl" />
             <span className="bg-gradient-to-b from-[#ffb86b] via-[#ff6b2c] to-[#c93c0a] bg-clip-text italic text-transparent">
