@@ -88,11 +88,37 @@ Deno.serve(async (request) => {
   if (fetchErr) return json({ error: "db fetch", details: fetchErr.message }, 500);
   if (!pipe) return json({ error: "lead not found" }, 404);
 
+  // Workspace-wide fallback: leads ingested via sendpilot-poll sometimes land
+  // without a sendpilot_sender_id (the poll payload doesn't always include
+  // it). Both Tresyv and CarterCo use exactly one SendPilot sender per
+  // workspace, so we can safely backfill from the most recent row in the
+  // same workspace that does have one. If we ever run multiple senders per
+  // workspace this needs to become campaign-aware.
+  let resolvedSenderId = pipe.sendpilot_sender_id as string | null;
+  if (!resolvedSenderId && pipe.workspace_id) {
+    const { data: senderRow } = await admin
+      .from("outreach_pipeline")
+      .select("sendpilot_sender_id, updated_at")
+      .eq("workspace_id", pipe.workspace_id)
+      .not("sendpilot_sender_id", "is", null)
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (senderRow?.sendpilot_sender_id) {
+      resolvedSenderId = senderRow.sendpilot_sender_id as string;
+      // Backfill the row so future calls don't need the lookup.
+      await admin.from("outreach_pipeline")
+        .update({ sendpilot_sender_id: resolvedSenderId })
+        .eq("sendpilot_lead_id", leadId);
+      console.log(`outreach-approve: backfilled sender_id=${resolvedSenderId} for lead=${leadId} (workspace=${pipe.workspace_id})`);
+    }
+  }
+
   const now = new Date().toISOString();
 
   if (decision === "reply") {
-    if (!pipe.sendpilot_sender_id) {
-      return json({ error: "lead has no sendpilot_sender_id" }, 400);
+    if (!resolvedSenderId) {
+      return json({ error: "lead has no sendpilot_sender_id (and no fallback sender found in workspace)" }, 400);
     }
     if (!pipe.linkedin_url) {
       return json({ error: "lead has no linkedin_url" }, 400);
@@ -106,7 +132,7 @@ Deno.serve(async (request) => {
       method: "POST",
       headers: { "X-API-Key": SP_API_KEY, "Content-Type": "application/json" },
       body: JSON.stringify({
-        senderId: pipe.sendpilot_sender_id,
+        senderId: resolvedSenderId,
         recipientLinkedinUrl: pipe.linkedin_url,
         message,
       }),
@@ -191,8 +217,8 @@ Deno.serve(async (request) => {
     ? body.messageOverride.trim()
     : pipe.rendered_message;
   if (!message) return json({ error: "no message to send" }, 400);
-  if (!pipe.sendpilot_sender_id) {
-    return json({ error: "lead has no sendpilot_sender_id (cannot send via /v1/inbox/send)" }, 400);
+  if (!resolvedSenderId) {
+    return json({ error: "lead has no sendpilot_sender_id and no fallback sender found in workspace" }, 400);
   }
   if (!pipe.linkedin_url) {
     return json({ error: "lead has no linkedin_url" }, 400);
@@ -216,7 +242,7 @@ Deno.serve(async (request) => {
     || undefined;
   const replyCheck = await checkLeadReplied({
     apiKey: SP_API_KEY,
-    senderAccountId: pipe.sendpilot_sender_id,
+    senderAccountId: resolvedSenderId,
     recipientLinkedinUrl: pipe.linkedin_url,
     recipientName: fullName,
   });
@@ -243,7 +269,7 @@ Deno.serve(async (request) => {
     method: "POST",
     headers: { "X-API-Key": SP_API_KEY, "Content-Type": "application/json" },
     body: JSON.stringify({
-      senderId: pipe.sendpilot_sender_id,
+      senderId: resolvedSenderId,
       recipientLinkedinUrl: pipe.linkedin_url,
       message,
     }),

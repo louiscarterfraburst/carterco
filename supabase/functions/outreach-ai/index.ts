@@ -9,6 +9,7 @@
 // human callers to the workspace allow-list.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.103.3";
+import { draftFirstMessage } from "../_shared/draft-first-message.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -20,6 +21,7 @@ const ALLOWED_USERS = new Set([
   "louis@carterco.dk",
   "rm@tresyv.dk",
   "haugefrom@haugefrom.com",
+  "kontakt@odagroup.dk",
 ]);
 
 const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY") ?? "";
@@ -86,6 +88,18 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
     );
     const result = await draftReply(admin, replyId);
+    if ("error" in result) return json(result, 502);
+    return json(result);
+  }
+
+  if (op === "draft_first_message") {
+    const leadId = String(body.leadId ?? "").trim();
+    if (!leadId) return json({ error: "leadId required" }, 400);
+    const admin = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    );
+    const result = await draftFirstMessage(admin, leadId);
     if ("error" in result) return json(result, 502);
     return json(result);
   }

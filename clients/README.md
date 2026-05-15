@@ -1,0 +1,177 @@
+# Clients
+
+Per-client content + briefs for the multi-tenant outreach system.
+
+Each client = one Supabase workspace + one row in `outreach_voice_playbooks` + (for AI-drafted-message clients) one bundled agent brief in the edge functions.
+
+```
+clients/
+  odagroup/
+    agent-brief.md          # canonical brief, edited by humans
+                            # mirror lives in supabase/functions/_shared/draft-first-message.ts
+                            # sync via: python3 scripts/sync_odagroup_brief.py
+```
+
+## Live workspaces
+
+| Name        | Workspace ID                              | Owner email              | Outreach style |
+|-------------|-------------------------------------------|--------------------------|----------------|
+| CarterCo    | `1e067f9a-d453-41a7-8bc4-9fdb5644a5fa`    | `louis@carterco.dk`      | SendSpark video render |
+| Tresyv      | `2740ba1f-d5d5-4008-bf43-b45367c73134`    | `rm@tresyv.dk`           | SendSpark video render |
+| Haugefrom   | `f4777612-4615-4734-94de-4745eade3318`    | `haugefrom@haugefrom.com`| SendSpark video render |
+| OdaGroup    | `cdfd80d8-33bb-4b64-b778-0a2c5ab78cc6`    | `kontakt@odagroup.dk`    | AI-drafted DM (no video) |
+
+---
+
+## Adding a new client
+
+Checklist for onboarding a new client workspace. ~30 minutes end-to-end.
+Replace `<NEW_NAME>`, `<NEW_EMAIL>`, `<NEW_UUID>` as you go.
+
+### 1. Decide the outreach style
+
+- **Video render** — clone the CarterCo flow. Most existing infra works as-is.
+- **AI-drafted DM** — clone the OdaGroup flow (the model below). Per-strategy AI message generation, no video.
+
+The rest of this checklist assumes AI-drafted DM. For video, only steps 2–4 apply.
+
+### 2. Provision the workspace in DB
+
+```sql
+WITH new_ws AS (
+  INSERT INTO workspaces (id, name, owner_email)
+  VALUES (gen_random_uuid(), '<NEW_NAME>', '<NEW_EMAIL>')
+  RETURNING id
+), m1 AS (
+  INSERT INTO workspace_members (workspace_id, user_email, role)
+  SELECT id, '<NEW_EMAIL>', 'owner' FROM new_ws
+), m2 AS (
+  INSERT INTO workspace_members (workspace_id, user_email, role)
+  SELECT id, 'louis@carterco.dk', 'member' FROM new_ws
+), pb AS (
+  INSERT INTO outreach_voice_playbooks
+    (workspace_id, owner_first_name, value_prop, guidelines, cta_preference, booking_link)
+  SELECT id, '<OWNER_FIRST_NAME>',
+    '<one-paragraph value prop>',
+    '<voice guidelines, used by reply-drafter>',
+    'soft_discovery',  -- or 'no_cta' / 'booking_link'
+    NULL
+  FROM new_ws
+)
+SELECT id AS new_workspace_id FROM new_ws;
+```
+
+Save the returned UUID — you'll wire it into code in step 5.
+
+### 3. Add the workspace label
+
+Edit `supabase/functions/_shared/workspaces.ts`:
+
+```ts
+const WORKSPACE_LABELS: Record<string, string> = {
+  // ...existing entries...
+  "<NEW_UUID>": "<NEW_NAME>",
+};
+```
+
+This shows up in push notification titles so users see which client triggered the alert.
+
+### 4. Add the user to ALLOWED_USERS
+
+Edit `supabase/functions/outreach-ai/index.ts`:
+
+```ts
+const ALLOWED_USERS = new Set([
+  // ...existing entries...
+  "<NEW_EMAIL>",
+]);
+```
+
+Without this, calls to `outreach-ai` from the user's JWT get a 403.
+
+### 5. (AI-drafted clients only) Author the agent brief
+
+Create `clients/<new-name>/agent-brief.md`. Use `clients/odagroup/agent-brief.md` as the model. Sections:
+
+1. **The core idea** — one-line philosophy of how messages get personalized
+2. **Client context** — company, founder, product, positioning, anchor proof point
+3. **Voice** — reference sample (real message the owner has written), traits to replicate
+4. **The strategies** — N strategies, each with title triggers + pain bank + hook + phrase bank
+5. **Inputs** — JSON shape passed to the agent
+6. **Output format** — JSON envelope shape
+7. **Hard rules** — length, banned phrases, language routing, CTA
+8. **Reference outputs** — 1–2 calibration samples (mark as STRUCTURE & VOICE only, not templates)
+9. **When in doubt** — fallback rules
+
+### 6. (AI-drafted clients only) Wire the brief into the edge function
+
+Edit `supabase/functions/_shared/draft-first-message.ts`:
+
+```ts
+import { ODAGROUP_WORKSPACE_ID, NEW_CLIENT_WORKSPACE_ID } from "./workspaces.ts";
+
+// Add another String.raw constant alongside ODAGROUP_AGENT_BRIEF.
+const NEW_CLIENT_AGENT_BRIEF = String.raw`<paste body of clients/<new-name>/agent-brief.md from '## 1.' onward>`;
+
+function briefForWorkspace(workspaceId: string): string | null {
+  if (workspaceId === ODAGROUP_WORKSPACE_ID) return ODAGROUP_AGENT_BRIEF;
+  if (workspaceId === NEW_CLIENT_WORKSPACE_ID) return NEW_CLIENT_AGENT_BRIEF;
+  return null;
+}
+```
+
+Also export `NEW_CLIENT_WORKSPACE_ID` from `supabase/functions/_shared/workspaces.ts`.
+
+> **TODO:** at N≥4 clients, refactor to load briefs from `outreach_voice_playbooks.agent_brief` text column at runtime instead of bundling per-client constants. The switch will get unwieldy.
+
+### 7. (AI-drafted clients only) Branch the connection.accepted handler
+
+Edit `supabase/functions/sendpilot-webhook/index.ts` — add a branch alongside the OdaGroup branch:
+
+```ts
+if (workspaceId === NEW_CLIENT_WORKSPACE_ID) {
+  // ...optional company blocklist check...
+  await supabase.from("outreach_pipeline").upsert({
+    /* same shape as OdaGroup branch */
+    status: "pending_ai_draft",
+  }, { onConflict: "sendpilot_lead_id" });
+  const draft = await draftFirstMessage(supabase, leadId);
+  // ...same error-handling as OdaGroup branch...
+}
+```
+
+### 8. Deploy
+
+```bash
+# 1. Sync the brief from .md → .ts (AI-drafted clients only)
+python3 scripts/sync_odagroup_brief.py   # or new equivalent for the new client
+
+# 2. Deploy the two functions touched in this onboarding
+#    (via Supabase CLI, MCP, or dashboard)
+#    - outreach-ai
+#    - sendpilot-webhook
+```
+
+### 9. Smoke test
+
+For AI-drafted clients, run the smoke test against synthetic leads:
+
+```bash
+ANTHROPIC_API_KEY=... python3 scripts/lead-enrichment/smoke_test_odagroup.py
+```
+
+Adapt the test lead list to the new client's strategies.
+
+For all clients: have the new user log into `/outreach`, confirm their workspace appears in the selector, and confirm their queue is empty (no leftover rows from setup).
+
+---
+
+## Editing an existing brief
+
+For OdaGroup (and any future AI-drafted client):
+
+1. Edit `clients/<client>/agent-brief.md`
+2. Run `python3 scripts/sync_odagroup_brief.py` (or per-client equivalent) to mirror to the .ts
+3. Redeploy `outreach-ai` and `sendpilot-webhook`
+
+The `--check` flag on the sync script exits non-zero if the .md and .ts have drifted — wire it into pre-deploy CI to catch the silent-drift footgun.

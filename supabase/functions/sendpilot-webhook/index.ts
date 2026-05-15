@@ -5,6 +5,8 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.103.3";
 import { normalizeWebsiteUrl } from "../_shared/text.ts";
+import { ODAGROUP_WORKSPACE_ID } from "../_shared/workspaces.ts";
+import { draftFirstMessage } from "../_shared/draft-first-message.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -167,6 +169,62 @@ Deno.serve(async (request) => {
         sendpilot_sender_id: senderId || null,
       }, { onConflict: "sendpilot_lead_id" });
       return json({ ok: true, recorded: "pre_connected_skipped" });
+    }
+
+    // OdaGroup branch: no SendSpark video. Write the pipeline row, then
+    // call draftFirstMessage which writes rendered_message + strategy +
+    // status='pending_approval' inline. The /outreach UI shows it in the
+    // approval queue same as a CarterCo render. Errors fall through to
+    // status='failed' so the row is visible for manual handling.
+    if (workspaceId === ODAGROUP_WORKSPACE_ID) {
+      // Hard blocklist: Novo Nordisk is Oda's flagship customer — never
+      // outreach to anyone employed there, even if they slip through Sales
+      // Nav filters. Belt-and-suspenders against the proof point becoming
+      // an embarrassment ("we use it at Novo!" → recipient works at Novo).
+      const companyLower = String(lead.company ?? "").toLowerCase();
+      if (companyLower.includes("novo nordisk") || companyLower.includes("novonordisk")) {
+        await supabase.from("outreach_pipeline").upsert({
+          sendpilot_lead_id: leadId,
+          linkedin_url: linkedinUrl,
+          contact_email: lead.contact_email,
+          is_cold: true,
+          status: "rejected",
+          accepted_at: now,
+          workspace_id: workspaceId,
+          campaign_id: campaignId || null,
+          sendpilot_sender_id: senderId || null,
+          error: "workspace_blocklist: company is Novo Nordisk (Oda customer)",
+        }, { onConflict: "sendpilot_lead_id" });
+        return json({ ok: true, recorded: "blocked_novo_nordisk_employee" });
+      }
+
+      await supabase.from("outreach_pipeline").upsert({
+        sendpilot_lead_id: leadId,
+        linkedin_url: linkedinUrl,
+        contact_email: lead.contact_email,
+        is_cold: true,
+        status: "pending_ai_draft",
+        accepted_at: now,
+        workspace_id: workspaceId,
+        campaign_id: campaignId || null,
+        sendpilot_sender_id: senderId || null,
+        referred_from_pipeline_lead_id: referredFrom,
+      }, { onConflict: "sendpilot_lead_id" });
+
+      const draft = await draftFirstMessage(supabase, leadId);
+      if ("error" in draft) {
+        await supabase.from("outreach_pipeline").update({
+          status: "failed",
+          error: `draft_first_message: ${draft.error}`,
+        }).eq("sendpilot_lead_id", leadId);
+        return json({ ok: false, recorded: "accepted_draft_failed", error: draft.error });
+      }
+      return json({
+        ok: true,
+        recorded: "accepted_drafted_pending_approval",
+        strategy: draft.envelope.strategy,
+        language: draft.envelope.language,
+      });
     }
 
     // Pause gate: campaigns listed in SENDSPARK_PAUSED_CAMPAIGNS skip the
@@ -405,8 +463,83 @@ async function lookupLead(sendpilotLeadId: string, linkedinUrl: string) {
         .eq("linkedin_url", bySlug.linkedin_url);
       return bySlug;
     }
+    // Fall through to lead_inbox staging table. Lets clients (currently
+    // OdaGroup) upload cleaned leads to SendPilot without pre-seeding
+    // outreach_leads — the row gets promoted to outreach_leads only on
+    // connection.accepted, so the active pipeline table stays small
+    // (~5% acceptance rate means ~95% of staged leads never need a row).
+    const promoted = await promoteFromInbox(sendpilotLeadId, linkedinUrl, slug);
+    if (promoted) return promoted;
   }
   return null;
+}
+
+// Promote a lead from lead_inbox → outreach_leads. Synthesises a contact_email
+// (no real email available — it's just a stable join key for downstream tables
+// like outreach_pipeline). Returns the new outreach_leads row, or null if no
+// inbox match.
+async function promoteFromInbox(
+  sendpilotLeadId: string,
+  linkedinUrl: string,
+  slug: string,
+): Promise<Record<string, unknown> | null> {
+  if (!slug) return null;
+  const { data: inbox } = await supabase
+    .from("lead_inbox")
+    .select("*")
+    .eq("linkedin_slug", slug)
+    .maybeSingle();
+  if (!inbox) return null;
+  const i = inbox as Record<string, string | null>;
+  const wsId = String(i.workspace_id ?? "");
+  if (!wsId) return null;
+  const contactEmail = await synthesizeContactEmail(wsId, linkedinUrl, slug);
+  const fullName = [i.first_name, i.last_name].filter(Boolean).join(" ").trim() || null;
+  const { data: promoted, error } = await supabase
+    .from("outreach_leads")
+    .upsert({
+      linkedin_url: i.linkedin_url ?? linkedinUrl,
+      sendpilot_lead_id: sendpilotLeadId,
+      first_name: i.first_name,
+      last_name: i.last_name,
+      full_name: fullName,
+      company: i.company,
+      title: i.title,
+      country: i.country,
+      contact_email: contactEmail,
+      slug,
+      workspace_id: wsId,
+    }, { onConflict: "linkedin_url" })
+    .select()
+    .single();
+  if (error) {
+    console.error("promoteFromInbox upsert error", error);
+    return null;
+  }
+  return promoted as Record<string, unknown>;
+}
+
+// Per-workspace synth email patterns. Real email is unavailable for cold
+// LinkedIn leads — we just need a stable join key that won't collide with
+// real customer emails. Uses SHA-1(url)[:6] suffix for collision safety,
+// matching the pattern in scripts/lead-enrichment-v2/export_for_sendpilot.py.
+async function synthesizeContactEmail(
+  workspaceId: string,
+  linkedinUrl: string,
+  slug: string,
+): Promise<string> {
+  const cleanSlug = slug.slice(0, 30).replace(/[^a-z0-9-]/g, "-");
+  const buf = await crypto.subtle.digest("SHA-1", new TextEncoder().encode(linkedinUrl));
+  const hash = Array.from(new Uint8Array(buf))
+    .slice(0, 3)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+  if (workspaceId === ODAGROUP_WORKSPACE_ID) {
+    return `kontakt+li-${cleanSlug}-${hash}@odagroup.dk`;
+  }
+  // Fallback — only OdaGroup uses lead_inbox right now. Adding a new client
+  // means adding a branch here.
+  return `noreply+li-${cleanSlug}-${hash}@example.invalid`;
 }
 
 function linkedinSlug(url: string): string {

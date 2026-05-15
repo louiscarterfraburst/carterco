@@ -45,17 +45,34 @@ type PipelineRow = {
 
 type ConvSummary = {
   id?: string;
-  participants?: Array<{ name?: string; profileUrl?: string; linkedinUrl?: string }>;
+  participants?: Array<{
+    id?: string;
+    leadId?: string;
+    name?: string;
+    profileUrl?: string;
+    linkedinUrl?: string;
+  }>;
 };
 
 type Message = {
   id?: string;
   content?: string;
-  direction?: "sent" | "received" | string;
+  direction?: string;
   sentAt?: string;
   sender?: { name?: string; profileUrl?: string };
   recipient?: { name?: string; profileUrl?: string };
 };
+
+// SendPilot has renamed message direction values at least once already
+// (cf. sendpilot-webhook's event-type and data-field fallbacks). Map every
+// known variant to a canonical "sent" | "received"; surface unknowns in the
+// response so we notice the next rename instead of silently dropping rows.
+function canonicaliseDirection(raw: unknown): "sent" | "received" | null {
+  const v = String(raw ?? "").toLowerCase();
+  if (v === "sent" || v === "outgoing" || v === "outbound" || v === "out") return "sent";
+  if (v === "received" || v === "incoming" || v === "inbound" || v === "in") return "received";
+  return null;
+}
 
 function normaliseLinkedinUrl(url: string): string {
   return (url || "").toLowerCase().trim().replace(/\/+$/, "");
@@ -174,8 +191,12 @@ async function syncOne(
     return { lead: row.sendpilot_lead_id, skipped: "missing_sender_or_url", outbound_inserted: 0 };
   }
 
-  // Step 1: find the conversation for this lead.
-  const listUrl = `${SP_BASE}/v1/inbox/conversations?accountId=${encodeURIComponent(row.sendpilot_sender_id)}&limit=20`;
+  // Step 1: find the conversation for this lead. List up to 50 — name/URL
+  // match alone misses threads that drop off the top-20 window when a sender
+  // is active across many conversations (the original limit=20 was why most
+  // CarterCo leads came back skipped:"no_conversation_match" in May 2026).
+  // SendPilot caps this endpoint below 100 (returns 500 at limit=100).
+  const listUrl = `${SP_BASE}/v1/inbox/conversations?accountId=${encodeURIComponent(row.sendpilot_sender_id)}&limit=50`;
   const listRes = await fetch(listUrl, { headers: { "X-API-Key": SP_API_KEY } });
   if (!listRes.ok) {
     return { lead: row.sendpilot_lead_id, error: `list HTTP ${listRes.status}`, outbound_inserted: 0 };
@@ -183,12 +204,18 @@ async function syncOne(
   const listBody = await listRes.json() as { conversations?: ConvSummary[] };
   const targetUrl = normaliseLinkedinUrl(row.linkedin_url);
   const targetName = normaliseName(fullName);
+  const targetLeadId = row.sendpilot_lead_id;
   let convId: string | null = null;
   for (const c of listBody.conversations ?? []) {
     for (const p of c.participants ?? []) {
+      const pId = String(p.id ?? p.leadId ?? "");
       const pUrl = normaliseLinkedinUrl((p.profileUrl ?? p.linkedinUrl ?? "") as string);
       const pName = normaliseName(p.name ?? "");
-      if ((targetUrl && pUrl === targetUrl) || (targetName && pName && pName === targetName)) {
+      if (
+        (pId && pId === targetLeadId) ||
+        (targetUrl && pUrl === targetUrl) ||
+        (targetName && pName && pName === targetName)
+      ) {
         convId = c.id ?? null;
         break;
       }
@@ -216,21 +243,55 @@ async function syncOne(
   // backfill creates a second copy of any legacy inbound, but only for
   // workspaces whose webhook never fired in the first place — Tresyv being
   // the primary case (no legacy inbound rows to clash with).
-  const relevant = messages.filter((m) => (m.direction === "sent" || m.direction === "received") && m.id && m.content);
+  const unknownDirs = new Set<string>();
+  const relevant: Array<Message & { _canonDir: "sent" | "received" }> = [];
+  for (const m of messages) {
+    if (!m.id || !m.content) continue;
+    const canon = canonicaliseDirection(m.direction);
+    if (!canon) {
+      unknownDirs.add(String(m.direction ?? "<missing>"));
+      continue;
+    }
+    relevant.push({ ...m, _canonDir: canon });
+  }
+  if (unknownDirs.size > 0) {
+    console.warn("sync: unknown message directions", {
+      lead: row.sendpilot_lead_id,
+      conv: convId,
+      unknownDirs: [...unknownDirs],
+    });
+  }
   if (relevant.length === 0) {
-    return { lead: row.sendpilot_lead_id, conv: convId, in_thread: 0, outbound_inserted: 0, inbound_inserted: 0 };
+    return {
+      lead: row.sendpilot_lead_id,
+      conv: convId,
+      in_thread: 0,
+      outbound_inserted: 0,
+      inbound_inserted: 0,
+      unknown_dirs: unknownDirs.size > 0 ? [...unknownDirs] : undefined,
+    };
   }
 
   if (dryRun) {
-    const ob = relevant.filter((m) => m.direction === "sent").length;
-    const ib = relevant.filter((m) => m.direction === "received").length;
-    return { lead: row.sendpilot_lead_id, conv: convId, in_thread: relevant.length, outbound_in_thread: ob, inbound_in_thread: ib, outbound_inserted: 0, inbound_inserted: 0, dryRun: true };
+    const ob = relevant.filter((m) => m._canonDir === "sent").length;
+    const ib = relevant.filter((m) => m._canonDir === "received").length;
+    return {
+      lead: row.sendpilot_lead_id,
+      conv: convId,
+      in_thread: relevant.length,
+      outbound_in_thread: ob,
+      inbound_in_thread: ib,
+      outbound_inserted: 0,
+      inbound_inserted: 0,
+      unknown_dirs: unknownDirs.size > 0 ? [...unknownDirs] : undefined,
+      dryRun: true,
+    };
   }
 
   let outboundInserted = 0;
   let inboundInserted = 0;
   for (const m of relevant) {
-    const direction = m.direction === "sent" ? "outbound" : "inbound";
+    const direction = m._canonDir === "sent" ? "outbound" : "inbound";
     // CRITICAL: trim. SendPilot's conversations API returns messages with
     // trailing whitespace, but sendpilot-webhook trims via .trim() in its
     // own insert path. Without trimming here, the dedupe-by-content check

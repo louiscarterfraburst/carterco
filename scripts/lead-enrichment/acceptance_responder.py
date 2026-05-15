@@ -38,6 +38,13 @@ SS_WS = os.environ.get("SENDSPARK_WORKSPACE") or sys.exit("SENDSPARK_WORKSPACE n
 SS_DYN = os.environ.get("SENDSPARK_DYNAMIC") or sys.exit("SENDSPARK_DYNAMIC not set")
 WH_TOKEN = os.environ.get("WEBHOOK_SITE_TOKEN") or sys.exit("WEBHOOK_SITE_TOKEN not set")
 
+# Supabase lookup (optional but strongly preferred): when set, `find_lead` reads
+# fresh website/firstName/etc. from `outreach_leads` instead of the in-memory CSV
+# snapshot. Without this, late website enrichment never reaches SendSpark and
+# rendered videos fall back to the workspace default background.
+SB_URL = os.environ.get("SUPABASE_URL") or os.environ.get("NEXT_PUBLIC_SUPABASE_URL")
+SB_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+
 SP_BASE = "https://api.sendpilot.ai/v1"
 SS_BASE = "https://api-gw.sendspark.com/v1"
 WH_BASE = f"https://webhook.site/token/{WH_TOKEN}"
@@ -70,6 +77,53 @@ def synth_email(linkedin_url):
     slug = re.sub(r"[^a-z0-9-]+", "-", slug.lower())[:30] or "lead"
     h = hashlib.sha1(linkedin_url.encode()).hexdigest()[:6]
     return SYNTH_EMAIL_BASE.format(tag=f"{slug}-{h}")
+
+
+def li_slug(url):
+    """Last non-empty path segment, lowercased — robust to country subdomain
+    (dk./www./etc.) and trailing slashes."""
+    path = (urllib.parse.urlparse(url or "").path or "").rstrip("/")
+    return path.rsplit("/", 1)[-1].lower()
+
+
+def fetch_lead_from_db(linkedin_url):
+    """Fetch a lead from outreach_leads, returning a CSV-shaped dict (firstName,
+    lastName, company, title, website, linkedinUrl). Returns None if Supabase
+    isn't configured or no row matches. Tries exact linkedin_url first, then
+    falls back to slug match for country-prefix mismatches."""
+    if not SB_URL or not SB_KEY:
+        return None
+    headers = {
+        "apikey": SB_KEY,
+        "Authorization": f"Bearer {SB_KEY}",
+        "Accept": "application/json",
+    }
+    def _shape(r):
+        return {
+            "linkedinUrl": r.get("linkedin_url") or linkedin_url,
+            "firstName": r.get("first_name") or "",
+            "lastName": r.get("last_name") or "",
+            "company": r.get("company") or "",
+            "title": r.get("title") or "",
+            "website": r.get("website") or "",
+        }
+    encoded = urllib.parse.quote(linkedin_url, safe="")
+    url = f"{SB_URL}/rest/v1/outreach_leads?linkedin_url=eq.{encoded}&select=linkedin_url,first_name,last_name,company,title,website&limit=1"
+    code, body = http(url, headers=headers)
+    if code == 200:
+        rows = json.loads(body or "[]")
+        if rows:
+            return _shape(rows[0])
+    slug = li_slug(linkedin_url)
+    if not slug:
+        return None
+    url = f"{SB_URL}/rest/v1/outreach_leads?slug=eq.{urllib.parse.quote(slug, safe='')}&select=linkedin_url,first_name,last_name,company,title,website&limit=1"
+    code, body = http(url, headers=headers)
+    if code == 200:
+        rows = json.loads(body or "[]")
+        if rows:
+            return _shape(rows[0])
+    return None
 
 
 def webhook_drain():
@@ -168,13 +222,8 @@ def main():
         template = DEFAULT_TEMPLATE
         print(f"(no template at {args.template}, using built-in default)")
 
-    def li_slug(url):
-        """Last non-empty path segment, lowercased — robust to country
-        subdomain (dk./www./etc.) and trailing slashes."""
-        path = (urllib.parse.urlparse(url or "").path or "").rstrip("/")
-        return path.rsplit("/", 1)[-1].lower()
-
-    # Build linkedinUrl + slug → lead lookup
+    # Build linkedinUrl + slug → lead lookup (in-memory CSV cache used as
+    # fallback only; Supabase is the live source when SB_URL/SB_KEY are set).
     leads_by_url = {}
     leads_by_slug = {}
     for r in csv.DictReader(open(args.leads_csv)):
@@ -183,9 +232,23 @@ def main():
         if s:
             leads_by_slug.setdefault(s, r)
     print(f"loaded {len(leads_by_url)} leads from {args.leads_csv}  ({len(leads_by_slug)} unique slugs)")
+    if SB_URL and SB_KEY:
+        print("Supabase lookup enabled — outreach_leads is the source of truth at render time")
+    else:
+        print("WARNING: SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY not set — falling back to CSV only (late website enrichment will be missed)")
 
     def find_lead(url):
-        return leads_by_url.get(url) or leads_by_slug.get(li_slug(url))
+        # Prefer live Supabase lookup so late-enriched websites reach SendSpark.
+        # CSV fallback only kicks in when Supabase is unavailable or has no row.
+        db_lead = fetch_lead_from_db(url)
+        if db_lead and db_lead.get("website"):
+            return db_lead
+        csv_lead = leads_by_url.get(url) or leads_by_slug.get(li_slug(url))
+        # If DB had the row but no website, prefer it over CSV anyway for
+        # name/title/company freshness — but only if CSV doesn't have the URL.
+        if db_lead and not csv_lead:
+            return db_lead
+        return csv_lead
 
     accepted = {a["linkedinUrl"]: a for a in load_jsonl(args.accepted_log)}
     rendered = {r["contactEmail"]: r for r in load_jsonl(args.rendered_log)}

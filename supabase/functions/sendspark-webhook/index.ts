@@ -176,7 +176,7 @@ async function handleRenderReady(evt: SendSparkEvent, email: string, videoLink: 
 
     const { data: pipe } = await supabase
         .from("outreach_pipeline")
-        .select("sendpilot_lead_id, contact_email, status, campaign_id, referred_from_pipeline_lead_id")
+        .select("sendpilot_lead_id, contact_email, status, campaign_id, referred_from_pipeline_lead_id, sent_at")
         .eq("contact_email", email)
         .maybeSingle();
 
@@ -187,6 +187,25 @@ async function handleRenderReady(evt: SendSparkEvent, email: string, videoLink: 
 
     if (pipe.status === "sent" || pipe.status === "rejected") {
         return json({ ok: true, recorded: "render_after_terminal" });
+    }
+    // Race-condition guard: if a manual `render` decision (outreach-approve)
+    // was kicked AFTER the lead was already sent, status got transitioned to
+    // `rendering` and the terminal-status check above doesn't catch it. Use
+    // sent_at as the source of truth — if the lead has ever been sent, the
+    // new render is informational only, never re-queue for approval.
+    if (pipe.sent_at) {
+        console.warn("video_generated_dv arrived for already-sent lead (status now resets to sent)", {
+            email,
+            videoLink,
+            status_was: pipe.status,
+        });
+        await supabase.from("outreach_pipeline").update({
+            video_link: videoLink,
+            embed_link: evt.embedLink ?? null,
+            thumbnail_url: evt.thumbnailUrl ?? null,
+            status: "sent",
+        }).eq("sendpilot_lead_id", pipe.sendpilot_lead_id);
+        return json({ ok: true, recorded: "render_after_sent_status_preserved" });
     }
     if (pipe.status === "pending_pre_render") {
         console.warn("video_generated_dv arrived before pre-render approval", { email, videoLink });

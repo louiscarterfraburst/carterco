@@ -23,6 +23,7 @@ type Status =
   | "invited"
   | "accepted"
   | "pending_pre_render"
+  | "pending_ai_draft"
   | "rendering"
   | "rendered"
   | "pending_approval"
@@ -32,6 +33,22 @@ type Status =
   | "pending_alt_review"
   | "failed"
   | "pre_connected";
+
+// AI-message clients (currently OdaGroup) skip the SendSpark video render and
+// have their first DM written by Claude. The strategy/rationale columns are
+// populated by draft_first_message; absence means it's a video-render lead.
+type MessageStrategy =
+  | "commercial_excellence"
+  | "crm_platform"
+  | "ai_innovation"
+  | "medical_affairs";
+
+const STRATEGY_LABELS: Record<MessageStrategy, string> = {
+  commercial_excellence: "CommEx",
+  crm_platform: "CRM/Veeva",
+  ai_innovation: "AI/Innov",
+  medical_affairs: "Med Affairs",
+};
 
 type Intent = "interested" | "question" | "decline" | "ooo" | "other" | "referral";
 
@@ -107,6 +124,10 @@ type PipelineRow = {
   outcome: Outcome | null;
   outcome_at: string | null;
   outcome_note: string | null;
+  message_strategy: MessageStrategy | null;
+  message_strategy_rationale: string | null;
+  message_model: string | null;
+  message_language: "da" | "en" | null;
   lead?: LeadEnrich;
 };
 
@@ -1411,7 +1432,9 @@ function PendingTab(props: {
                   </label>
 
                   <div className="flex flex-1 flex-wrap gap-4">
-                    {/* video preview / thumbnail */}
+                    {/* video preview / thumbnail — only for video-render clients.
+                        AI-drafted clients (OdaGroup) have no video and skip this block. */}
+                    {r.message_strategy ? null : (
                     <div className="w-full sm:w-[280px] shrink-0">
                       {r.embed_link ? (
                         isPlaying ? (
@@ -1443,6 +1466,7 @@ function PendingTab(props: {
                         </div>
                       )}
                     </div>
+                    )}
 
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -1450,6 +1474,15 @@ function PendingTab(props: {
                           {r.lead?.first_name} {r.lead?.last_name}
                         </div>
                         <div className="flex items-center gap-2">
+                          {r.message_strategy ? (
+                            <span
+                              title={r.message_strategy_rationale ?? r.message_strategy}
+                              className="tabular inline-block rounded-sm px-2 py-0.5 text-[10px] uppercase tracking-[0.18em]"
+                              style={{ background: "rgba(35,90,67,0.10)", color: "var(--forest)" }}>
+                              {STRATEGY_LABELS[r.message_strategy]}
+                              {r.message_language ? ` · ${r.message_language}` : ""}
+                            </span>
+                          ) : null}
                           {r.is_cold === false ? <Pill kind="warm" label="forbundet" /> : null}
                           {r.is_cold === true ? <Pill kind="cold" label="kold" /> : null}
                         </div>
@@ -1468,6 +1501,11 @@ function PendingTab(props: {
                       <div className="tabular mt-0.5 text-[11px] text-[var(--ink)]/40">
                         Køet {fmtRelative(r.queued_at ?? r.rendered_at)}{r.lead?.title ? ` · ${r.lead.title.slice(0, 80)}` : ""}
                       </div>
+                      {r.message_strategy_rationale ? (
+                        <div className="tabular mt-1 text-[11px] italic text-[var(--ink)]/45">
+                          AI: {r.message_strategy_rationale}
+                        </div>
+                      ) : null}
 
                       <textarea
                         value={message}
@@ -2593,6 +2631,7 @@ function StatusPill({ status }: { status: Status }) {
     invited: { label: "Inviteret", bg: "rgb(0 0 0 / .06)", fg: "rgb(0 0 0 / .55)" },
     accepted: { label: "Accept", bg: "rgb(0 0 0 / .06)", fg: "rgb(0 0 0 / .55)" },
     pending_pre_render: { label: "Review", bg: "rgba(185,112,65,0.14)", fg: "var(--clay)" },
+    pending_ai_draft: { label: "Skriver…", bg: "rgb(0 0 0 / .06)", fg: "rgb(0 0 0 / .55)" },
     rendering: { label: "Render", bg: "rgb(0 0 0 / .06)", fg: "rgb(0 0 0 / .55)" },
     rendered: { label: "Klar", bg: "rgb(0 0 0 / .06)", fg: "rgb(0 0 0 / .55)" },
     pending_approval: { label: "Afventer", bg: "rgba(185,112,65,0.14)", fg: "var(--clay)" },
