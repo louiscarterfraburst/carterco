@@ -85,6 +85,7 @@ const logoFiles: {
   preserveColor?: boolean;
 }[] = [
   { file: "logo-mavico.png" },
+  { file: "logo-odagroup.png" },
   { file: "logo-tresyv.svg", sizeClass: "h-8 w-auto sm:h-10" },
   { file: "logo-murph.png" },
   { file: "logo-burst.png", sizeClass: "h-6 w-auto sm:h-7", offsetClass: "mb-2.5 sm:mb-3" },
