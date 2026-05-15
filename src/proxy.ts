@@ -10,7 +10,7 @@ export const config = {
   matcher: ["/test-leads/:path*"],
 };
 
-export function middleware(req: NextRequest) {
+export function proxy(req: NextRequest) {
   const expected = process.env.ADMIN_BASIC_AUTH;
   if (!expected) {
     // Fail-closed: if not configured, deny rather than expose.
