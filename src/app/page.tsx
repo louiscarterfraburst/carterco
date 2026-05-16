@@ -189,7 +189,7 @@ const journey: JourneyStage[] = [
     n: "02",
     eyebrow: "02 · HASTIGHED",
     title: "Få dem på telefonen,",
-    titleAccent: "før de glemmer dig.",
+    titleAccent: "før leadet køler.",
     body: "",
     subpoints: [
       "Lead lander på hele teamets mobil med det samme, sælgeren ringer med ét tryk",
