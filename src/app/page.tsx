@@ -176,11 +176,10 @@ const journey: JourneyStage[] = [
     titleAccent: "til at svare.",
     body: "",
     subpoints: [
-      "Henvendelser der føles personlige og velovervejede, ikke spam",
       "LinkedIn-beskeder skrevet til dig, ikke til din titel",
       "Mails direkte til indbakken, uden om receptionen",
-      "Meta- og Google-annoncer bygget på din ideelle kunde",
-      "Genaktivering af leads der ligger kolde i databasen",
+      "Annoncer rettet mod dine bedste kunder, ikke alle der ligner",
+      "Genaktivering af leads I allerede har samlet, men aldrig hørt fra",
     ],
     anchorClient: { name: "Tresyv", line: "Kører den i dag." },
     supportingClients: [],
