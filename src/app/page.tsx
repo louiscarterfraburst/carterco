@@ -2151,7 +2151,7 @@ export default function Home() {
                     <div className="mt-24 flex items-center gap-3 sm:mt-28">
                       <span aria-hidden className="h-px w-8 bg-[var(--clay)]/60" />
                       <p className="text-[10px] font-bold uppercase tracking-[0.32em] text-[var(--clay)]">
-                        + andre dele af samme værktøj
+                        + andre dele af opsætningen
                       </p>
                     </div>
                     <div className="mt-7 grid grid-cols-1 gap-5 sm:grid-cols-2 sm:gap-6 lg:grid-cols-4">
