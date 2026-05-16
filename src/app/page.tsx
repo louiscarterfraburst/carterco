@@ -2460,7 +2460,7 @@ export default function Home() {
                             </p>
                             <div className="mt-6 h-px w-10 bg-[var(--cream)]/15" />
                             <p className="mt-4 text-[10px] font-bold uppercase tracking-[0.24em] text-[var(--forest)]">
-                              ✓ Won · close 30. apr
+                              ✓ Vundet · lukket 30. apr
                             </p>
                           </div>
                         </>
