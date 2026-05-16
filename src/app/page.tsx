@@ -193,7 +193,7 @@ const journey: JourneyStage[] = [
     body: "",
     subpoints: [
       "Lead lander på teamets mobil, ét tryk ringer dem op",
-      "SMS-bro hvis ingen tager, refererer til opkaldet",
+      "Automatisk SMS hvis ingen tager, refererer til opkaldet",
       "Mail og reaktivering hvis stadig stille",
     ],
     proof: {
