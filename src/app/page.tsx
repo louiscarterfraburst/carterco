@@ -2391,8 +2391,8 @@ export default function Home() {
                             <p className="mt-1 font-display text-[1.35rem] italic leading-[1.1] tracking-tight text-[var(--cream)]/90">
                                 aftaler vundet.
                             </p>
-                            <p className="mt-4 font-mono text-[11px] tabular text-[var(--cream)]/55">
-                              1.200.000 dkk · sporet til kilde
+                            <p className="mt-4 text-[12px] leading-relaxed text-[var(--cream)]/55">
+                              <span className="font-semibold text-[var(--cream)]/85">1.200.000&thinsp;dkk</span> — sporet til kilde, sidste 30 dage.
                             </p>
                             <div className="mt-6 h-px w-10 bg-[var(--cream)]/15" />
                             <div className="mt-4 space-y-2 font-mono text-[10.5px] tabular">
