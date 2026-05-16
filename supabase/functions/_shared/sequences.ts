@@ -1,10 +1,21 @@
-// Sequence contract + the live sequence list. The engine
+// Sequence contract + DB-backed loader. The engine
 // (outreach-engagement-tick) walks a lead through one sequence at a time:
 // trigger → step 0 → wait → branch → step 1 → ... → done.
 //
-// Adding a new sequence = appending to SEQUENCES below + updating the
-// "Current sequences" table in docs/outreach-playbook.md.
+// Storage: `outreach_sequences` table. A row with workspace_id=NULL is a
+// global default; a row with a real workspace_id overrides the global for
+// that workspace by matching `id`. Resolution per lead = (global rows whose
+// `id` is not also overridden for this workspace) + (workspace-specific
+// rows), ordered by `position`.
+//
+// Adding a new sequence:
+//   - global:        INSERT into outreach_sequences with workspace_id=NULL
+//   - workspace-only: INSERT with workspace_id=<uuid>
+//   - workspace override of a global: INSERT with workspace_id=<uuid> and the
+//     same `id` as the global row
+// No code changes required, no redeploy.
 
+import type { SupabaseClient } from "npm:@supabase/supabase-js@2.103.3";
 import type { Signal, Action } from "./engagement-rules.ts";
 
 export type SequenceBranch = {
@@ -26,97 +37,83 @@ export type SequenceStep = {
 export type SequenceTrigger = { signal: Signal };
 
 export type Sequence = {
-    id: string;            // stable; audit log writes "<sequence>::<step>"
+    id: string;                       // stable; audit log writes "<sequence>::<step>"
     description: string;
     trigger: SequenceTrigger;
-    excludesGlobal?: Signal[]; // checked at every step. Default: ["replied"]
+    excludesGlobal?: Signal[];        // checked at every step. Default: ["replied"]
     steps: SequenceStep[];
+    // Resolution metadata. NULL = global default; non-null = override for
+    // that workspace. Engine logic doesn't depend on these, but the page
+    // surfaces them so you can tell "this client uses the global flow" vs
+    // "this client has a custom flow".
+    workspaceId: string | null;
+    position: number;
 };
 
 export const DEFAULT_GLOBAL_EXCLUDES: Signal[] = ["replied"];
 
-// Active sequences. Order matters: enrolment picks the first matching one.
-// Order matters: enrolment picks the first matching sequence. Watched MUST
-// come first so a lead with both `sent` and `played` lands in the watched
-// flow rather than the unwatched flow.
-export const SEQUENCES: Sequence[] = [
-    {
-        id: "watched_followup_v1",
-        description:
-            "Lead played the video. React fast (20 min), then bump 3 days later if no reply.",
-        trigger: { signal: "played" },
-        steps: [
-            {
-                id: "nysgerrig",
-                waitHours: 20 / 60, // 20 minutes
-                branches: [
-                    {
-                        action: {
-                            type: "auto_send",
-                            template:
-                                "Hej {firstName}\n\nEr nysgerrig på din vurdering. Er det noget, der lyder interessant?\n\nJeg kan sende et par forslag til tider, hvis det giver mening at tage den videre.",
-                        },
-                    },
-                ],
-            },
-            {
-                id: "kalender",
-                waitHours: 72, // 3 days after step 0 fired
-                branches: [
-                    {
-                        action: {
-                            type: "auto_send",
-                            template:
-                                "Hej {firstName}, vender tilbage på denne. Er det noget vi skal sætte i kalenderen?",
-                        },
-                    },
-                ],
-            },
-        ],
-    },
-    {
-        id: "unwatched_followup_v1",
-        description:
-            "Lead got the video but hasn't played it. Qualify at +3d, then a final graceful exit at +5d. Slower than the watched flow because no engagement yet, gives them room for vacations / busy weeks before pushing.",
-        trigger: { signal: "sent" },
-        // Exit if they reply OR play. Played leads get re-enrolled in the
-        // watched flow by the engine's re-enrolment path.
-        excludesGlobal: ["replied", "played"],
-        steps: [
-            {
-                id: "qualifier",
-                waitHours: 72, // 3 days after sent
-                branches: [
-                    {
-                        action: {
-                            type: "auto_send",
-                            template:
-                                "Hej {firstName}\n\nHurtigt spørgsmål: er du den rigtige hos {company} at tale med om dette, eller skal jeg fange en anden? Sig også til hvis det ikke er relevant.",
-                        },
-                    },
-                ],
-            },
-            {
-                id: "graceful_exit",
-                waitHours: 120, // 5 days after qualifier fired
-                branches: [
-                    {
-                        action: {
-                            type: "auto_send",
-                            template:
-                                "Hej {firstName}\n\nJeg lukker den herfra for nu.\n\nHvis det bliver relevant senere, er du meget velkommen til at skrive, så tager vi den derfra.\n\nGod dag.",
-                        },
-                    },
-                ],
-            },
-        ],
-    },
-];
+// One DB row.
+type SequenceRow = {
+    id: string;
+    workspace_id: string | null;
+    description: string;
+    trigger_signal: string;
+    excludes_global: string[];
+    steps: SequenceStep[];
+    position: number;
+};
+
+// Load every active sequence row in one query. Engine calls this once per
+// tick, then partitions by workspace via resolveSequencesForWorkspace.
+export async function loadAllSequences(sb: SupabaseClient): Promise<Sequence[]> {
+    const { data, error } = await sb
+        .from("outreach_sequences")
+        .select("id, workspace_id, description, trigger_signal, excludes_global, steps, position")
+        .eq("is_active", true)
+        .order("position", { ascending: true });
+    if (error) {
+        console.error("loadAllSequences error", error);
+        return [];
+    }
+    return ((data ?? []) as SequenceRow[]).map(rowToSequence);
+}
+
+function rowToSequence(r: SequenceRow): Sequence {
+    return {
+        id: r.id,
+        description: r.description,
+        trigger: { signal: r.trigger_signal as Signal },
+        excludesGlobal: (r.excludes_global ?? []) as Signal[],
+        steps: r.steps ?? [],
+        workspaceId: r.workspace_id,
+        position: r.position,
+    };
+}
+
+// Resolve which sequences apply to a given workspace. Workspace-specific
+// rows take precedence over globals when ids collide. Ordering matches the
+// pre-DB order in code: lowest `position` first, which means watched_followup
+// (100) wins enrolment over unwatched_followup (200) when both triggers match.
+export function resolveSequencesForWorkspace(
+    all: Sequence[],
+    workspaceId: string | null,
+): Sequence[] {
+    const byId = new Map<string, Sequence>();
+    for (const seq of all) {
+        if (seq.workspaceId === null) byId.set(seq.id, seq);
+    }
+    if (workspaceId) {
+        for (const seq of all) {
+            if (seq.workspaceId === workspaceId) byId.set(seq.id, seq);
+        }
+    }
+    return Array.from(byId.values()).sort((a, b) => a.position - b.position);
+}
 
 // --- Pure helpers (no DB) ----------------------------------------------------
 
-export function findSequence(id: string): Sequence | undefined {
-    return SEQUENCES.find((s) => s.id === id);
+export function findSequenceIn(seqs: Sequence[], id: string): Sequence | undefined {
+    return seqs.find((s) => s.id === id);
 }
 
 export function effectiveExcludes(seq: Sequence, step: SequenceStep): Signal[] {

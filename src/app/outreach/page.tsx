@@ -1196,6 +1196,10 @@ function Header({ pushStatus, onEnablePush, onReload, onSignOut, workspaces, act
           ) : null}
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          <Link href="/outreach/clients"
+            className="focus-cream tabular rounded-sm border border-[var(--ink)]/15 px-3 py-1.5 text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/65 hover:border-[var(--ink)]/35 hover:text-[var(--ink)]"
+            title="Klient-oversigt (read-only)"
+          >Clients</Link>
           <button type="button" onClick={() => void onEnablePush()}
             className="focus-cream tabular rounded-sm border border-[var(--ink)]/15 px-3 py-1.5 text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/65 hover:border-[var(--ink)]/35 hover:text-[var(--ink)]"
             title="Push-notifikationer"
