@@ -231,7 +231,22 @@ The page is heavy by default. Cuts are easier wins than additions. Specifically:
 
 If a number can't be attributed to a named case (Tresyv, Murph, Burst, etc.), it doesn't go on the page. External claims (MIT 21×) carry inline citations to the linked PDF. No anonymized proof, ever.
 
-### 6.7 Outbound goes metric-less by design
+### 6.7 Timing claims must match reality, not approximate it
+
+When describing time-sensitive mechanics, name the actual time scale, not a looser one. Looser-than-reality undersells what's built.
+
+**Bad (rejected during iteration):**
+> Hvert opkald får et resultat samme dag, pipelinen lyver ikke
+("samme dag" is loose. The reality: salesperson taps the outcome chip on the phone *right after* the call ends. Not "later in the day.")
+
+**Good:**
+> Sælgeren markerer resultatet lige efter opkaldet, pipelinen lyver ikke
+
+Same principle for the push-til-mobil claim — say "med det samme" (or similar) when the reality is instant, not "samme dag" or "inden for X minutter."
+
+The buyer cares about urgency. If we say "samme dag" when we mean "med det samme," we sound like every other slow CRM vendor. Precision is the differentiator.
+
+### 6.8 Outbound goes metric-less by design
 
 Owner-confirmed: accept-rate is an activity metric, not an outcome metric. The ICP (founders, sales leaders) doesn't care about LinkedIn accept rates. Let the mockup do the proof (LinkedIn DM card + SendSpark thumbnail + Meta ad card) instead of leading with a stat that lands soft.
 

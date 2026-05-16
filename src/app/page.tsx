@@ -192,7 +192,7 @@ const journey: JourneyStage[] = [
     titleAccent: "før de glemmer dig.",
     body: "",
     subpoints: [
-      "Lead lander på hele teamets mobil, sælgeren ringer med ét tryk",
+      "Lead lander på hele teamets mobil med det samme, sælgeren ringer med ét tryk",
       "SMS-bro hvis ingen tager, kontekstuelt, ikke spam",
       "Mail og genaktivering hvis ingen reaktion",
       "Mens samtalen er varm, ikke 47 timer senere",
@@ -215,7 +215,7 @@ const journey: JourneyStage[] = [
     titleAccent: "Lukke aftalen.",
     body: "Møder glipper. Aftaler forsvinder. Sælgeren glemte at følge op.",
     subpoints: [
-      "Hvert opkald får et resultat samme dag, pipelinen lyver ikke",
+      "Sælgeren markerer resultatet lige efter opkaldet, pipelinen lyver ikke",
       "Plejeflow til leads der ikke er klar nu",
       "Genoptagelses-flow til tabte aftaler",
       "Storkunde-fraled-opsporing: kunden der stopper med at bestille",
