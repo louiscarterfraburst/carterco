@@ -178,7 +178,7 @@ const journey: JourneyStage[] = [
     subpoints: [
       "Personlige LinkedIn-beskeder, automatiseret per modtager",
       "Mails direkte til beslutningstagerens indbakke",
-      "Annoncer rettet mod dine bedste kunder, ikke alle der ligner",
+      "Annoncer til folk der ligner jeres bedste kunder",
       "Genaktivering af kolde leads I allerede har samlet",
     ],
     anchorClient: { name: "Tresyv", line: "Kører den i dag." },
