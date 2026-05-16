@@ -2418,11 +2418,14 @@ export default function Home() {
                                 Talepunkter · ai
                               </p>
                             </div>
-                            <p className="mt-7 font-display text-[2.6rem] italic leading-[1] tracking-[-0.02em] text-[var(--cream)]">
-                              Brief 2&nbsp;min før opkaldet.
+                            <p className="mt-7 font-display text-[5.5rem] italic leading-[0.85] tracking-[-0.04em] text-[var(--cream)] sm:text-[6rem]">
+                              3
+                            </p>
+                            <p className="mt-1 font-display text-[1.35rem] italic leading-[1.1] tracking-tight text-[var(--cream)]/90">
+                              talepunkter klar.
                             </p>
                             <p className="mt-4 text-[12px] leading-relaxed text-[var(--cream)]/55">
-                              Konteksten Stark Group ringer ind på, klar i operatørens hånd.
+                              <span className="font-semibold text-[var(--cream)]/85">Stark Group</span> — kontekst leveret 2 min før opkald.
                             </p>
                             <div className="mt-6 h-px w-10 bg-[var(--cream)]/15" />
                             <ol className="mt-4 space-y-3 text-[12.5px] leading-snug">
