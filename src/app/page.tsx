@@ -2157,21 +2157,23 @@ export default function Home() {
                     <div className="mt-7 grid grid-cols-1 gap-5 sm:grid-cols-2 sm:gap-6 lg:grid-cols-4">
                       {stage.n === "01" && (
                         <>
-                          {/* AI-drafted DM (OdaGroup-style — no video, title-targeted) */}
-                          <div className="rounded-2xl border border-[#29261f]/12 bg-[#fff8ea] p-4 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.4)]">
+                          {/* AI-drafted DM — preview-only, 1 line ellipsized.
+                              All row-2 cards live on ember so the row reads
+                              as "operator's screen" not 4 SaaS-feature tiles. */}
+                          <div className="rounded-2xl border border-[var(--cream)]/8 bg-[#14110d] p-4 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.5)]">
                             <div className="mb-3 flex items-center gap-2">
                               <div className="grid h-7 w-7 place-items-center rounded-full bg-[linear-gradient(135deg,#3a4654,#525e6c)] text-[10px] font-bold text-[#fff8ea]">JS</div>
                               <div className="min-w-0 flex-1">
-                                <div className="truncate text-[11px] text-[#29261f]">Jonas Schmidt</div>
-                                <div className="truncate text-[9px] text-[#29261f]/55">VP Sales · Bio-Pharma X</div>
+                                <div className="truncate text-[11px] text-[var(--cream)]/90">Jonas Schmidt</div>
+                                <div className="truncate text-[9px] text-[var(--cream)]/45">VP Sales · Bio-Pharma X</div>
                               </div>
                               <span className="rounded-full bg-[var(--clay)]/15 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider text-[var(--clay)]">AI</span>
                             </div>
-                            <p className="text-[11px] leading-relaxed text-[#29261f]/82">
-                              Hej Jonas — så at I ramper jeres pharma-felt-team. Mit korte input om hvad der virker for VP'er der lægger top of funnel oven på Veeva...
+                            <p className="truncate text-[11px] text-[var(--cream)]/65">
+                              Hej Jonas — så at I ramper jeres pharma-felt-team…
                             </p>
-                            <div className="mt-3 flex items-center justify-between border-t border-[#29261f]/8 pt-2.5">
-                              <span className="text-[9px] uppercase tracking-[0.18em] text-[#29261f]/45">Skrevet · 12ms</span>
+                            <div className="mt-3 flex items-center justify-between border-t border-[var(--cream)]/8 pt-2.5">
+                              <span className="text-[9px] uppercase tracking-[0.18em] text-[var(--cream)]/40">Skrevet · 12ms</span>
                               <span className="text-[9px] font-bold uppercase tracking-wider text-[var(--forest)]">Klar at sende</span>
                             </div>
                           </div>
@@ -2180,35 +2182,29 @@ export default function Home() {
                           <div className="rounded-2xl border border-[var(--cream)]/8 bg-[#14110d] p-4 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.5)]">
                             <div className="flex items-center justify-between">
                               <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--clay)]">ICP-score</p>
-                              <span className="text-[9px] text-[var(--cream)]/45">auto · Claude</span>
+                              <span className="rounded-full bg-[var(--clay)]/15 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider text-[var(--clay)]">Auto</span>
                             </div>
-                            <div className="mt-3 grid grid-cols-2 gap-3">
+                            <div className="mt-4 grid grid-cols-2 gap-3">
                               <div>
                                 <div className="text-[8px] uppercase tracking-wider text-[var(--cream)]/55">Firma</div>
                                 <div className="mt-1 flex items-baseline gap-1">
-                                  <span className="font-display text-2xl italic leading-none text-[var(--cream)]">8</span>
+                                  <span className="font-display text-3xl leading-none text-[var(--cream)]">8</span>
                                   <span className="text-[10px] text-[var(--cream)]/45">/10</span>
                                 </div>
                               </div>
                               <div>
                                 <div className="text-[8px] uppercase tracking-wider text-[var(--cream)]/55">Person</div>
                                 <div className="mt-1 flex items-baseline gap-1">
-                                  <span className="font-display text-2xl italic leading-none text-[var(--cream)]">9</span>
+                                  <span className="font-display text-3xl leading-none text-[var(--cream)]">9</span>
                                   <span className="text-[10px] text-[var(--cream)]/45">/10</span>
                                 </div>
                               </div>
                             </div>
-                            <p className="mt-3 border-t border-[var(--cream)]/8 pt-2.5 text-[10px] leading-snug text-[var(--cream)]/55">
-                              B2B SaaS · 30–60 ansatte · CRO/COO med outbound-mandat
-                            </p>
                           </div>
 
                           {/* Reply-intent classifier */}
                           <div className="rounded-2xl border border-[var(--cream)]/8 bg-[#14110d] p-4 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.5)]">
-                            <div className="flex items-center justify-between">
-                              <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--clay)]">Svar-type</p>
-                              <span className="text-[9px] text-[var(--cream)]/45">87 svar · 30d</span>
-                            </div>
+                            <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--clay)]">Svar-type</p>
                             <div className="mt-3 space-y-1.5">
                               {[
                                 { label: "Interesseret", count: 18, color: "var(--forest)" },
@@ -2225,18 +2221,20 @@ export default function Home() {
                             </div>
                           </div>
 
-                          {/* Alternativ kontakt — auto-fundet kollega når den primære henviser videre */}
-                          <div className="rounded-2xl border border-[#29261f]/12 bg-[#fff8ea] p-4 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.4)]">
+                          {/* Anden kontakt — embedded mini-card only, no body paragraph */}
+                          <div className="rounded-2xl border border-[var(--cream)]/8 bg-[#14110d] p-4 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.5)]">
                             <div className="flex items-center justify-between">
                               <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--clay)]">Anden kontakt</p>
                               <span className="rounded-full bg-[var(--clay)]/15 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider text-[var(--clay)]">Auto</span>
                             </div>
-                            <p className="mt-2.5 text-[11px] leading-snug text-[#29261f]/82">
-                              <span className="font-medium">Justyna</span> henviste videre. Fundet kollega ved samme firma — klar til invite.
-                            </p>
-                            <div className="mt-3 flex items-center gap-2 rounded-lg border border-[#29261f]/10 bg-[#29261f]/5 p-2">
-                              <div className="grid h-6 w-6 place-items-center rounded-full bg-[linear-gradient(135deg,#3a4654,#525e6c)] text-[9px] font-bold text-[#fff8ea]">MO</div>
-                              <div className="min-w-0 flex-1 truncate text-[10px] text-[#29261f]">Morten Otto · TechSupply ApS</div>
+                            <div className="mt-3 flex items-center gap-2 rounded-lg border border-[var(--cream)]/10 bg-[var(--cream)]/[0.04] p-2.5">
+                              <div className="grid h-7 w-7 place-items-center rounded-full bg-[linear-gradient(135deg,#3a4654,#525e6c)] text-[9px] font-bold text-[#fff8ea]">MO</div>
+                              <div className="min-w-0 flex-1">
+                                <div className="truncate text-[11px] text-[var(--cream)]/85">Morten Otto</div>
+                                <div className="truncate text-[9px] text-[var(--cream)]/45">TechSupply ApS · via Justyna</div>
+                              </div>
+                            </div>
+                            <div className="mt-3 flex justify-end border-t border-[var(--cream)]/8 pt-2.5">
                               <span className="text-[9px] font-bold uppercase tracking-wider text-[var(--forest)]">+ Invite</span>
                             </div>
                           </div>
@@ -2274,22 +2272,19 @@ export default function Home() {
                           </div>
 
                           {/* Lead-prioritetsliste */}
-                          <div className="rounded-2xl border border-[#29261f]/12 bg-[#fff8ea] p-4 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.4)]">
-                            <div className="flex items-center justify-between">
-                              <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--clay)]">Prioritets-kø</p>
-                              <span className="text-[9px] text-[#29261f]/55">ICP-sorteret</span>
-                            </div>
+                          <div className="rounded-2xl border border-[var(--cream)]/8 bg-[#14110d] p-4 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.5)]">
+                            <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--clay)]">Prioritets-kø</p>
                             <div className="mt-3 space-y-1.5">
                               {[
                                 { name: "Mette Sørensen", company: "Nordlys A/S", score: 9 },
                                 { name: "Jonas Holm", company: "Bagsika Møbler", score: 8 },
                                 { name: "Anders Kjær", company: "Boligbranding", score: 7 },
                               ].map((l) => (
-                                <div key={l.name} className="flex items-center gap-2.5 rounded-lg border border-[#29261f]/8 bg-[#29261f]/[0.03] px-2 py-1.5">
-                                  <span className="font-display text-base italic leading-none text-[#29261f]">{l.score}</span>
+                                <div key={l.name} className="flex items-center gap-2.5 rounded-lg border border-[var(--cream)]/8 bg-[var(--cream)]/[0.03] px-2 py-1.5">
+                                  <span className="font-display text-base leading-none text-[var(--cream)]">{l.score}</span>
                                   <div className="min-w-0 flex-1">
-                                    <div className="truncate text-[10px] font-medium text-[#29261f]">{l.name}</div>
-                                    <div className="truncate text-[9px] text-[#29261f]/55">{l.company}</div>
+                                    <div className="truncate text-[10px] font-medium text-[var(--cream)]/90">{l.name}</div>
+                                    <div className="truncate text-[9px] text-[var(--cream)]/50">{l.company}</div>
                                   </div>
                                   <span className="text-[9px] uppercase tracking-wider text-[#ff6b2c]">→</span>
                                 </div>
@@ -2320,20 +2315,17 @@ export default function Home() {
                             </div>
                           </div>
 
-                          {/* Telefon-opsporing — direkte nummer på beslutningstager, uden om hovedomstilling */}
-                          <div className="rounded-2xl border border-[#29261f]/12 bg-[#fff8ea] p-4 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.4)]">
+                          {/* Telefon-opsporing — direkte nummer på beslutningstager */}
+                          <div className="rounded-2xl border border-[var(--cream)]/8 bg-[#14110d] p-4 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.5)]">
                             <div className="flex items-center justify-between">
                               <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--clay)]">Direkte nummer</p>
                               <span className="rounded-full bg-[var(--forest)]/15 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider text-[var(--forest)]">Fundet</span>
                             </div>
-                            <p className="mt-2.5 text-[11px] leading-snug text-[#29261f]/82">
-                              Direkte nummer på beslutningstager — uden om hovedomstilling.
-                            </p>
-                            <div className="mt-3 flex items-center gap-2 rounded-lg border border-[#29261f]/10 bg-[#29261f]/[0.04] p-2">
-                              <span className="text-[14px]">📞</span>
+                            <div className="mt-4 flex items-center gap-2.5 rounded-lg border border-[var(--cream)]/10 bg-[var(--cream)]/[0.04] p-2.5">
+                              <span className="text-[14px]" aria-hidden>📞</span>
                               <div className="min-w-0 flex-1">
-                                <div className="font-mono text-[12px] tabular text-[#29261f]">+45 32 11 22 33</div>
-                                <div className="text-[9px] text-[#29261f]/55">Karen Hjort · CFO</div>
+                                <div className="font-mono text-[12px] tabular text-[var(--cream)]/90">+45 32 11 22 33</div>
+                                <div className="truncate text-[9px] text-[var(--cream)]/50">Karen Hjort · CFO</div>
                               </div>
                               <span className="text-[9px] font-bold uppercase tracking-wider text-[#ff6b2c]">Ring</span>
                             </div>
@@ -2345,58 +2337,48 @@ export default function Home() {
                         <>
                           {/* Storkunde-fraled alert (Cleanstep-pattern) */}
                           <div className="rounded-2xl border border-[#c93c0a]/35 bg-[#14110d] p-4 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.5)]">
-                            <div className="flex items-center justify-between">
-                              <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[#ff6b2c]">⚠ Storkunde falder fra</p>
-                              <span className="text-[9px] text-[var(--cream)]/45">i dag</span>
-                            </div>
-                            <p className="mt-2.5 text-[11px] leading-snug text-[var(--cream)]/85">
-                              <span className="font-medium">Vela Wood</span> bestiller normalt hver 14. dag. Ikke set siden d. 24/4 — <span className="text-[#ff6b2c]">21 dage forsinket</span>.
+                            <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[#ff6b2c]">⚠ Storkunde falder fra</p>
+                            <p className="mt-3 text-[11px] leading-snug text-[var(--cream)]/85">
+                              <span className="font-medium">Vela Wood</span> · normalt hver 14. dag · <span className="text-[#ff6b2c]">21 dage forsinket</span>
                             </p>
-                            <div className="mt-3 flex items-center gap-2 rounded-lg border border-[var(--cream)]/8 bg-[var(--cream)]/[0.03] p-2">
-                              <span className="text-[14px]">📞</span>
-                              <div className="min-w-0 flex-1 truncate text-[10px] text-[var(--cream)]/72">Forslag: ring CFO i dag</div>
+                            <div className="mt-3 flex items-center gap-2 border-t border-[var(--cream)]/8 pt-2.5">
+                              <span className="flex-1 truncate text-[10px] text-[var(--cream)]/55">Ring CFO i dag</span>
                               <span className="text-[9px] font-bold uppercase tracking-wider text-[#ff6b2c]">→</span>
                             </div>
                           </div>
 
                           {/* Attribution mini-dashboard */}
-                          <div className="rounded-2xl border border-[#29261f]/12 bg-[#fff8ea] p-4 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.4)]">
+                          <div className="rounded-2xl border border-[var(--cream)]/8 bg-[#14110d] p-4 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.5)]">
                             <div className="flex items-center justify-between">
                               <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--clay)]">Sporing · 30d</p>
-                              <span className="text-[9px] text-[#29261f]/55">13 won</span>
+                              <span className="text-[9px] text-[var(--cream)]/45">13 won</span>
                             </div>
                             <div className="mt-3 space-y-1.5">
                               {[
-                                { source: "LinkedIn outbound", count: 8, value: "640 K" },
-                                { source: "Meta ads", count: 3, value: "180 K" },
-                                { source: "Reference", count: 2, value: "380 K" },
+                                { source: "LinkedIn outbound", count: 8, value: "640K" },
+                                { source: "Meta ads", count: 3, value: "180K" },
+                                { source: "Reference", count: 2, value: "380K" },
                               ].map((a) => (
                                 <div key={a.source} className="flex items-center gap-2 text-[10px]">
                                   <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-[#ff6b2c]" />
-                                  <span className="flex-1 truncate text-[#29261f]/80">{a.source}</span>
-                                  <span className="font-mono tabular text-[#29261f]/55">{a.count} · {a.value}</span>
+                                  <span className="flex-1 truncate text-[var(--cream)]/72">{a.source}</span>
+                                  <span className="font-mono tabular text-[var(--cream)]/55">{a.count} · {a.value}</span>
                                 </div>
                               ))}
-                            </div>
-                            <div className="mt-2.5 border-t border-[#29261f]/8 pt-2 text-[10px] font-medium text-[#29261f]/82">
-                              Pipeline: 1.2M DKK
                             </div>
                           </div>
 
                           {/* Talepunkter før opkald — AI-genereret kontekst-brief */}
                           <div className="rounded-2xl border border-[var(--cream)]/8 bg-[#14110d] p-4 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.5)]">
                             <div className="flex items-center justify-between">
-                              <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--clay)]">Talepunkter før opkald</p>
+                              <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--clay)]">Talepunkter</p>
                               <span className="rounded-full bg-[var(--clay)]/15 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider text-[var(--clay)]">AI</span>
                             </div>
-                            <p className="mt-2.5 text-[10px] text-[var(--cream)]/55">
-                              Klar 15 min før opkald · Maria, Nordlys A/S
-                            </p>
                             <ul className="mt-3 space-y-1.5 text-[10px] leading-snug text-[var(--cream)]/72">
                               {[
-                                "Sidste samtale: takkede for tilbud, ville se det internt",
-                                "Bestilte 32K DKK i Q4 — typisk køber kvartalsvis",
-                                "Bemærk: just shipped ny e-shop — mention som anker",
+                                "Sidste samtale: takkede for tilbud",
+                                "Bestilte 32K i Q4 · køber kvartalsvis",
+                                "Just shipped ny e-shop · brug som anker",
                               ].map((p) => (
                                 <li key={p} className="flex items-start gap-2">
                                   <span aria-hidden className="mt-1 h-px w-2 shrink-0 bg-[#ff6b2c]/60" />
@@ -2408,20 +2390,14 @@ export default function Home() {
 
                           {/* Won-deal card */}
                           <div className="rounded-2xl border border-[var(--forest)]/35 bg-[linear-gradient(135deg,rgba(25,70,58,0.18),rgba(20,17,13,0.85))] p-4 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.5)]">
-                            <div className="flex items-center justify-between">
-                              <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--forest)]">✓ Aftale lukket</p>
-                              <span className="text-[9px] text-[var(--cream)]/55">i dag · 14:32</span>
-                            </div>
-                            <div className="mt-3 flex items-baseline gap-2">
-                              <span className="font-display text-3xl italic leading-none text-[var(--cream)]">32.500</span>
+                            <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--forest)]">✓ Aftale lukket</p>
+                            <div className="mt-4 flex items-baseline gap-2">
+                              <span className="font-display text-3xl leading-none text-[var(--cream)]">32.500</span>
                               <span className="text-[11px] text-[var(--cream)]/55">DKK</span>
                             </div>
-                            <p className="mt-2 text-[10px] text-[var(--cream)]/65">
-                              Stark Group · sporet til LinkedIn-DM d. 18/3
+                            <p className="mt-2 truncate text-[10px] text-[var(--cream)]/55">
+                              Stark Group · sporet til LinkedIn-DM
                             </p>
-                            <div className="mt-2.5 flex items-center gap-2 border-t border-[var(--cream)]/8 pt-2 text-[9px] uppercase tracking-wider text-[var(--cream)]/45">
-                              <span>Tid fra lead → aftale: 28d</span>
-                            </div>
                           </div>
                         </>
                       )}
