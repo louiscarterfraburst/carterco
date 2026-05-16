@@ -129,7 +129,7 @@ const cases: {
     metric: "<3 min",
     metricLabel: "gennemsnitlig responstid",
     annotation: "87× hurtigere",
-    copy: "Murph rammer hvert nyt lead på under 3 minutter — fra annonceklik til opkald. Sælgeren får leadet på telefonen med navn, firma, kontekst. Ringer op uden at åbne CRM'et.",
+    copy: "Murph rammer hvert nyt lead på under 3 minutter, fra annonceklik til opkald. Sælgeren får det med navn, firma og kontekst.",
     client: "Murph",
     url: "https://www.trymurph.com/",
     logo: "/logos/logo-murph.png",
@@ -139,7 +139,7 @@ const cases: {
   {
     metric: "4×",
     metricLabel: "lead-konvertering",
-    copy: "4× flere lukkede aftaler. Samme målgruppe, samme budget. Et intro-tilbud der stikker af fra konkurrenternes, annoncer bygget på deres bedste kunder, og et SMS-flow der rammer før leadet er gået ud af brusebadet.",
+    copy: "4× flere lukkede aftaler. Samme målgruppe, samme budget.",
     client: "Burst",
     kind: "won",
     url: "https://burstcreators.com",
@@ -174,20 +174,16 @@ const journey: JourneyStage[] = [
     eyebrow: "01 · OUTBOUND",
     title: "Hente dem ind,",
     titleAccent: "hvor de allerede er.",
-    body: "Cold outreach der ikke føles cold. Hver besked har research, video og en grund til at læse den. Annoncerne rammer dem du faktisk vil have, ikke alle der ligner dem.",
+    body: "",
     subpoints: [
-      "Personlige LinkedIn-DMs på skala — én video pr. modtager",
+      "Cold outreach der ikke føles cold — research, video, grund til at læse",
+      "Personlige LinkedIn-DMs på skala, én video pr. modtager",
       "Email-outreach uden om gatekeepere",
       "Meta- og Google-annoncer bygget på din ICP",
-      "Manuel research per high-value lead",
       "Genaktivering af leads der ligger kolde i databasen",
     ],
     anchorClient: { name: "Tresyv", line: "Kører den i dag." },
-    supportingClients: [
-      { initials: "—", name: "TBD" },
-      { initials: "—", name: "TBD" },
-      { initials: "—", name: "TBD" },
-    ],
+    supportingClients: [],
     visual: "outbound",
   },
   {
@@ -195,14 +191,12 @@ const journey: JourneyStage[] = [
     eyebrow: "02 · SPEED-TO-LEAD",
     title: "Få dem på telefonen,",
     titleAccent: "før de glemmer dig.",
-    body: "Sælgeren får leadet på skærmen samme sekund det lander — med navn, firma, kontekst. Ét tryk og du ringer op. Ingen CRM at åbne, ingen indbakke at scrolle.",
+    body: "",
     subpoints: [
       "Lead lander → sælgeren har det på skærmen samme sekund",
       "Ét tryk = opkald (ingen CRM, ingen indbakke)",
       "SMS-bridge hvis ingen tager — kontekstuelt, ikke spammy",
       "Email og reaktivering hvis det stadig ikke flytter sig",
-      "Push-notifikation til alle med adgang samtidig",
-      "Lead-prioritering på ICP-score",
     ],
     proof: {
       metric: "21×",
@@ -212,10 +206,7 @@ const journey: JourneyStage[] = [
         "https://25649.fs1.hubspotusercontent-na2.net/hub/25649/file-13535879-pdf/docs/mit_study.pdf",
     },
     anchorClient: { name: "Murph", line: "Rammer hvert lead på under 3 min — branchen tager 47 timer." },
-    supportingClients: [
-      { initials: "—", name: "TBD" },
-      { initials: "—", name: "TBD" },
-    ],
+    supportingClients: [],
     visual: "sms",
   },
   {
@@ -230,7 +221,6 @@ const journey: JourneyStage[] = [
       "Reaktiverings-flows for tabte deals",
       "Storkunde-fraled-opsporing — kunden der stopper med at bestille",
       "Attribution: hvilket lead blev til hvilken vundet aftale",
-      "Talepunkter genereret før hver opfølgning",
     ],
     proof: {
       metric: "4×",
@@ -238,10 +228,7 @@ const journey: JourneyStage[] = [
       note: "Samme målgruppe, samme budget — Burst på et SMS- og pleje-flow over 3 måneder.",
     },
     anchorClient: { name: "Burst", line: "4× på samme budget." },
-    supportingClients: [
-      { initials: "—", name: "TBD" },
-      { initials: "—", name: "TBD" },
-    ],
+    supportingClients: [],
     visual: "pipeline",
   },
 ];
@@ -1103,9 +1090,11 @@ export default function Home() {
                           {stage.titleAccent}
                         </span>
                       </h3>
-                      <p className="mt-5 max-w-md text-[15px] leading-relaxed text-[var(--cream)]/72">
-                        {stage.body}
-                      </p>
+                      {stage.body && (
+                        <p className="mt-5 max-w-md text-[15px] leading-relaxed text-[var(--cream)]/72">
+                          {stage.body}
+                        </p>
+                      )}
 
                       {/* Sub-points — show the breadth of work in this area,
                           editorial list (no SaaS-feature-grid). Each line is
@@ -1175,6 +1164,7 @@ export default function Home() {
                           </div>
                         </div>
 
+                        {stage.supportingClients.length > 0 && (
                         <div className="ml-auto flex items-center -space-x-2">
                           {stage.supportingClients.map((c, idx) => {
                             // Empty slot: portrait silhouette placeholder.
@@ -1201,6 +1191,7 @@ export default function Home() {
                             );
                           })}
                         </div>
+                        )}
                       </div>
                     </div>
 
@@ -2453,78 +2444,15 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ─────── Section: Connective beat — bespoke, not packaged ───────
-          Closes the three-section practice with the white-glove claim:
-          each engagement is built to fit, every client takes a different
-          subset. Replaces the deleted "Det her er forskellen" before/after
-          (which read as a linear funnel that no longer fits). */}
-      <section className="relative overflow-hidden bg-[#f6efe4] py-24 text-[#29261f] sm:py-28">
-        <div aria-hidden className="paper-grain" />
-
-        <div className="relative z-[1] mx-auto w-full max-w-[1080px] px-8 sm:px-12">
-          <div className="mx-auto max-w-[820px] text-center">
-            <p className="font-display text-[6vw] leading-[1.05] tracking-tight sm:text-4xl lg:text-[2.75rem]">
-              Tre dele. <span className="italic text-[var(--clay)]">Ét billede.</span>
-            </p>
-            <p className="mx-auto mt-8 max-w-[640px] text-[15px] leading-relaxed text-[#29261f]/72 sm:text-[17px]">
-              Sjældent samme vej for to klienter. Engagementet er altid bygget til hvad du faktisk har brug for — den del der mangler, eller hele opbygningen.
-            </p>
-          </div>
-
-          {/* Three client-paths cards — makes "different vej for each
-              client" concrete. Each shows which delivery areas the client
-              took. Real client logo replaces the initial-circle when ready. */}
-          <div className="mt-14 grid gap-4 sm:mt-16 sm:grid-cols-3 sm:gap-5">
-            {[
-              {
-                client: "Tresyv",
-                initials: "TR",
-                uses: ["Outbound"],
-                note: "Kører den i dag",
-              },
-              {
-                client: "Murph",
-                initials: "MU",
-                uses: ["Speed-to-lead"],
-                note: "87× hurtigere end branchen",
-              },
-              {
-                client: "Burst",
-                initials: "BU",
-                uses: ["Post-meeting"],
-                note: "4× på samme budget",
-              },
-            ].map((c) => (
-              <article
-                key={c.client}
-                className="relative flex flex-col gap-4 rounded-2xl border border-[#29261f]/15 bg-[#efe6d6]/70 p-5 text-left shadow-[0_20px_50px_-30px_rgba(0,0,0,0.25)]"
-              >
-                <div className="flex items-center gap-3">
-                  <span className="grid h-10 w-10 place-items-center rounded-full border border-[var(--clay)]/45 bg-[var(--clay)]/15 text-[11px] font-bold uppercase tracking-wider text-[#29261f]/80">
-                    {c.initials}
-                  </span>
-                  <div className="min-w-0">
-                    <div className="text-[12px] font-bold uppercase tracking-[0.2em] text-[#29261f]/85">
-                      {c.client}
-                    </div>
-                    <div className="text-[11px] text-[#29261f]/55">{c.note}</div>
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {c.uses.map((u) => (
-                    <span
-                      key={u}
-                      className="rounded-full border border-[var(--clay)]/40 bg-[var(--clay)]/12 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[var(--clay)]"
-                    >
-                      {u}
-                    </span>
-                  ))}
-                </div>
-              </article>
-            ))}
-          </div>
-        </div>
-      </section>
+      {/* Sand bridge — thin printer's-rule band that breaks the
+          ember-to-ember run (journey → stack are both dark sections).
+          Replaces the killed "Tre dele. Ét billede." sand section which
+          was repeating proof already told by the cases section + the
+          anchor rows. The rhythm fix happens here without adding copy. */}
+      <div aria-hidden className="relative h-20 overflow-hidden bg-[#f6efe4]">
+        <div className="paper-grain" />
+        <div className="pointer-events-none absolute left-1/2 top-1/2 h-[2px] w-[min(280px,30%)] -translate-x-1/2 -translate-y-1/2 bg-[linear-gradient(90deg,transparent,#ff6b2c_30%,#ff6b2c_70%,transparent)] shadow-[0_0_28px_rgba(255,107,44,0.45)]" />
+      </div>
 
       {/* ─────── Section: Testimonials placeholder (dark) ─────── */}
       {/*
