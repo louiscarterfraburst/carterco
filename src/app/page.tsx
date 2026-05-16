@@ -172,8 +172,8 @@ const journey: JourneyStage[] = [
   {
     n: "01",
     eyebrow: "01 · OUTBOUND",
-    title: "Hente dem ind,",
-    titleAccent: "hvor de allerede er.",
+    title: "Skrive til dem,",
+    titleAccent: "med en grund til at svare.",
     body: "",
     subpoints: [
       "Cold outreach der ikke føles cold — research, video, grund til at læse",
@@ -188,7 +188,7 @@ const journey: JourneyStage[] = [
   },
   {
     n: "02",
-    eyebrow: "02 · SPEED-TO-LEAD",
+    eyebrow: "02 · HASTIGHED",
     title: "Få dem på telefonen,",
     titleAccent: "før de glemmer dig.",
     body: "",
@@ -211,7 +211,7 @@ const journey: JourneyStage[] = [
   },
   {
     n: "03",
-    eyebrow: "03 · POST-MEETING",
+    eyebrow: "03 · OPFØLGNING",
     title: "Holde dem varme.",
     titleAccent: "Lukke aftalen.",
     body: "Møder glipper. Aftaler forsvinder. Leads der stod stille for to uger siden bliver fanget. Pipelinen følger med dagen, ikke ugen — vundne aftaler hopper til 'lukket' samme dag.",
