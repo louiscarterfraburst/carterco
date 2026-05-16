@@ -1018,16 +1018,23 @@ export default function Home() {
         </div>
 
         <div className="mx-auto w-full max-w-[1400px] px-8 sm:px-12">
-          {/* Header */}
-          <div>
+          {/* Header — centered chapter-opener for the three machines.
+              Matches the centered cases title above ("Forskellige
+              brancher. Samme retning."), establishes an editorial
+              section-title-plate rhythm. */}
+          <div className="text-center">
             <h2 className="font-display text-[11vw] leading-[0.88] tracking-[-0.045em] sm:text-7xl lg:text-[6rem]">
               Hele vejen fra
               <br />
               kontakt til kontrakt.
             </h2>
-            <p className="mt-7 max-w-md text-[13px] uppercase tracking-[0.28em] text-[var(--cream)]/45">
-              Tre dele · samme værksted
-            </p>
+            <div className="mx-auto mt-7 flex items-center justify-center gap-3">
+              <span aria-hidden className="h-px w-8 bg-[var(--clay)]/55" />
+              <p className="text-[13px] uppercase tracking-[0.28em] text-[var(--cream)]/55">
+                Tre dele · samme værksted
+              </p>
+              <span aria-hidden className="h-px w-8 bg-[var(--clay)]/55" />
+            </div>
           </div>
 
           {/* Three sections — no wire / no rail nodes. Each is its own beat;
