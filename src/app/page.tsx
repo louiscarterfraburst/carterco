@@ -215,7 +215,7 @@ const journey: JourneyStage[] = [
     titleAccent: "Lukke aftalen.",
     body: "Møder glipper. Aftaler forsvinder. Sælgeren glemte at følge op.",
     subpoints: [
-      "Sælgeren markerer resultatet lige efter opkaldet, pipelinen lyver ikke",
+      "Mails, accepter og opkaldsresultater markerer pipelinen. Den lyver ikke.",
       "Plejeflow til leads der ikke er klar nu",
       "Genoptagelses-flow til tabte aftaler",
       "Storkunde-fraled-opsporing: kunden der stopper med at bestille",
