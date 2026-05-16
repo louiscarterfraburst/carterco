@@ -1049,10 +1049,7 @@ export default function Home() {
               {journey.map((stage, i) => {
                 const isReverse = i % 2 === 1;
                 return (
-                  <article
-                    key={stage.n}
-                    className="relative grid gap-12 sm:grid-cols-12 sm:items-center sm:gap-12"
-                  >
+                  <article key={stage.n} className="relative">
                     {/* Ghost numeral — keep editorial weight without the rail */}
                     <span
                       aria-hidden
@@ -1061,6 +1058,8 @@ export default function Home() {
                       {stage.n}
                     </span>
 
+                    {/* Row 1 — copy + primary mockup, side-by-side. */}
+                    <div className="grid gap-12 sm:grid-cols-12 sm:items-center sm:gap-12">
                     {/* Copy column */}
                     <div
                       className={`relative ${isReverse ? "sm:col-span-5 sm:col-start-7" : "sm:col-span-5 sm:col-start-2"} flex flex-col`}
@@ -2114,6 +2113,285 @@ export default function Home() {
                           </div>
 
                         </div>
+                      )}
+                    </div>
+                    </div>
+
+                    {/* Row 2 — supporting mockups. 3-4 smaller cards per
+                        section showing breadth of work (ICP scoring, reply
+                        classifier, alt-contacts, push notify, attribution,
+                        churn detection, etc.). Real implementations live in
+                        supabase/functions — these are visual proof. */}
+                    <div className="mt-14 grid grid-cols-1 gap-4 sm:mt-16 sm:grid-cols-2 lg:grid-cols-4 lg:gap-5">
+                      {stage.n === "01" && (
+                        <>
+                          {/* AI-drafted DM (OdaGroup-style — no video, title-targeted) */}
+                          <div className="rounded-2xl border border-[#29261f]/12 bg-[#fff8ea] p-4 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.4)]">
+                            <div className="mb-3 flex items-center gap-2">
+                              <div className="grid h-7 w-7 place-items-center rounded-full bg-[linear-gradient(135deg,#3a4654,#525e6c)] text-[10px] font-bold text-[#fff8ea]">JS</div>
+                              <div className="min-w-0 flex-1">
+                                <div className="truncate text-[11px] text-[#29261f]">Jonas Schmidt</div>
+                                <div className="truncate text-[9px] text-[#29261f]/55">VP Sales · Bio-Pharma X</div>
+                              </div>
+                              <span className="rounded-full bg-[var(--clay)]/15 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider text-[var(--clay)]">AI</span>
+                            </div>
+                            <p className="text-[11px] leading-relaxed text-[#29261f]/82">
+                              Hej Jonas — så at I ramper jeres pharma-felt-team. Mit korte input om hvad der virker for VP'er der lægger top of funnel oven på Veeva...
+                            </p>
+                            <div className="mt-3 flex items-center justify-between border-t border-[#29261f]/8 pt-2.5">
+                              <span className="text-[9px] uppercase tracking-[0.18em] text-[#29261f]/45">Drafted · 12ms</span>
+                              <span className="text-[9px] font-bold uppercase tracking-wider text-[var(--forest)]">Klar at sende</span>
+                            </div>
+                          </div>
+
+                          {/* ICP-score panel */}
+                          <div className="rounded-2xl border border-[var(--cream)]/8 bg-[#14110d] p-4 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.5)]">
+                            <div className="flex items-center justify-between">
+                              <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--clay)]">ICP-score</p>
+                              <span className="text-[9px] text-[var(--cream)]/45">auto · Claude</span>
+                            </div>
+                            <div className="mt-3 grid grid-cols-2 gap-3">
+                              <div>
+                                <div className="text-[8px] uppercase tracking-wider text-[var(--cream)]/55">Firma</div>
+                                <div className="mt-1 flex items-baseline gap-1">
+                                  <span className="font-display text-2xl italic leading-none text-[var(--cream)]">8</span>
+                                  <span className="text-[10px] text-[var(--cream)]/45">/10</span>
+                                </div>
+                              </div>
+                              <div>
+                                <div className="text-[8px] uppercase tracking-wider text-[var(--cream)]/55">Person</div>
+                                <div className="mt-1 flex items-baseline gap-1">
+                                  <span className="font-display text-2xl italic leading-none text-[var(--cream)]">9</span>
+                                  <span className="text-[10px] text-[var(--cream)]/45">/10</span>
+                                </div>
+                              </div>
+                            </div>
+                            <p className="mt-3 border-t border-[var(--cream)]/8 pt-2.5 text-[10px] leading-snug text-[var(--cream)]/55">
+                              B2B SaaS · 30–60 ansatte · CRO/COO med outbound-mandat
+                            </p>
+                          </div>
+
+                          {/* Reply-intent classifier */}
+                          <div className="rounded-2xl border border-[var(--cream)]/8 bg-[#14110d] p-4 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.5)]">
+                            <div className="flex items-center justify-between">
+                              <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--clay)]">Svar-intent</p>
+                              <span className="text-[9px] text-[var(--cream)]/45">87 svar · 30d</span>
+                            </div>
+                            <div className="mt-3 space-y-1.5">
+                              {[
+                                { label: "Interesseret", count: 18, color: "var(--forest)" },
+                                { label: "Spørgsmål", count: 24, color: "#ff6b2c" },
+                                { label: "Henvist videre", count: 12, color: "var(--clay)" },
+                                { label: "Afvist", count: 33, color: "#6c6254" },
+                              ].map((r) => (
+                                <div key={r.label} className="flex items-center gap-2 text-[10px]">
+                                  <span aria-hidden className="h-2 w-2 rounded-full" style={{ background: r.color }} />
+                                  <span className="flex-1 text-[var(--cream)]/72">{r.label}</span>
+                                  <span className="font-mono text-[var(--cream)]/55 tabular">{r.count}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Alt-contact search */}
+                          <div className="rounded-2xl border border-[#29261f]/12 bg-[#fff8ea] p-4 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.4)]">
+                            <div className="flex items-center justify-between">
+                              <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--clay)]">Alt-contact</p>
+                              <span className="rounded-full bg-[var(--clay)]/15 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider text-[var(--clay)]">Auto</span>
+                            </div>
+                            <p className="mt-2.5 text-[11px] leading-snug text-[#29261f]/82">
+                              <span className="font-medium">Justyna</span> henviste videre. Fundet kollega ved samme firma — klar til invite.
+                            </p>
+                            <div className="mt-3 flex items-center gap-2 rounded-lg border border-[#29261f]/10 bg-[#29261f]/5 p-2">
+                              <div className="grid h-6 w-6 place-items-center rounded-full bg-[linear-gradient(135deg,#3a4654,#525e6c)] text-[9px] font-bold text-[#fff8ea]">MO</div>
+                              <div className="min-w-0 flex-1 truncate text-[10px] text-[#29261f]">Morten Otto · TechSupply ApS</div>
+                              <span className="text-[9px] font-bold uppercase tracking-wider text-[var(--forest)]">+ Invite</span>
+                            </div>
+                          </div>
+                        </>
+                      )}
+
+                      {stage.n === "02" && (
+                        <>
+                          {/* Push-notification on mobile */}
+                          <div className="rounded-2xl border border-[var(--cream)]/8 bg-[#14110d] p-4 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.5)]">
+                            <div className="flex items-center justify-between">
+                              <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--clay)]">Push · mobil</p>
+                              <span className="text-[9px] text-[var(--cream)]/45">nu</span>
+                            </div>
+                            <div className="mt-3 rounded-xl border border-[var(--cream)]/10 bg-[var(--cream)]/[0.04] p-3">
+                              <div className="flex items-center gap-2 text-[9px] uppercase tracking-wider text-[var(--cream)]/55">
+                                <span className="h-1.5 w-1.5 rounded-full bg-[#ff6b2c]" />
+                                Carter & Co · lige nu
+                              </div>
+                              <div className="mt-1.5 text-[12px] font-medium text-[var(--cream)]/92">
+                                🔔 Nyt lead: Vela Wood
+                              </div>
+                              <div className="text-[10px] text-[var(--cream)]/65">
+                                Copenhagen · 12 ansatte · ringer nu?
+                              </div>
+                            </div>
+                            <div className="mt-2.5 flex gap-2">
+                              <span className="flex-1 rounded-lg bg-[var(--forest)]/20 px-2 py-1.5 text-center text-[10px] font-bold uppercase tracking-wider text-[var(--forest)]">
+                                Jeg ringer
+                              </span>
+                              <span className="rounded-lg border border-[var(--cream)]/15 px-2 py-1.5 text-[10px] text-[var(--cream)]/55">
+                                Senere
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Lead-prioritetsliste */}
+                          <div className="rounded-2xl border border-[#29261f]/12 bg-[#fff8ea] p-4 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.4)]">
+                            <div className="flex items-center justify-between">
+                              <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--clay)]">Prioritets-kø</p>
+                              <span className="text-[9px] text-[#29261f]/55">ICP-sorteret</span>
+                            </div>
+                            <div className="mt-3 space-y-1.5">
+                              {[
+                                { name: "Mette Sørensen", company: "Nordlys A/S", score: 9 },
+                                { name: "Jonas Holm", company: "Bagsika Møbler", score: 8 },
+                                { name: "Anders Kjær", company: "Boligbranding", score: 7 },
+                              ].map((l) => (
+                                <div key={l.name} className="flex items-center gap-2.5 rounded-lg border border-[#29261f]/8 bg-[#29261f]/[0.03] px-2 py-1.5">
+                                  <span className="font-display text-base italic leading-none text-[#29261f]">{l.score}</span>
+                                  <div className="min-w-0 flex-1">
+                                    <div className="truncate text-[10px] font-medium text-[#29261f]">{l.name}</div>
+                                    <div className="truncate text-[9px] text-[#29261f]/55">{l.company}</div>
+                                  </div>
+                                  <span className="text-[9px] uppercase tracking-wider text-[#ff6b2c]">→</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Outcome day-strip */}
+                          <div className="rounded-2xl border border-[var(--cream)]/8 bg-[#14110d] p-4 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.5)]">
+                            <div className="flex items-center justify-between">
+                              <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--clay)]">I dag</p>
+                              <span className="text-[9px] text-[var(--cream)]/45">14 opkald</span>
+                            </div>
+                            <div className="mt-3 grid grid-cols-2 gap-2">
+                              {[
+                                { label: "Booket", count: 4, color: "var(--forest)" },
+                                { label: "Kunde", count: 1, color: "#ff6b2c" },
+                                { label: "No svar", count: 7, color: "var(--cream)" },
+                                { label: "Ikke int.", count: 2, color: "var(--clay)" },
+                              ].map((o) => (
+                                <div key={o.label} className="rounded-lg border border-[var(--cream)]/8 bg-[var(--cream)]/[0.03] p-2">
+                                  <div className="flex items-baseline gap-1.5">
+                                    <span className="font-display text-xl italic leading-none" style={{ color: o.color }}>{o.count}</span>
+                                  </div>
+                                  <div className="text-[9px] uppercase tracking-wider text-[var(--cream)]/55">{o.label}</div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Phone-scout result */}
+                          <div className="rounded-2xl border border-[#29261f]/12 bg-[#fff8ea] p-4 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.4)]">
+                            <div className="flex items-center justify-between">
+                              <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--clay)]">Phone-scout</p>
+                              <span className="rounded-full bg-[var(--forest)]/15 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider text-[var(--forest)]">Fundet</span>
+                            </div>
+                            <p className="mt-2.5 text-[11px] leading-snug text-[#29261f]/82">
+                              Direkte nummer på beslutningstager — uden om hovedomstilling.
+                            </p>
+                            <div className="mt-3 flex items-center gap-2 rounded-lg border border-[#29261f]/10 bg-[#29261f]/[0.04] p-2">
+                              <span className="text-[14px]">📞</span>
+                              <div className="min-w-0 flex-1">
+                                <div className="font-mono text-[12px] tabular text-[#29261f]">+45 32 11 22 33</div>
+                                <div className="text-[9px] text-[#29261f]/55">Karen Hjort · CFO</div>
+                              </div>
+                              <span className="text-[9px] font-bold uppercase tracking-wider text-[#ff6b2c]">Ring</span>
+                            </div>
+                          </div>
+                        </>
+                      )}
+
+                      {stage.n === "03" && (
+                        <>
+                          {/* Storkunde-fraled alert (Cleanstep-pattern) */}
+                          <div className="rounded-2xl border border-[#c93c0a]/35 bg-[#14110d] p-4 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.5)]">
+                            <div className="flex items-center justify-between">
+                              <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[#ff6b2c]">⚠ Fraled-alert</p>
+                              <span className="text-[9px] text-[var(--cream)]/45">i dag</span>
+                            </div>
+                            <p className="mt-2.5 text-[11px] leading-snug text-[var(--cream)]/85">
+                              <span className="font-medium">Vela Wood</span> bestiller normalt hver 14. dag. Ikke set siden d. 24/4 — <span className="text-[#ff6b2c]">21 dage forsinket</span>.
+                            </p>
+                            <div className="mt-3 flex items-center gap-2 rounded-lg border border-[var(--cream)]/8 bg-[var(--cream)]/[0.03] p-2">
+                              <span className="text-[14px]">📞</span>
+                              <div className="min-w-0 flex-1 truncate text-[10px] text-[var(--cream)]/72">Forslag: ring CFO i dag</div>
+                              <span className="text-[9px] font-bold uppercase tracking-wider text-[#ff6b2c]">→</span>
+                            </div>
+                          </div>
+
+                          {/* Attribution mini-dashboard */}
+                          <div className="rounded-2xl border border-[#29261f]/12 bg-[#fff8ea] p-4 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.4)]">
+                            <div className="flex items-center justify-between">
+                              <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--clay)]">Attribution · 30d</p>
+                              <span className="text-[9px] text-[#29261f]/55">13 won</span>
+                            </div>
+                            <div className="mt-3 space-y-1.5">
+                              {[
+                                { source: "LinkedIn outbound", count: 8, value: "640 K" },
+                                { source: "Meta ads", count: 3, value: "180 K" },
+                                { source: "Reference", count: 2, value: "380 K" },
+                              ].map((a) => (
+                                <div key={a.source} className="flex items-center gap-2 text-[10px]">
+                                  <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-[#ff6b2c]" />
+                                  <span className="flex-1 truncate text-[#29261f]/80">{a.source}</span>
+                                  <span className="font-mono tabular text-[#29261f]/55">{a.count} · {a.value}</span>
+                                </div>
+                              ))}
+                            </div>
+                            <div className="mt-2.5 border-t border-[#29261f]/8 pt-2 text-[10px] font-medium text-[#29261f]/82">
+                              Pipeline: 1.2M DKK
+                            </div>
+                          </div>
+
+                          {/* Pre-meeting talepunkter */}
+                          <div className="rounded-2xl border border-[var(--cream)]/8 bg-[#14110d] p-4 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.5)]">
+                            <div className="flex items-center justify-between">
+                              <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--clay)]">Pre-meeting brief</p>
+                              <span className="rounded-full bg-[var(--clay)]/15 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider text-[var(--clay)]">AI</span>
+                            </div>
+                            <p className="mt-2.5 text-[10px] text-[var(--cream)]/55">
+                              Klar 15 min før opkald · Maria, Nordlys A/S
+                            </p>
+                            <ul className="mt-3 space-y-1.5 text-[10px] leading-snug text-[var(--cream)]/72">
+                              {[
+                                "Sidste interaktion: takkede for tilbud, ville se intern brief",
+                                "Bestilte 32K DKK i Q4 — typisk køber kvartalsvis",
+                                "Bemærk: just shipped ny e-shop — mention som anker",
+                              ].map((p) => (
+                                <li key={p} className="flex items-start gap-2">
+                                  <span aria-hidden className="mt-1 h-px w-2 shrink-0 bg-[#ff6b2c]/60" />
+                                  <span>{p}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+
+                          {/* Won-deal card */}
+                          <div className="rounded-2xl border border-[var(--forest)]/35 bg-[linear-gradient(135deg,rgba(25,70,58,0.18),rgba(20,17,13,0.85))] p-4 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.5)]">
+                            <div className="flex items-center justify-between">
+                              <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--forest)]">✓ Aftale lukket</p>
+                              <span className="text-[9px] text-[var(--cream)]/55">i dag · 14:32</span>
+                            </div>
+                            <div className="mt-3 flex items-baseline gap-2">
+                              <span className="font-display text-3xl italic leading-none text-[var(--cream)]">32.500</span>
+                              <span className="text-[11px] text-[var(--cream)]/55">DKK</span>
+                            </div>
+                            <p className="mt-2 text-[10px] text-[var(--cream)]/65">
+                              Stark Group · sporet til LinkedIn-DM d. 18/3
+                            </p>
+                            <div className="mt-2.5 flex items-center gap-2 border-t border-[var(--cream)]/8 pt-2 text-[9px] uppercase tracking-wider text-[var(--cream)]/45">
+                              <span>Tid fra lead → aftale: 28d</span>
+                            </div>
+                          </div>
+                        </>
                       )}
                     </div>
                   </article>
