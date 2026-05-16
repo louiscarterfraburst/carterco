@@ -192,7 +192,7 @@ const journey: JourneyStage[] = [
     titleAccent: "før de glemmer dig.",
     body: "",
     subpoints: [
-      "Lead lander, sælgeren ringer med ét tryk",
+      "Lead lander på hele teamets mobil, sælgeren ringer med ét tryk",
       "SMS-bro hvis ingen tager, kontekstuelt, ikke spam",
       "Mail og genaktivering hvis ingen reaktion",
       "Mens samtalen er varm, ikke 47 timer senere",
