@@ -192,7 +192,7 @@ const journey: JourneyStage[] = [
     titleAccent: "før leadet køler.",
     body: "",
     subpoints: [
-      "Lead lander på teamets mobil, ét tryk åbner opkaldet",
+      "Lead lander på teamets mobil, ét tryk ringer dem op",
       "SMS-bro hvis ingen tager, refererer til opkaldet",
       "Mail og reaktivering hvis stadig stille",
       "Mens samtalen er varm, ikke 47 timer senere",
