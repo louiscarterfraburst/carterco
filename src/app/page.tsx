@@ -195,7 +195,6 @@ const journey: JourneyStage[] = [
       "Lead lander på teamets mobil, ét tryk ringer dem op",
       "SMS-bro hvis ingen tager, refererer til opkaldet",
       "Mail og reaktivering hvis stadig stille",
-      "Mens samtalen er varm, ikke 47 timer senere",
     ],
     proof: {
       metric: "21×",
