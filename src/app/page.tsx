@@ -176,10 +176,10 @@ const journey: JourneyStage[] = [
     titleAccent: "til at svare.",
     body: "",
     subpoints: [
-      "Cold outreach der ikke føles cold — research, video, grund til at læse",
-      "Personlige LinkedIn-DMs på skala, én video pr. modtager",
-      "Email-outreach uden om gatekeepere",
-      "Meta- og Google-annoncer bygget på din ICP",
+      "Henvendelser der ikke føles kolde — research, video, en grund til at læse",
+      "Personlige LinkedIn-beskeder, én video pr. modtager",
+      "Mails direkte til indbakken, uden om receptionen",
+      "Meta- og Google-annoncer bygget på din ideelle kunde",
       "Genaktivering af leads der ligger kolde i databasen",
     ],
     anchorClient: { name: "Tresyv", line: "Kører den i dag." },
@@ -195,8 +195,8 @@ const journey: JourneyStage[] = [
     subpoints: [
       "Lead lander → sælgeren har det på skærmen samme sekund",
       "Ét tryk = opkald (ingen CRM, ingen indbakke)",
-      "SMS-bridge hvis ingen tager — kontekstuelt, ikke spammy",
-      "Email og reaktivering hvis det stadig ikke flytter sig",
+      "SMS-bro hvis ingen tager — i kontekst, ikke spam",
+      "Mail og genoptagelse hvis det stadig ikke flytter sig",
     ],
     proof: {
       metric: "21×",
@@ -216,11 +216,11 @@ const journey: JourneyStage[] = [
     titleAccent: "Lukke aftalen.",
     body: "Møder glipper. Aftaler forsvinder. Leads der stod stille for to uger siden bliver fanget. Pipelinen følger med dagen, ikke ugen — vundne aftaler hopper til 'lukket' samme dag.",
     subpoints: [
-      "Outcome markeret samme dag — pipelinen følger med dagen",
-      "Nurture-flows for \"ikke klar nu\"-leads",
-      "Reaktiverings-flows for tabte deals",
+      "Resultat markeret samme dag — pipelinen følger med dagen",
+      "Plejeflow til leads der ikke er klar nu",
+      "Genoptagelses-flow til tabte aftaler",
       "Storkunde-fraled-opsporing — kunden der stopper med at bestille",
-      "Attribution: hvilket lead blev til hvilken vundet aftale",
+      "Sporing: hvilket lead blev til hvilken vundet aftale",
     ],
     proof: {
       metric: "4×",
@@ -808,7 +808,7 @@ export default function Home() {
             className="max-w-xl text-lg leading-relaxed text-[var(--cream)]/70 sm:max-w-2xl sm:text-xl"
             style={{ textWrap: "balance" }}
           >
-            Tre dele af salgsinfrastrukturen, bygget og driftet på dit eget setup. Outbound. Speed-to-lead. Post-meeting. Det fulde billede eller bare den del der mangler.
+            Tre dele af salgsinfrastrukturen, bygget og driftet på din egen opsætning. Outbound. Hastighed. Opfølgning. Det fulde billede eller bare den del der mangler.
           </p>
 
           <div className="flex flex-col-reverse items-start justify-between gap-8 sm:flex-row sm:items-end">
@@ -2153,7 +2153,7 @@ export default function Home() {
                     <div className="mt-24 flex items-center gap-3 sm:mt-28">
                       <span aria-hidden className="h-px w-8 bg-[var(--clay)]/60" />
                       <p className="text-[10px] font-bold uppercase tracking-[0.32em] text-[var(--clay)]">
-                        + andre dele af samme stack
+                        + andre dele af samme værktøj
                       </p>
                     </div>
                     <div className="mt-7 grid grid-cols-1 gap-5 sm:grid-cols-2 sm:gap-6 lg:grid-cols-4">
@@ -2173,7 +2173,7 @@ export default function Home() {
                               Hej Jonas — så at I ramper jeres pharma-felt-team. Mit korte input om hvad der virker for VP'er der lægger top of funnel oven på Veeva...
                             </p>
                             <div className="mt-3 flex items-center justify-between border-t border-[#29261f]/8 pt-2.5">
-                              <span className="text-[9px] uppercase tracking-[0.18em] text-[#29261f]/45">Drafted · 12ms</span>
+                              <span className="text-[9px] uppercase tracking-[0.18em] text-[#29261f]/45">Skrevet · 12ms</span>
                               <span className="text-[9px] font-bold uppercase tracking-wider text-[var(--forest)]">Klar at sende</span>
                             </div>
                           </div>
@@ -2208,7 +2208,7 @@ export default function Home() {
                           {/* Reply-intent classifier */}
                           <div className="rounded-2xl border border-[var(--cream)]/8 bg-[#14110d] p-4 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.5)]">
                             <div className="flex items-center justify-between">
-                              <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--clay)]">Svar-intent</p>
+                              <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--clay)]">Svar-type</p>
                               <span className="text-[9px] text-[var(--cream)]/45">87 svar · 30d</span>
                             </div>
                             <div className="mt-3 space-y-1.5">
@@ -2227,10 +2227,10 @@ export default function Home() {
                             </div>
                           </div>
 
-                          {/* Alt-contact search */}
+                          {/* Alternativ kontakt — auto-fundet kollega når den primære henviser videre */}
                           <div className="rounded-2xl border border-[#29261f]/12 bg-[#fff8ea] p-4 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.4)]">
                             <div className="flex items-center justify-between">
-                              <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--clay)]">Alt-contact</p>
+                              <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--clay)]">Anden kontakt</p>
                               <span className="rounded-full bg-[var(--clay)]/15 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider text-[var(--clay)]">Auto</span>
                             </div>
                             <p className="mt-2.5 text-[11px] leading-snug text-[#29261f]/82">
@@ -2322,10 +2322,10 @@ export default function Home() {
                             </div>
                           </div>
 
-                          {/* Phone-scout result */}
+                          {/* Telefon-opsporing — direkte nummer på beslutningstager, uden om hovedomstilling */}
                           <div className="rounded-2xl border border-[#29261f]/12 bg-[#fff8ea] p-4 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.4)]">
                             <div className="flex items-center justify-between">
-                              <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--clay)]">Phone-scout</p>
+                              <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--clay)]">Direkte nummer</p>
                               <span className="rounded-full bg-[var(--forest)]/15 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider text-[var(--forest)]">Fundet</span>
                             </div>
                             <p className="mt-2.5 text-[11px] leading-snug text-[#29261f]/82">
@@ -2348,7 +2348,7 @@ export default function Home() {
                           {/* Storkunde-fraled alert (Cleanstep-pattern) */}
                           <div className="rounded-2xl border border-[#c93c0a]/35 bg-[#14110d] p-4 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.5)]">
                             <div className="flex items-center justify-between">
-                              <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[#ff6b2c]">⚠ Fraled-alert</p>
+                              <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[#ff6b2c]">⚠ Storkunde falder fra</p>
                               <span className="text-[9px] text-[var(--cream)]/45">i dag</span>
                             </div>
                             <p className="mt-2.5 text-[11px] leading-snug text-[var(--cream)]/85">
@@ -2364,7 +2364,7 @@ export default function Home() {
                           {/* Attribution mini-dashboard */}
                           <div className="rounded-2xl border border-[#29261f]/12 bg-[#fff8ea] p-4 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.4)]">
                             <div className="flex items-center justify-between">
-                              <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--clay)]">Attribution · 30d</p>
+                              <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--clay)]">Sporing · 30d</p>
                               <span className="text-[9px] text-[#29261f]/55">13 won</span>
                             </div>
                             <div className="mt-3 space-y-1.5">
@@ -2385,10 +2385,10 @@ export default function Home() {
                             </div>
                           </div>
 
-                          {/* Pre-meeting talepunkter */}
+                          {/* Talepunkter før opkald — AI-genereret kontekst-brief */}
                           <div className="rounded-2xl border border-[var(--cream)]/8 bg-[#14110d] p-4 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.5)]">
                             <div className="flex items-center justify-between">
-                              <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--clay)]">Pre-meeting brief</p>
+                              <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--clay)]">Talepunkter før opkald</p>
                               <span className="rounded-full bg-[var(--clay)]/15 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider text-[var(--clay)]">AI</span>
                             </div>
                             <p className="mt-2.5 text-[10px] text-[var(--cream)]/55">
@@ -2396,7 +2396,7 @@ export default function Home() {
                             </p>
                             <ul className="mt-3 space-y-1.5 text-[10px] leading-snug text-[var(--cream)]/72">
                               {[
-                                "Sidste interaktion: takkede for tilbud, ville se intern brief",
+                                "Sidste samtale: takkede for tilbud, ville se det internt",
                                 "Bestilte 32K DKK i Q4 — typisk køber kvartalsvis",
                                 "Bemærk: just shipped ny e-shop — mention som anker",
                               ].map((p) => (
@@ -2603,7 +2603,7 @@ export default function Home() {
               Du beholder alt <span className="italic text-[var(--clay)]">du har.</span>
             </h2>
             <p className="mx-auto mt-6 max-w-[28rem] text-[15px] leading-relaxed text-[var(--cream)]/70">
-              Du behøver ikke en ny stack. Annonce → CRM → kalender — jeg kobler det I allerede har, lægger systemet oven på.
+              Du behøver ikke nye værktøjer. Annonce → CRM → kalender — jeg kobler det I allerede har, lægger systemet oven på.
             </p>
 
             {/* CTA stack — forest-green pill (won-color CTA on paper) + email link */}
