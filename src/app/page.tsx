@@ -192,10 +192,10 @@ const journey: JourneyStage[] = [
     titleAccent: "før de glemmer dig.",
     body: "",
     subpoints: [
-      "Lead lander → sælgeren har det på skærmen samme sekund",
-      "Ét tryk = opkald (ingen CRM, ingen indbakke)",
-      "SMS-bro hvis ingen tager — i kontekst, ikke spam",
-      "Mail og genoptagelse hvis det stadig ikke flytter sig",
+      "Lead lander, sælgeren ringer med ét tryk",
+      "SMS-bro hvis ingen tager, kontekstuelt, ikke spam",
+      "Mail og genaktivering hvis ingen reaktion",
+      "Mens samtalen er varm, ikke 47 timer senere",
     ],
     proof: {
       metric: "21×",
@@ -213,13 +213,12 @@ const journey: JourneyStage[] = [
     eyebrow: "03 · OPFØLGNING",
     title: "Holde dem varme.",
     titleAccent: "Lukke aftalen.",
-    body: "Møder glipper. Aftaler forsvinder. Leads der stod stille for to uger siden bliver fanget. Pipelinen følger med dagen, ikke ugen — vundne aftaler hopper til 'lukket' samme dag.",
+    body: "Møder glipper. Aftaler forsvinder. Sælgeren glemte at følge op.",
     subpoints: [
-      "Resultat markeret samme dag — pipelinen følger med dagen",
+      "Hvert opkald får et resultat samme dag, pipelinen lyver ikke",
       "Plejeflow til leads der ikke er klar nu",
       "Genoptagelses-flow til tabte aftaler",
-      "Storkunde-fraled-opsporing — kunden der stopper med at bestille",
-      "Sporing: hvilket lead blev til hvilken vundet aftale",
+      "Storkunde-fraled-opsporing: kunden der stopper med at bestille",
     ],
     proof: {
       metric: "4×",
