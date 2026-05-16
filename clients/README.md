@@ -191,52 +191,57 @@ Schema:
 
 Current state: two globals seeded (`watched_followup_v1`, `unwatched_followup_v1`). No workspace overrides exist yet — all four clients hit the globals.
 
-### Override a global for one client
+### Recommended: use the CLI
 
-Say OdaGroup wants its own `unwatched_followup_v1` copy (no video → only the unwatched branch ever fires for them):
+Use `scripts/sequences/manage.py` for any change to a sequence. It validates the JSON shape against the engine's `SequenceStep` type, shows a diff, and prompts for confirmation. Catches the silent footgun where `wait_hours` (snake_case typo) freezes leads mid-flow.
+
+```bash
+# Look at what a client is on right now
+python3 scripts/sequences/manage.py list --workspace odagroup
+
+# Override one template for one client (most common case)
+python3 scripts/sequences/manage.py set-template \
+  --workspace odagroup --sequence unwatched_followup_v1 --step qualifier \
+  --template "Hej {firstName}, vender lige tilbage på denne — er det noget i {company} har kigget på?"
+
+# Replace the whole sequence for one client (from a JSON file)
+python3 scripts/sequences/manage.py set-sequence \
+  --workspace odagroup --sequence unwatched_followup_v1 --from path/to/seq.json
+
+# Remove a workspace override — client falls back to global default
+python3 scripts/sequences/manage.py reset \
+  --workspace odagroup --sequence unwatched_followup_v1
+
+# Validate a JSON file without touching the DB
+python3 scripts/sequences/manage.py validate path/to/seq.json
+```
+
+Reads `SUPABASE_SERVICE_ROLE_KEY` from `.env.local` automatically. Pass `--yes` to skip the confirmation prompt in scripts. Templates accept `\n` and `\t` as escape sequences — they're decoded to real newlines/tabs before storage.
+
+### What the CLI does in the DB
+
+For reference / for cases the CLI doesn't cover, the underlying SQL operations are:
 
 ```sql
+-- Override (workspace-specific row; same id as a global wins for that workspace)
 INSERT INTO outreach_sequences (id, workspace_id, description, trigger_signal, excludes_global, steps, position)
-VALUES (
-  'unwatched_followup_v1',
-  'cdfd80d8-33bb-4b64-b778-0a2c5ab78cc6',           -- OdaGroup workspace_id
-  'OdaGroup-specific follow-up — no video, AI-drafted voice.',
-  'sent',
-  ARRAY['replied'],
-  $JSON$[
-    {
-      "id": "qualifier",
-      "waitHours": 72,
-      "branches": [{
-        "action": {
-          "type": "auto_send",
-          "template": "Hej {firstName}, vender lige tilbage på denne — er det noget i {company} har kigget på?"
-        }
-      }]
-    }
-  ]$JSON$::jsonb,
-  200
-);
-```
+VALUES ('unwatched_followup_v1', '<workspace-uuid>', '...', 'sent', ARRAY['replied'], '[...]'::jsonb, 200);
 
-That's it. Next engine tick (≤5 min) resolves OdaGroup leads to the new sequence; CarterCo/Tresyv/Haugefrom still hit the global. The `/outreach/clients` overview shows the new sequence with a "Workspace override" badge, so you can see at a glance which clients have custom flows.
-
-### Edit a global for everyone
-
-```sql
-UPDATE outreach_sequences
-SET steps = '[...new steps...]'::jsonb
+-- Edit a global (affects all clients without an override)
+UPDATE outreach_sequences SET steps = '[...]'::jsonb
 WHERE id = 'unwatched_followup_v1' AND workspace_id IS NULL;
-```
 
-### Pause a sequence for one client
-
-```sql
+-- Pause a sequence for one client (inactive override + empty steps shadows the global)
 INSERT INTO outreach_sequences (id, workspace_id, description, trigger_signal, steps, is_active, position)
 VALUES ('watched_followup_v1', '<workspace-uuid>', 'Disabled for this client.', 'played', '[]'::jsonb, false, 100);
+
+-- Drop an override (workspace falls back to global)
+DELETE FROM outreach_sequences WHERE workspace_id = '<workspace-uuid>' AND id = '<seq-id>';
 ```
 
-Inactive override + empty `steps` shadows the global; engine sees nothing to enrol leads into for that sequence id.
+The CLI maps to `INSERT … ON CONFLICT` (set-template, set-sequence) and `DELETE` (reset). For pause/edit-global, run the SQL directly.
+
+After any change, refresh `/outreach/clients` to see the new state — the page shows a green "Workspace override" badge next to sequences that have a workspace-specific row, so you can tell at a glance which clients are on custom flows.
 
 ### Engine + UI references
 
