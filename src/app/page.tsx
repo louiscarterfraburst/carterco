@@ -192,9 +192,9 @@ const journey: JourneyStage[] = [
     titleAccent: "før leadet køler.",
     body: "",
     subpoints: [
-      "Lead lander på hele teamets mobil med det samme, sælgeren ringer med ét tryk",
-      "SMS-bro hvis ingen tager, kontekstuelt, ikke spam",
-      "Mail og genaktivering hvis ingen reaktion",
+      "Lead lander på teamets mobil, ét tryk åbner opkaldet",
+      "SMS-bro hvis ingen tager, refererer til opkaldet",
+      "Mail og reaktivering hvis stadig stille",
       "Mens samtalen er varm, ikke 47 timer senere",
     ],
     proof: {
