@@ -172,8 +172,8 @@ const journey: JourneyStage[] = [
   {
     n: "01",
     eyebrow: "01 · OUTBOUND",
-    title: "Skrive til dem,",
-    titleAccent: "med en grund til at svare.",
+    title: "Give dem en grund",
+    titleAccent: "til at svare.",
     body: "",
     subpoints: [
       "Cold outreach der ikke føles cold — research, video, grund til at læse",
