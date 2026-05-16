@@ -126,6 +126,19 @@ body {
   outline-offset: 2px;
 }
 
+/* Sand-themed scope inside the otherwise-dark journey section.
+   Hastighed (stage 02) opts into this so its copy column flips from
+   cream-on-ink to ink-on-sand, restoring DESIGN.md's sand→ember rhythm.
+   We remap --cream so every `text-[var(--cream)]` / `border-[var(--cream)]`
+   inside automatically inverts without rewriting every class. Row-2 cards
+   sit *outside* this scope so they keep their ember surfaces.
+   Class name avoids the "theme-" prefix because Tailwind v4 strips it. */
+.sand-scope {
+  --cream: #29261f;
+  --clay: #7a4523;
+  color: var(--ink);
+}
+
 /* Paper grain — for sand/cream sections. Position: absolute inset-0
    inside a relative parent so it scrolls with the section. */
 .paper-grain {

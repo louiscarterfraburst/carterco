@@ -166,6 +166,7 @@ type JourneyStage = {
   anchorClient: { name: string; line: string };          // Named anchor case + one-line attribution
   supportingClients: SupportingClient[];                  // 2-3 supporting clients as round-avatar placeholders
   visual: "outbound" | "pipeline" | "sms" | "flows";
+  theme?: "sand" | "ember";                              // Surface theme — defaults to ember. Hastighed (02) flips to sand so the middle stage reads as a paper poster inset, restoring DESIGN.md's sand→ember alternation rhythm. Row-2 cards stay ember on sand stages (dark panels resting on paper).
 };
 
 const journey: JourneyStage[] = [
@@ -206,6 +207,7 @@ const journey: JourneyStage[] = [
     anchorClient: { name: "Murph", line: "Rammer hvert lead på under 3 min — branchen tager 47 timer." },
     supportingClients: [],
     visual: "sms",
+    theme: "sand",
   },
   {
     n: "03",
@@ -217,7 +219,7 @@ const journey: JourneyStage[] = [
       "Mails, accepter og opkaldsresultater markerer pipelinen. Aldrig en uge bagud.",
       "Plejeflow til leads der ikke er klar nu",
       "Genoptagelses-flow til tabte aftaler",
-      "Storkunde-fraled-opsporing: kunden der stopper med at bestille",
+      "Storkunder der stopper med at bestille, opdaget før konkurrenten ringer",
     ],
     proof: {
       metric: "4×",
@@ -1043,20 +1045,26 @@ export default function Home() {
             <div className="flex flex-col gap-36 sm:gap-48 lg:gap-56">
               {journey.map((stage, i) => {
                 const isReverse = i % 2 === 1;
+                const isSand = stage.theme === "sand";
                 // Per-stage atmospheric tint: subtle radial in a unique
-                // position + accent so each machine reads as its own poster
-                // without leaving the ember theme.
-                const stageBackdrop =
-                  stage.n === "01"
+                // position + accent so each machine reads as its own poster.
+                // Sand stages skip the dark-on-dark radial and instead get
+                // a full-bleed sand band behind the article.
+                const stageBackdrop = isSand
+                  ? (
+                    // Full-bleed sand band. Top extends 8rem above article; bottom
+                    // stops 14rem above article-bottom so the EmberSpark divider
+                    // that closes this stage sits fully in ember (marks the sand→
+                    // ember transition cleanly instead of being split across tones).
+                    <div aria-hidden className="pointer-events-none absolute -z-[1] bg-[var(--sand)]" style={{ top: "-8rem", bottom: "14rem", left: "calc(50% - 50vw)", right: "calc(50% - 50vw)" }}>
+                      <div className="paper-grain" />
+                      <div className="absolute left-[8%] top-[15%] h-[460px] w-[560px] rounded-full bg-[radial-gradient(ellipse_at_center,rgba(185,112,65,0.16),transparent_70%)] blur-3xl" />
+                    </div>
+                  )
+                  : stage.n === "01"
                     ? (
                       <div aria-hidden className="pointer-events-none absolute inset-0 -z-[1]">
                         <div className="absolute -right-[10%] top-[5%] h-[420px] w-[520px] rounded-full bg-[radial-gradient(ellipse_at_center,rgba(185,112,65,0.22),transparent_70%)] blur-3xl" />
-                      </div>
-                    )
-                    : stage.n === "02"
-                    ? (
-                      <div aria-hidden className="pointer-events-none absolute inset-0 -z-[1]">
-                        <div className="absolute left-[8%] top-[20%] h-[480px] w-[600px] rounded-full bg-[radial-gradient(ellipse_at_center,rgba(255,107,44,0.18),transparent_65%)] blur-3xl" />
                       </div>
                     )
                     : (
@@ -1066,12 +1074,14 @@ export default function Home() {
                     );
 
                 return (
-                  <article key={stage.n} className="relative">
+                  <article key={stage.n} className={`relative ${isSand ? "isolate py-24 sm:py-28" : ""}`}>
                     {stageBackdrop}
-                    {/* Ghost numeral — keep editorial weight without the rail */}
+                    {/* Ghost numeral — keep editorial weight without the rail.
+                        On sand stages, swap to a darker ink-tinted variant
+                        so it still reads against the warm paper bg. */}
                     <span
                       aria-hidden
-                      className="ghost-numeral pointer-events-none absolute -top-16 right-0 select-none text-[18rem] leading-none sm:-top-24 sm:right-auto sm:left-[-1rem] sm:text-[22rem]"
+                      className={`ghost-numeral pointer-events-none absolute -top-16 right-0 select-none text-[18rem] leading-none sm:-top-24 sm:right-auto sm:left-[-1rem] sm:text-[22rem] ${isSand ? "opacity-[0.55] [background:linear-gradient(180deg,rgba(122,69,35,0.22)_0%,rgba(185,112,65,0.18)_50%,rgba(41,38,31,0.12)_100%)] [-webkit-background-clip:text] [background-clip:text]" : ""}`}
                     >
                       {stage.n}
                     </span>
@@ -1080,7 +1090,7 @@ export default function Home() {
                     <div className="grid gap-12 sm:grid-cols-12 sm:items-center sm:gap-12">
                     {/* Copy column */}
                     <div
-                      className={`relative ${isReverse ? "sm:col-span-5 sm:col-start-7" : "sm:col-span-5 sm:col-start-2"} flex flex-col`}
+                      className={`relative ${isReverse ? "sm:col-span-5 sm:col-start-7" : "sm:col-span-5 sm:col-start-2"} flex flex-col ${isSand ? "sand-scope" : ""}`}
                     >
                       <div className="flex items-center gap-3">
                         <span aria-hidden className="h-px w-10 bg-[#ff6b2c]" />
