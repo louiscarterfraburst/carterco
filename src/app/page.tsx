@@ -1021,20 +1021,21 @@ export default function Home() {
           {/* Header — centered chapter-opener for the three machines.
               Matches the centered cases title above ("Forskellige
               brancher. Samme retning."), establishes an editorial
-              section-title-plate rhythm. */}
+              section-title-plate rhythm. The H2 alone carries the
+              promise ("hele vejen fra kontakt til kontrakt"); the
+              numbered 01/02/03 sections below show "tre dele" without
+              needing to announce it. Thin flame rule below = visual
+              anchor for the centered layout, no copy. */}
           <div className="text-center">
             <h2 className="font-display text-[11vw] leading-[0.88] tracking-[-0.045em] sm:text-7xl lg:text-[6rem]">
               Hele vejen fra
               <br />
               kontakt til kontrakt.
             </h2>
-            <div className="mx-auto mt-7 flex items-center justify-center gap-3">
-              <span aria-hidden className="h-px w-8 bg-[var(--clay)]/55" />
-              <p className="text-[13px] uppercase tracking-[0.28em] text-[var(--cream)]/55">
-                Tre dele · samme værksted
-              </p>
-              <span aria-hidden className="h-px w-8 bg-[var(--clay)]/55" />
-            </div>
+            <div
+              aria-hidden
+              className="mx-auto mt-9 h-[2px] w-[min(140px,30%)] bg-[#ff6b2c] shadow-[0_0_22px_rgba(255,107,44,0.6)]"
+            />
           </div>
 
           {/* Three sections — no wire / no rail nodes. Each is its own beat;
