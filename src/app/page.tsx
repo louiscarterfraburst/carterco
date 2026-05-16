@@ -147,31 +147,63 @@ const cases: {
   },
 ];
 
+type SupportingClient = {
+  // Placeholder until real logos/portraits land. Initials render in a round
+  // avatar; name labels the circle. Anchor case has the metric attached;
+  // supporting clients are just proof that "more than one client uses this."
+  initials: string;
+  name: string;
+};
+
 type JourneyStage = {
   n: string;
-  verb: string;
+  eyebrow: string;            // "01 · OUTBOUND" style — replaces the gradient-italic verb (DESIGN.md reserves that for hero + founder)
   title: string;
   titleAccent: string;
   body: string;
+  subpoints: string[];        // 4-6 lines showing depth — what the work actually is, not "features you get"
   proof?: { metric: string; unit: string; note: string; noteHref?: string };
+  anchorClient: { name: string; line: string };          // Named anchor case + one-line attribution
+  supportingClients: SupportingClient[];                  // 2-3 supporting clients as round-avatar placeholders
   visual: "outbound" | "pipeline" | "sms" | "flows";
 };
 
 const journey: JourneyStage[] = [
   {
     n: "01",
-    verb: "Finde",
-    title: "Hente dem ind",
+    eyebrow: "01 · OUTBOUND",
+    title: "Hente dem ind,",
     titleAccent: "hvor de allerede er.",
-    body: "Personlige LinkedIn-DMs i skala. Email-outreach uden om gatekeepere. Meta- og Google-annoncer bygget på den profil du sælger til.",
+    body: "Cold outreach der ikke føles cold. Hver besked har research, video og en grund til at læse den. Annoncerne rammer dem du faktisk vil have, ikke alle der ligner dem.",
+    subpoints: [
+      "Personlige LinkedIn-DMs på skala — én video pr. modtager",
+      "Email-outreach uden om gatekeepere",
+      "Meta- og Google-annoncer bygget på din ICP",
+      "Manuel research per high-value lead",
+      "Genaktivering af leads der ligger kolde i databasen",
+    ],
+    anchorClient: { name: "Tresyv", line: "Kører den i dag." },
+    supportingClients: [
+      { initials: "—", name: "TBD" },
+      { initials: "—", name: "TBD" },
+      { initials: "—", name: "TBD" },
+    ],
     visual: "outbound",
   },
   {
     n: "02",
-    verb: "Ringe",
-    title: "Få dem på telefonen",
+    eyebrow: "02 · SPEED-TO-LEAD",
+    title: "Få dem på telefonen,",
     titleAccent: "før de glemmer dig.",
     body: "Sælgeren får leadet på skærmen samme sekund det lander — med navn, firma, kontekst. Ét tryk og du ringer op. Ingen CRM at åbne, ingen indbakke at scrolle.",
+    subpoints: [
+      "Lead lander → sælgeren har det på skærmen samme sekund",
+      "Ét tryk = opkald (ingen CRM, ingen indbakke)",
+      "SMS-bridge hvis ingen tager — kontekstuelt, ikke spammy",
+      "Email og reaktivering hvis det stadig ikke flytter sig",
+      "Push-notifikation til alle med adgang samtidig",
+      "Lead-prioritering på ICP-score",
+    ],
     proof: {
       metric: "21×",
       unit: "mere kvalificeret",
@@ -179,22 +211,37 @@ const journey: JourneyStage[] = [
       noteHref:
         "https://25649.fs1.hubspotusercontent-na2.net/hub/25649/file-13535879-pdf/docs/mit_study.pdf",
     },
+    anchorClient: { name: "Murph", line: "Rammer hvert lead på under 3 min — branchen tager 47 timer." },
+    supportingClients: [
+      { initials: "—", name: "TBD" },
+      { initials: "—", name: "TBD" },
+    ],
     visual: "sms",
   },
   {
     n: "03",
-    verb: "Pleje",
-    title: "Holde dem varme",
-    titleAccent: "indtil de er klar.",
-    body: "Ikke alle leads er klar til at købe i dag. Email og SMS i ugevis. Når de engagerer, ryger leadet tilbage til sælgeren med hele samtalen som kontekst.",
-    visual: "flows",
-  },
-  {
-    n: "04",
-    verb: "Lukke",
-    title: "Føre dem hjem",
-    titleAccent: "uden at miste én.",
-    body: "De fleste CRM'er er en uge bagud. Mit følger med dagen. Vundne aftaler hopper til 'lukket', leads der står stille får ny aktion, og det der ellers ville falde af radaren bliver fanget før du selv ser det.",
+    eyebrow: "03 · POST-MEETING",
+    title: "Holde dem varme.",
+    titleAccent: "Lukke aftalen.",
+    body: "Møder glipper. Aftaler forsvinder. Leads der stod stille for to uger siden bliver fanget. Pipelinen følger med dagen, ikke ugen — vundne aftaler hopper til 'lukket' samme dag.",
+    subpoints: [
+      "Outcome markeret samme dag — pipelinen følger med dagen",
+      "Nurture-flows for \"ikke klar nu\"-leads",
+      "Reaktiverings-flows for tabte deals",
+      "Storkunde-fraled-opsporing — kunden der stopper med at bestille",
+      "Attribution: hvilket lead blev til hvilken vundet aftale",
+      "Talepunkter genereret før hver opfølgning",
+    ],
+    proof: {
+      metric: "4×",
+      unit: "lead-konvertering",
+      note: "Samme målgruppe, samme budget — Burst på et SMS- og pleje-flow over 3 måneder.",
+    },
+    anchorClient: { name: "Burst", line: "4× på samme budget." },
+    supportingClients: [
+      { initials: "—", name: "TBD" },
+      { initials: "—", name: "TBD" },
+    ],
     visual: "pipeline",
   },
 ];
@@ -774,7 +821,7 @@ export default function Home() {
             className="max-w-xl text-lg leading-relaxed text-[var(--cream)]/70 sm:max-w-2xl sm:text-xl"
             style={{ textWrap: "balance" }}
           >
-            Leads køler. Møder glipper. Pipelines visner. Jeg bygger systemet, der finder dem, ringer dem op før de køler, plejer dem til de er klar – så du kan få flere aftaler i hus.
+            Tre dele af salgsinfrastrukturen, bygget og driftet på dit eget setup. Outbound. Speed-to-lead. Post-meeting. Det fulde billede eller bare den del der mangler.
           </p>
 
           <div className="flex flex-col-reverse items-start justify-between gap-8 sm:flex-row sm:items-end">
@@ -993,40 +1040,20 @@ export default function Home() {
             </h2>
           </div>
 
-          {/* Stages with continuous wire */}
+          {/* Three sections — no wire / no rail nodes. Each is its own beat;
+              they read as a connected practice via the closing connective
+              line below, not via a visual spine. (Three-machines decision
+              2026-05-16: equal-weight delivery areas, bespoke per engagement.) */}
           <div className="relative mt-28 sm:mt-36">
-            {/* Wire down the left side */}
-            <div
-              aria-hidden
-              className="absolute left-2 top-0 hidden h-full w-px bg-[linear-gradient(180deg,transparent,rgba(185,112,65,0.55)_6%,rgba(185,112,65,0.55)_50%,rgba(25,70,58,0.6)_94%,transparent)] sm:block"
-            />
-            <div
-              aria-hidden
-              className="absolute left-[5px] top-0 hidden h-full w-[2px] sm:block"
-              style={{ ["--wire-length" as string]: "100%" }}
-            >
-              <span className="wire-travel block h-2 w-2 -translate-x-[3px] rounded-full bg-[#ff6b2c] shadow-[0_0_18px_3px_rgba(255,107,44,0.55)]" />
-            </div>
-
             <div className="flex flex-col gap-28 sm:gap-36">
               {journey.map((stage, i) => {
                 const isReverse = i % 2 === 1;
                 return (
                   <article
                     key={stage.n}
-                    className="relative grid gap-12 sm:grid-cols-12 sm:items-center sm:gap-12 sm:pl-14"
+                    className="relative grid gap-12 sm:grid-cols-12 sm:items-center sm:gap-12"
                   >
-                    {/* Rail node — centered on the wire (x), vertically centered on the stage (y) */}
-                    <span
-                      aria-hidden
-                      className="absolute left-2 top-1/2 hidden h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#ff6b2c] ring-4 ring-[#0a0907] sm:block"
-                    />
-                    <span
-                      aria-hidden
-                      className="glow-pulse absolute left-2 top-1/2 hidden h-7 w-7 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#ff6b2c]/30 blur-md sm:block"
-                    />
-
-                    {/* Ghost numeral */}
+                    {/* Ghost numeral — keep editorial weight without the rail */}
                     <span
                       aria-hidden
                       className="ghost-numeral pointer-events-none absolute -top-16 right-0 select-none text-[18rem] leading-none sm:-top-24 sm:right-auto sm:left-[-1rem] sm:text-[22rem]"
@@ -1038,14 +1065,11 @@ export default function Home() {
                     <div
                       className={`relative ${isReverse ? "sm:col-span-5 sm:col-start-7" : "sm:col-span-5 sm:col-start-2"} flex flex-col`}
                     >
-                      <span className="font-display text-6xl italic leading-none tracking-tight sm:text-7xl">
-                        <span className="bg-gradient-to-b from-[#ffb86b] via-[#ff6b2c] to-[#c93c0a] bg-clip-text text-transparent">
-                          {stage.verb}
-                        </span>
-                        <span className="text-[#ff6b2c]">.</span>
-                      </span>
+                      <p className="text-[10px] font-bold uppercase tracking-[0.32em] text-[#ff6b2c]">
+                        {stage.eyebrow}
+                      </p>
 
-                      <h3 className="mt-7 font-display text-3xl leading-[1.08] tracking-tight sm:text-4xl lg:text-[2.75rem]">
+                      <h3 className="mt-5 font-display text-3xl leading-[1.08] tracking-tight sm:text-4xl lg:text-[2.75rem]">
                         {stage.title}{" "}
                         <span className="italic text-[var(--clay)]/90">
                           {stage.titleAccent}
@@ -1054,6 +1078,22 @@ export default function Home() {
                       <p className="mt-5 max-w-md text-[15px] leading-relaxed text-[var(--cream)]/72">
                         {stage.body}
                       </p>
+
+                      {/* Sub-points — show the breadth of work in this area,
+                          editorial list (no SaaS-feature-grid). Each line is
+                          a thing the operator actually does, not a feature
+                          the buyer gets. */}
+                      <ul className="mt-7 flex max-w-md flex-col gap-2.5 text-[14px] leading-snug text-[var(--cream)]/72">
+                        {stage.subpoints.map((point) => (
+                          <li key={point} className="flex items-start gap-3">
+                            <span
+                              aria-hidden
+                              className="mt-2 inline-block h-px w-3 shrink-0 bg-[#ff6b2c]/55"
+                            />
+                            <span>{point}</span>
+                          </li>
+                        ))}
+                      </ul>
 
                       {/* Proof point — replaces the 4-bullet list */}
                       {stage.proof && (
@@ -1083,6 +1123,43 @@ export default function Home() {
                           </div>
                         </div>
                       )}
+
+                      {/* Anchor client + supporting circles — placeholders.
+                          Real avatars/logos go in later; for now: the anchor
+                          gets a named line, the supporting clients are round
+                          initials-circles you swap to real portraits or
+                          cropped logos. */}
+                      <div className="mt-9 flex items-center gap-5 border-t border-[var(--cream)]/10 pt-6">
+                        <div className="flex items-center gap-2.5">
+                          <span
+                            className="grid h-10 w-10 place-items-center rounded-full border border-[var(--clay)]/40 bg-[var(--clay)]/15 text-[11px] font-bold uppercase tracking-wider text-[var(--cream)]/80"
+                            aria-label={`Anchor case: ${stage.anchorClient.name}`}
+                          >
+                            {stage.anchorClient.name.slice(0, 2)}
+                          </span>
+                          <div className="min-w-0">
+                            <div className="text-[12px] font-bold uppercase tracking-[0.18em] text-[var(--cream)]/85">
+                              {stage.anchorClient.name}
+                            </div>
+                            <div className="text-[12px] text-[var(--cream)]/55">
+                              {stage.anchorClient.line}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="ml-auto flex items-center gap-1.5">
+                          {stage.supportingClients.map((c, idx) => (
+                            <span
+                              key={`${stage.n}-supporting-${idx}`}
+                              className="grid h-7 w-7 place-items-center rounded-full border border-[var(--cream)]/15 bg-[var(--cream)]/[0.04] text-[9px] font-bold uppercase tracking-wider text-[var(--cream)]/50"
+                              aria-label={`Also: ${c.name}`}
+                              title={c.name}
+                            >
+                              {c.initials}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
                     </div>
 
                     {/* Visual column */}
@@ -1919,78 +1996,21 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ─────── Section: Before / After (cream) ─────── */}
-      <section className="relative overflow-hidden bg-[#f6efe4] py-28 text-[#29261f] sm:py-36">
+      {/* ─────── Section: Connective beat — bespoke, not packaged ───────
+          Closes the three-section practice with the white-glove claim:
+          each engagement is built to fit, every client takes a different
+          subset. Replaces the deleted "Det her er forskellen" before/after
+          (which read as a linear funnel that no longer fits). */}
+      <section className="relative overflow-hidden bg-[#f6efe4] py-24 text-[#29261f] sm:py-28">
         <div aria-hidden className="paper-grain" />
 
-        {/* EmberSpark — top: bridges down from dark offer */}
-        <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-10 bg-[linear-gradient(180deg,rgba(255,107,44,0.18),transparent)]" />
-        <div aria-hidden className="pointer-events-none absolute left-1/2 top-0 h-[2px] w-[min(680px,60%)] -translate-x-1/2 bg-[linear-gradient(90deg,transparent,#ff6b2c_30%,#ff6b2c_70%,transparent)] shadow-[0_0_28px_rgba(255,107,44,0.7)]" />
-
-        {/* EmberSpark — bottom: bridges up to dark process */}
-        <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-[linear-gradient(0deg,rgba(255,107,44,0.18),transparent)]" />
-        <div aria-hidden className="pointer-events-none absolute bottom-0 left-1/2 h-[2px] w-[min(680px,60%)] -translate-x-1/2 bg-[linear-gradient(90deg,transparent,#ff6b2c_30%,#ff6b2c_70%,transparent)] shadow-[0_0_28px_rgba(255,107,44,0.7)]" />
-
-        <div className="relative z-[1] mx-auto w-full max-w-[1280px] px-8 sm:px-12">
-          <h2 className="ml-auto max-w-3xl text-right font-display text-[10vw] leading-[0.92] tracking-[-0.04em] text-[#29261f] sm:text-6xl lg:text-7xl">
-            Det her er forskellen.
-          </h2>
-
-          <div className="mt-16 grid gap-6 sm:mt-20 sm:grid-cols-2 sm:gap-10">
-            {/* FØR — faded, monochrome */}
-            <div className="relative rounded-2xl border border-[#29261f]/15 bg-[#efe6d6]/70 p-8 sm:p-10">
-              <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-[#29261f]/55">
-                Før · som det plejer
-              </p>
-              <h3 className="mt-3 font-display text-3xl italic leading-tight tracking-tight text-[#29261f]/70 sm:text-[2.25rem]">
-                Leads i en delt indbakke.
-              </h3>
-              <ul className="mt-7 flex flex-col gap-3.5 text-[15px] leading-relaxed text-[#29261f]/65">
-                {[
-                  "Leads lander i en delt indbakke ingen ejer.",
-                  "Sælger ringer to dage senere — leadet er kølet af.",
-                  "No-shows ringer ingen til. De er bare væk.",
-                  "“Hvad blev der af leadet fra forrige måned?” Ingen kan svare.",
-                ].map((line) => (
-                  <li key={line} className="flex items-start gap-3">
-                    <span
-                      aria-hidden
-                      className="mt-2 inline-block h-px w-3 shrink-0 bg-[#29261f]/35"
-                    />
-                    <span>{line}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            {/* EFTER — vibrant */}
-            <div className="relative rounded-2xl border border-[var(--clay)]/40 bg-[#fff8ea] p-8 shadow-[0_30px_80px_-30px_rgba(218,96,34,0.35)] sm:p-10">
-              <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-[#ff6b2c]">
-                Efter · med systemet
-              </p>
-              <h3 className="mt-3 font-display text-3xl italic leading-tight tracking-tight sm:text-[2.25rem]">
-                <span className="bg-gradient-to-b from-[#ffb86b] via-[#ff6b2c] to-[#c93c0a] bg-clip-text text-transparent">
-                  Ringet op før leadet køler.
-                </span>
-              </h3>
-              <ul className="mt-7 flex flex-col gap-3.5 text-[15px] leading-relaxed text-[#29261f]/82">
-                {[
-                  "Lead fanget — kilde, kontekst, ejer fra første sekund.",
-                  "Sælger har leadet på telefonen samme sekund det lander.",
-                  "SMS- og email-flow tager over hvis ingen når at svare.",
-                  "Outcome markeret samme dag — pipelinen er altid live.",
-                ].map((line) => (
-                  <li key={line} className="flex items-start gap-3">
-                    <span
-                      aria-hidden
-                      className="mt-2 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-[#ff6b2c]"
-                    />
-                    <span>{line}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
+        <div className="relative z-[1] mx-auto w-full max-w-[820px] px-8 text-center sm:px-12">
+          <p className="font-display text-[6vw] leading-[1.05] tracking-tight sm:text-4xl lg:text-[2.75rem]">
+            Tre dele. <span className="italic text-[var(--clay)]">Ét billede.</span>
+          </p>
+          <p className="mx-auto mt-8 max-w-[640px] text-[15px] leading-relaxed text-[#29261f]/72 sm:text-[17px]">
+            Sjældent samme vej for to klienter. Tresyv kører kun outbound. Murph startede med speed-to-lead. Burst byggede pleje og lukke. Engagementet er altid bygget til hvad du faktisk har brug for — den del der mangler, eller hele opbygningen.
+          </p>
         </div>
       </section>
 

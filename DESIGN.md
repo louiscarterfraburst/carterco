@@ -269,7 +269,8 @@ All other section accents use solid italic Fraunces in `var(--clay)` or `var(--c
 | Geist Sans loaded but unused | Low | **Done** 2026-05-14 |
 | Founder copy doesn't mention "fractional" | Low | **Done** 2026-05-14 |
 | Decorative SVGs missing `aria-hidden` consistently | Low | **Done** 2026-05-14 |
-| "Det her er forskellen" bullets don't carry pillar labels | Medium | Open — each Før/Efter bullet should explicitly label `Finde / Ringe / Pleje / Lukke` so the section reads as the inverse of the journey section. Today the 4 Efter bullets implicitly follow the pillar order but the symmetry is invisible. |
+| "Det her er forskellen" bullets don't carry pillar labels | Medium | **Superseded** 2026-05-15 — the section is being deleted as part of the three-machine restructure (see `docs/site-restructure-three-machines.md`). |
+| Page reads as one linear lead-funnel; outbound, speed-to-lead, and post-meeting are smushed into 4 funnel stages | High | Open — restructure to 3 equal-weight machine sections. Plan in `docs/site-restructure-three-machines.md`. Awaiting 3 inputs before implementation. |
 
 ---
 
