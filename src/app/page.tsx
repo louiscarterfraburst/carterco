@@ -2163,7 +2163,7 @@ export default function Home() {
                         + andre dele af opsætningen
                       </p>
                     </div>
-                    <div className="mt-7 grid grid-cols-1 gap-5 sm:grid-cols-2 sm:gap-6 lg:grid-cols-4">
+                    <div className={`mt-7 ${stage.n === "03" ? "grid grid-cols-1 gap-y-12 sm:grid-cols-2 sm:gap-x-10 sm:gap-y-14 lg:grid-cols-4 lg:gap-x-0 lg:gap-y-0" : "grid grid-cols-1 gap-5 sm:grid-cols-2 sm:gap-6 lg:grid-cols-4"}`}>
                       {stage.n === "01" && (
                         <>
                           {/* AI-drafted DM — preview-only, 1 line ellipsized.
@@ -2344,132 +2344,124 @@ export default function Home() {
 
                       {stage.n === "03" && (
                         <>
-                          {/* Stage 03 row-2 — operator's notebook on the dark desk.
-                              Each card is a different paper artifact, not 4 sand
-                              tiles in a uniform grid:
-                                · Card 1 = alarm ticket with torn top edge
-                                · Card 2 = ledger paper with ruled lines
-                                · Card 3 = lined notebook page with margin redline
-                                · Card 4 = thermal receipt with serrated bottom
-                              Mikro-rotations (-1° to +1°) so they look pinned
-                              to a desk, not template-grid'd. */}
+                          {/* Stage 03 row-2 — editorial typographic spread.
+                              The previous notebook-with-torn-edges treatment
+                              was twee for a serious infrastructure brand.
+                              No card backgrounds, borders, or decoration —
+                              just typography on the dark section, divided by
+                              hairlines like a financial-print broadsheet.
+                              Each cell anchored by one massive Fraunces
+                              italic numeral; state colors (rust storkunde,
+                              forest aftale) reserved for signal only. */}
 
-                          {/* Card 1 — storkunde alarm ticket */}
-                          <div
-                            style={{ transform: "rotate(-1deg)" }}
-                            className="sand-scope torn-top paper-shadow relative rounded-2xl border border-[var(--ink)]/10 bg-[var(--sand)] px-4 pb-4 pt-5"
-                          >
-                            <div className="paper-grain" />
-                            <p className="relative text-[9px] font-bold uppercase tracking-[0.28em] text-[#c93c0a] ink-stamp">⚠ Storkunde falder fra</p>
-                            <p className="relative mt-3 text-[11px] leading-snug text-[var(--cream)]/85">
-                              <span className="font-semibold">Vela Wood</span> · normalt hver 14. dag · <span className="text-[#c93c0a] font-medium">21 dage forsinket</span>
-                            </p>
-                            <div className="relative mt-3 flex items-center gap-2 border-t border-[var(--cream)]/12 pt-2.5">
-                              <span className="flex-1 truncate text-[10px] text-[var(--cream)]/55">Ring CFO i dag</span>
-                              <span className="text-[9px] font-bold uppercase tracking-wider text-[#c93c0a]">→</span>
+                          {/* Cell 1 — storkunde alarm */}
+                          <div className="relative lg:pr-8">
+                            <div className="flex items-center gap-2.5">
+                              <span aria-hidden className="h-px w-7 bg-[#c93c0a]" />
+                              <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-[#c93c0a]">
+                                Storkunde · alarm
+                              </p>
                             </div>
+                            <p className="mt-7 font-display text-[5.5rem] italic leading-[0.85] tracking-[-0.04em] text-[#c93c0a] sm:text-[6rem]">
+                              21
+                            </p>
+                            <p className="mt-1 font-display text-[1.35rem] italic leading-[1.1] tracking-tight text-[var(--cream)]/90">
+                                dage forsinket.
+                            </p>
+                            <p className="mt-4 text-[12px] leading-relaxed text-[var(--cream)]/55">
+                              <span className="font-semibold text-[var(--cream)]/85">Vela Wood</span> — normalt hver 14. dag.
+                            </p>
+                            <div className="mt-6 h-px w-10 bg-[var(--cream)]/15" />
+                            <p className="mt-4 text-[10px] font-bold uppercase tracking-[0.24em] text-[#c93c0a]">
+                              Ring CFO i dag <span aria-hidden>↗</span>
+                            </p>
                           </div>
 
-                          {/* Card 2 — sporing on ledger paper */}
-                          <div
-                            style={{ transform: "rotate(0.5deg)" }}
-                            className="sand-scope ledger-ruled paper-shadow relative rounded-2xl border border-[var(--ink)]/10 bg-[var(--sand)] p-4"
-                          >
-                            <div className="paper-grain" />
-                            <div className="relative flex items-center justify-between">
-                              <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--clay)]">Sporing · 30d</p>
-                              <span className="font-mono tabular text-[9px] text-[var(--cream)]/45">13 won</span>
+                          {/* Cell 2 — sporing 30d */}
+                          <div className="relative lg:border-l lg:border-[var(--cream)]/12 lg:px-8">
+                            <div className="flex items-center gap-2.5">
+                              <span aria-hidden className="h-px w-7 bg-[var(--clay)]" />
+                              <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-[var(--clay)]">
+                                Sporing · 30d
+                              </p>
                             </div>
-                            <div className="relative mt-3 space-y-1.5">
+                            <p className="mt-7 font-display text-[5.5rem] italic leading-[0.85] tracking-[-0.04em] text-[var(--cream)] sm:text-[6rem]">
+                              13
+                            </p>
+                            <p className="mt-1 font-display text-[1.35rem] italic leading-[1.1] tracking-tight text-[var(--cream)]/90">
+                                aftaler vundet.
+                            </p>
+                            <p className="mt-4 font-mono text-[11px] tabular text-[var(--cream)]/55">
+                              1.200.000 dkk · sporet til kilde
+                            </p>
+                            <div className="mt-6 h-px w-10 bg-[var(--cream)]/15" />
+                            <div className="mt-4 space-y-2 font-mono text-[10.5px] tabular">
                               {[
-                                { source: "LinkedIn outbound", count: 8, value: "640K" },
-                                { source: "Meta ads", count: 3, value: "180K" },
-                                { source: "Reference", count: 2, value: "380K" },
+                                { count: "8", source: "LinkedIn outbound", value: "640K" },
+                                { count: "3", source: "Meta ads", value: "180K" },
+                                { count: "2", source: "Reference", value: "380K" },
                               ].map((a) => (
-                                <div key={a.source} className="flex items-center gap-2 text-[10px]">
-                                  <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-[#c93c0a]" />
+                                <div key={a.source} className="flex items-baseline gap-3">
+                                  <span className="w-3 text-right text-[var(--cream)]/70">{a.count}</span>
                                   <span className="flex-1 truncate text-[var(--cream)]/72">{a.source}</span>
-                                  <span className="font-mono tabular text-[var(--cream)]/65">{a.count} · {a.value}</span>
+                                  <span className="text-[var(--cream)]/55">{a.value}</span>
                                 </div>
                               ))}
                             </div>
                           </div>
 
-                          {/* Card 3 — talepunkter on lined notebook page */}
-                          <div
-                            style={{ transform: "rotate(-0.5deg)" }}
-                            className="sand-scope notebook-margin paper-shadow relative rounded-2xl border border-[var(--ink)]/10 bg-[var(--sand)] py-4 pl-9 pr-4"
-                          >
-                            <div className="paper-grain" />
-                            <div className="relative flex items-center justify-between">
-                              <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--clay)]">Talepunkter</p>
-                              <span
-                                className="ink-stamp rounded-sm border border-[var(--clay)]/40 bg-[var(--clay)]/10 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider text-[var(--clay)]"
-                                style={{ transform: "rotate(2deg)" }}
-                              >
-                                AI
-                              </span>
+                          {/* Cell 3 — talepunkter (AI brief) */}
+                          <div className="relative lg:border-l lg:border-[var(--cream)]/12 lg:px-8">
+                            <div className="flex items-center gap-2.5">
+                              <span aria-hidden className="h-px w-7 bg-[var(--clay)]" />
+                              <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-[var(--clay)]">
+                                Talepunkter · ai
+                              </p>
                             </div>
-                            <ul className="relative mt-3 space-y-1.5 text-[10px] leading-snug text-[var(--cream)]/75">
+                            <p className="mt-7 font-display text-[2.6rem] italic leading-[1] tracking-[-0.02em] text-[var(--cream)]">
+                              Brief 2&nbsp;min før opkaldet.
+                            </p>
+                            <p className="mt-4 text-[12px] leading-relaxed text-[var(--cream)]/55">
+                              Konteksten Stark Group ringer ind på, klar i operatørens hånd.
+                            </p>
+                            <div className="mt-6 h-px w-10 bg-[var(--cream)]/15" />
+                            <ol className="mt-4 space-y-3 text-[12.5px] leading-snug">
                               {[
                                 "Sidste samtale: takkede for tilbud",
                                 "Bestilte 32K i Q4 · køber kvartalsvis",
                                 "Just shipped ny e-shop · brug som anker",
-                              ].map((p) => (
-                                <li key={p} className="flex items-start gap-2">
-                                  <span aria-hidden className="mt-1 h-px w-2 shrink-0 bg-[#c93c0a]/70" />
-                                  <span>{p}</span>
+                              ].map((p, i) => (
+                                <li key={p} className="flex items-start gap-3">
+                                  <span className="mt-[1px] w-4 shrink-0 font-mono text-[10px] tabular text-[var(--cream)]/40">
+                                    {String(i + 1).padStart(2, "0")}
+                                  </span>
+                                  <span className="text-[var(--cream)]/78">{p}</span>
                                 </li>
                               ))}
-                            </ul>
+                            </ol>
                           </div>
 
-                          {/* Card 4 — won-deal receipt with hand-circled value + LUKKET stamp */}
-                          <div
-                            style={{ transform: "rotate(1deg)" }}
-                            className="sand-scope receipt-bottom paper-shadow relative rounded-t-2xl border border-b-0 border-[var(--ink)]/10 bg-[var(--sand)] px-4 pb-7 pt-4"
-                          >
-                            <div className="paper-grain" />
-                            <p className="relative text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--forest)]">✓ Aftale lukket</p>
-
-                            <div className="relative mt-4 inline-block">
-                              <div className="flex items-baseline gap-2">
-                                <span className="font-display text-3xl leading-none text-[var(--cream)]">32.500</span>
-                                <span className="text-[11px] text-[var(--cream)]/55">DKK</span>
-                              </div>
-                              {/* Hand-drawn loop around the value — bezier path
-                                  with deliberate imperfection (start ≠ end) so
-                                  it reads as ink, not template. */}
-                              <svg
-                                aria-hidden
-                                viewBox="0 0 200 70"
-                                preserveAspectRatio="none"
-                                className="pointer-events-none absolute -inset-x-3 -inset-y-2 h-[calc(100%+1rem)] w-[calc(100%+1.5rem)]"
-                              >
-                                <path
-                                  d="M 25,42 C 14,18 70,8 120,10 C 165,12 192,28 184,50 C 175,68 95,66 45,58 C 22,53 18,44 30,40"
-                                  fill="none"
-                                  stroke="#19463a"
-                                  strokeWidth="1.6"
-                                  strokeLinecap="round"
-                                  opacity="0.6"
-                                />
-                              </svg>
+                          {/* Cell 4 — aftale lukket */}
+                          <div className="relative lg:border-l lg:border-[var(--cream)]/12 lg:pl-8">
+                            <div className="flex items-center gap-2.5">
+                              <span aria-hidden className="h-px w-7 bg-[var(--forest)]" />
+                              <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-[var(--forest)]">
+                                Aftale · lukket
+                              </p>
                             </div>
-
-                            <p className="relative mt-2 truncate text-[10px] text-[var(--cream)]/55">
-                              Stark Group · sporet til LinkedIn-DM
+                            <p className="mt-7 font-display text-[3.6rem] italic leading-[0.85] tracking-[-0.04em] text-[var(--cream)] sm:text-[4rem]">
+                              32&thinsp;500
                             </p>
-
-                            {/* LUKKET diagonal stamp — sits behind text, reads
-                                as a faded rubber ink-stamp imprint. */}
-                            <span
-                              aria-hidden
-                              className="ink-stamp pointer-events-none absolute right-3 top-3 select-none font-display text-xl uppercase text-[var(--forest)]/25"
-                              style={{ transform: "rotate(-12deg)" }}
-                            >
-                              Lukket
-                            </span>
+                            <p className="mt-1 font-display text-[1.35rem] italic leading-[1.1] tracking-tight text-[var(--cream)]/90">
+                              dkk.
+                            </p>
+                            <p className="mt-4 text-[12px] leading-relaxed text-[var(--cream)]/55">
+                              <span className="font-semibold text-[var(--cream)]/85">Stark Group</span> — sporet til LinkedIn-DM.
+                            </p>
+                            <div className="mt-6 h-px w-10 bg-[var(--cream)]/15" />
+                            <p className="mt-4 text-[10px] font-bold uppercase tracking-[0.24em] text-[var(--forest)]">
+                              ✓ Won · close 30. apr
+                            </p>
                           </div>
                         </>
                       )}
