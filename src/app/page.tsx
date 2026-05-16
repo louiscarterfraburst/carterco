@@ -2344,31 +2344,43 @@ export default function Home() {
 
                       {stage.n === "03" && (
                         <>
-                          {/* Stage 03 row-2 unified on sand — paper-print outs
-                              on the dark desk instead of dark panels. Colored
-                              state-borders dropped so the 4 cards share the
-                              same frame; narrative arc (alarm → tracking →
-                              prep → won) carried by inner signals only (flame
-                              text in card 1, forest text in card 4). */}
-                          {/* Storkunde-fraled alert (Cleanstep-pattern) */}
-                          <div className="sand-scope rounded-2xl border border-[var(--ink)]/10 bg-[var(--sand)] p-4 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.5)]">
-                            <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[#c93c0a]">⚠ Storkunde falder fra</p>
-                            <p className="mt-3 text-[11px] leading-snug text-[var(--cream)]/85">
-                              <span className="font-medium">Vela Wood</span> · normalt hver 14. dag · <span className="text-[#c93c0a]">21 dage forsinket</span>
+                          {/* Stage 03 row-2 — operator's notebook on the dark desk.
+                              Each card is a different paper artifact, not 4 sand
+                              tiles in a uniform grid:
+                                · Card 1 = alarm ticket with torn top edge
+                                · Card 2 = ledger paper with ruled lines
+                                · Card 3 = lined notebook page with margin redline
+                                · Card 4 = thermal receipt with serrated bottom
+                              Mikro-rotations (-1° to +1°) so they look pinned
+                              to a desk, not template-grid'd. */}
+
+                          {/* Card 1 — storkunde alarm ticket */}
+                          <div
+                            style={{ transform: "rotate(-1deg)" }}
+                            className="sand-scope torn-top paper-shadow relative rounded-2xl border border-[var(--ink)]/10 bg-[var(--sand)] px-4 pb-4 pt-5"
+                          >
+                            <div className="paper-grain" />
+                            <p className="relative text-[9px] font-bold uppercase tracking-[0.28em] text-[#c93c0a] ink-stamp">⚠ Storkunde falder fra</p>
+                            <p className="relative mt-3 text-[11px] leading-snug text-[var(--cream)]/85">
+                              <span className="font-semibold">Vela Wood</span> · normalt hver 14. dag · <span className="text-[#c93c0a] font-medium">21 dage forsinket</span>
                             </p>
-                            <div className="mt-3 flex items-center gap-2 border-t border-[var(--cream)]/12 pt-2.5">
+                            <div className="relative mt-3 flex items-center gap-2 border-t border-[var(--cream)]/12 pt-2.5">
                               <span className="flex-1 truncate text-[10px] text-[var(--cream)]/55">Ring CFO i dag</span>
                               <span className="text-[9px] font-bold uppercase tracking-wider text-[#c93c0a]">→</span>
                             </div>
                           </div>
 
-                          {/* Attribution mini-dashboard */}
-                          <div className="sand-scope rounded-2xl border border-[var(--ink)]/10 bg-[var(--sand)] p-4 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.5)]">
-                            <div className="flex items-center justify-between">
+                          {/* Card 2 — sporing on ledger paper */}
+                          <div
+                            style={{ transform: "rotate(0.5deg)" }}
+                            className="sand-scope ledger-ruled paper-shadow relative rounded-2xl border border-[var(--ink)]/10 bg-[var(--sand)] p-4"
+                          >
+                            <div className="paper-grain" />
+                            <div className="relative flex items-center justify-between">
                               <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--clay)]">Sporing · 30d</p>
-                              <span className="text-[9px] text-[var(--cream)]/45">13 won</span>
+                              <span className="font-mono tabular text-[9px] text-[var(--cream)]/45">13 won</span>
                             </div>
-                            <div className="mt-3 space-y-1.5">
+                            <div className="relative mt-3 space-y-1.5">
                               {[
                                 { source: "LinkedIn outbound", count: 8, value: "640K" },
                                 { source: "Meta ads", count: 3, value: "180K" },
@@ -2377,19 +2389,28 @@ export default function Home() {
                                 <div key={a.source} className="flex items-center gap-2 text-[10px]">
                                   <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-[#c93c0a]" />
                                   <span className="flex-1 truncate text-[var(--cream)]/72">{a.source}</span>
-                                  <span className="font-mono tabular text-[var(--cream)]/55">{a.count} · {a.value}</span>
+                                  <span className="font-mono tabular text-[var(--cream)]/65">{a.count} · {a.value}</span>
                                 </div>
                               ))}
                             </div>
                           </div>
 
-                          {/* Talepunkter før opkald — AI-genereret kontekst-brief */}
-                          <div className="sand-scope rounded-2xl border border-[var(--ink)]/10 bg-[var(--sand)] p-4 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.5)]">
-                            <div className="flex items-center justify-between">
+                          {/* Card 3 — talepunkter on lined notebook page */}
+                          <div
+                            style={{ transform: "rotate(-0.5deg)" }}
+                            className="sand-scope notebook-margin paper-shadow relative rounded-2xl border border-[var(--ink)]/10 bg-[var(--sand)] py-4 pl-9 pr-4"
+                          >
+                            <div className="paper-grain" />
+                            <div className="relative flex items-center justify-between">
                               <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--clay)]">Talepunkter</p>
-                              <span className="rounded-full bg-[var(--clay)]/15 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider text-[var(--clay)]">AI</span>
+                              <span
+                                className="ink-stamp rounded-sm border border-[var(--clay)]/40 bg-[var(--clay)]/10 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider text-[var(--clay)]"
+                                style={{ transform: "rotate(2deg)" }}
+                              >
+                                AI
+                              </span>
                             </div>
-                            <ul className="mt-3 space-y-1.5 text-[10px] leading-snug text-[var(--cream)]/72">
+                            <ul className="relative mt-3 space-y-1.5 text-[10px] leading-snug text-[var(--cream)]/75">
                               {[
                                 "Sidste samtale: takkede for tilbud",
                                 "Bestilte 32K i Q4 · køber kvartalsvis",
@@ -2403,16 +2424,52 @@ export default function Home() {
                             </ul>
                           </div>
 
-                          {/* Won-deal card */}
-                          <div className="sand-scope rounded-2xl border border-[var(--ink)]/10 bg-[var(--sand)] p-4 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.5)]">
-                            <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--forest)]">✓ Aftale lukket</p>
-                            <div className="mt-4 flex items-baseline gap-2">
-                              <span className="font-display text-3xl leading-none text-[var(--cream)]">32.500</span>
-                              <span className="text-[11px] text-[var(--cream)]/55">DKK</span>
+                          {/* Card 4 — won-deal receipt with hand-circled value + LUKKET stamp */}
+                          <div
+                            style={{ transform: "rotate(1deg)" }}
+                            className="sand-scope receipt-bottom paper-shadow relative rounded-t-2xl border border-b-0 border-[var(--ink)]/10 bg-[var(--sand)] px-4 pb-7 pt-4"
+                          >
+                            <div className="paper-grain" />
+                            <p className="relative text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--forest)]">✓ Aftale lukket</p>
+
+                            <div className="relative mt-4 inline-block">
+                              <div className="flex items-baseline gap-2">
+                                <span className="font-display text-3xl leading-none text-[var(--cream)]">32.500</span>
+                                <span className="text-[11px] text-[var(--cream)]/55">DKK</span>
+                              </div>
+                              {/* Hand-drawn loop around the value — bezier path
+                                  with deliberate imperfection (start ≠ end) so
+                                  it reads as ink, not template. */}
+                              <svg
+                                aria-hidden
+                                viewBox="0 0 200 70"
+                                preserveAspectRatio="none"
+                                className="pointer-events-none absolute -inset-x-3 -inset-y-2 h-[calc(100%+1rem)] w-[calc(100%+1.5rem)]"
+                              >
+                                <path
+                                  d="M 25,42 C 14,18 70,8 120,10 C 165,12 192,28 184,50 C 175,68 95,66 45,58 C 22,53 18,44 30,40"
+                                  fill="none"
+                                  stroke="#19463a"
+                                  strokeWidth="1.6"
+                                  strokeLinecap="round"
+                                  opacity="0.6"
+                                />
+                              </svg>
                             </div>
-                            <p className="mt-2 truncate text-[10px] text-[var(--cream)]/55">
+
+                            <p className="relative mt-2 truncate text-[10px] text-[var(--cream)]/55">
                               Stark Group · sporet til LinkedIn-DM
                             </p>
+
+                            {/* LUKKET diagonal stamp — sits behind text, reads
+                                as a faded rubber ink-stamp imprint. */}
+                            <span
+                              aria-hidden
+                              className="ink-stamp pointer-events-none absolute right-3 top-3 select-none font-display text-xl uppercase text-[var(--forest)]/25"
+                              style={{ transform: "rotate(-12deg)" }}
+                            >
+                              Lukket
+                            </span>
                           </div>
                         </>
                       )}
