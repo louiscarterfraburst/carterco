@@ -71,6 +71,7 @@ export type SharedSequenceStep = {
   id: string;
   wait_hours: number;
   template: string;
+  fires_7d: { ok: number; fail: number };
 };
 
 export type SharedSequence = {
@@ -112,29 +113,44 @@ type SequenceRow = {
   }>;
 };
 
+// Fire counts keyed by `<seqId>::<stepId>` (the same rule_id the engine
+// writes into outreach_engagement_actions). One map per workspace so the
+// page can show "this template has fired N times for THIS client in the
+// last 7d" — which is the bit that turns the read-only page into an
+// actual feedback loop after a template change.
+type StepFires = { ok: number; fail: number };
+type FiresByRule = Map<string, StepFires>;
+type FiresByWorkspace = Map<string, FiresByRule>;
+
 // Resolve workspace-scoped sequences from the full row set. Workspace-specific
 // rows override globals by matching id. Mirrors the logic in
 // supabase/functions/_shared/sequences.ts so the page and the engine agree
 // about which sequences a given lead would enrol into.
-function resolveForWorkspace(rows: SequenceRow[], workspaceId: string): SharedSequence[] {
+function resolveForWorkspace(
+  rows: SequenceRow[],
+  workspaceId: string,
+  fires: FiresByRule | undefined,
+): SharedSequence[] {
   const byId = new Map<string, SequenceRow>();
   for (const r of rows) if (r.workspace_id === null) byId.set(r.id, r);
   for (const r of rows) if (r.workspace_id === workspaceId) byId.set(r.id, r);
   return Array.from(byId.values())
     .sort((a, b) => a.position - b.position)
-    .map(rowToShared);
+    .map((r) => rowToShared(r, fires));
 }
 
-function rowToShared(r: SequenceRow): SharedSequence {
+function rowToShared(r: SequenceRow, fires: FiresByRule | undefined): SharedSequence {
   // Pull the first auto_send template out of each step's branches. The page
   // only renders the message body, not the full branch structure, since the
   // current sequences all use a single unconditional branch per step.
   const steps: SharedSequenceStep[] = r.steps.map((s) => {
     const firstAutoSend = (s.branches ?? []).find((b) => b.action?.type === "auto_send");
+    const key = `${r.id}::${s.id}`;
     return {
       id: s.id,
       wait_hours: s.waitHours,
       template: firstAutoSend?.action.template ?? "(no template — branch is not auto_send)",
+      fires_7d: fires?.get(key) ?? { ok: 0, fail: 0 },
     };
   });
   return {
@@ -146,6 +162,40 @@ function rowToShared(r: SequenceRow): SharedSequence {
     source: r.workspace_id === null ? "global" : "workspace",
   };
 }
+
+// Bucket the raw engagement-action rows from the last 7d into
+// workspace → ruleId → {ok, fail}. "ok" means the engine successfully
+// dispatched an auto_send (HTTP 200/201 from SendPilot); everything else
+// (auto_send failures, aborts because the lead replied, skipped because
+// missing creds, queue_approval, push_only) counts as fail — which on the
+// page reads as "didn't actually fire this template to the prospect".
+function bucketFires(rows: ActionRow[]): FiresByWorkspace {
+  const out: FiresByWorkspace = new Map();
+  for (const row of rows) {
+    if (!row.workspace_id || !row.rule_id) continue;
+    let ws = out.get(row.workspace_id);
+    if (!ws) {
+      ws = new Map();
+      out.set(row.workspace_id, ws);
+    }
+    let bucket = ws.get(row.rule_id);
+    if (!bucket) {
+      bucket = { ok: 0, fail: 0 };
+      ws.set(row.rule_id, bucket);
+    }
+    const r = (row.result ?? {}) as Record<string, unknown>;
+    const isOkSend = r.dispatched === "auto_send" && r.ok === true;
+    if (isOkSend) bucket.ok += 1;
+    else bucket.fail += 1;
+  }
+  return out;
+}
+
+type ActionRow = {
+  workspace_id: string | null;
+  rule_id: string | null;
+  result: unknown;
+};
 
 function firstMessageFlowFor(style: "video_render" | "ai_drafted_dm"): FirstMessageFlow {
   if (style === "ai_drafted_dm") {
@@ -237,17 +287,35 @@ export async function GET(req: NextRequest) {
   // Pull every accessible sequence row in one go. RLS already scopes to
   // (workspace_id IS NULL OR I'm a workspace_member). For a few workspaces
   // and a handful of sequences this is a single small query.
-  const { data: sequenceRows, error: seqErr } = await sb
-    .from("outreach_sequences")
-    .select("id, workspace_id, description, trigger_signal, excludes_global, position, steps")
-    .eq("is_active", true)
-    .order("position", { ascending: true });
-  if (seqErr) {
-    return NextResponse.json({ error: seqErr.message }, { status: 500 });
-  }
-  const allSequences = (sequenceRows ?? []) as SequenceRow[];
-
+  // Don't 500 on errors here — return them as `sequences_error` so the page
+  // can show a visible red banner instead of a confusing empty Outbound flow
+  // block (the original DX bug was "looks empty, was actually broken").
   const since30d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const since7d = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+  const [sequenceRes, actionRes] = await Promise.all([
+    sb.from("outreach_sequences")
+      .select("id, workspace_id, description, trigger_signal, excludes_global, position, steps")
+      .eq("is_active", true)
+      .order("position", { ascending: true }),
+    sb.from("outreach_engagement_actions")
+      .select("workspace_id, rule_id, result")
+      .gte("fired_at", since7d),
+  ]);
+
+  let sequencesError: string | null = null;
+  if (sequenceRes.error) {
+    sequencesError = `Failed to load sequences: ${sequenceRes.error.message}`;
+  }
+  const allSequences = (sequenceRes.data ?? []) as SequenceRow[];
+  // Detect "globals exist but resolution returned nothing" elsewhere by
+  // checking allSequences.length later; the banner uses sequencesError.
+  if (!sequencesError && allSequences.length === 0) {
+    sequencesError = "outreach_sequences table is empty — engine has no flows to enrol leads into.";
+  }
+
+  const allActions = (actionRes.data ?? []) as ActionRow[];
+  const firesByWorkspace = bucketFires(allActions);
 
   const configs: ClientConfig[] = await Promise.all(
     (workspaces ?? []).map(async (ws) => {
@@ -304,7 +372,7 @@ export async function GET(req: NextRequest) {
         active_icp: (icp.data as IcpVersion | null) ?? null,
         agent_brief: agentBrief,
         first_message_flow: firstMessageFlowFor(style),
-        sequences: resolveForWorkspace(allSequences, ws.id),
+        sequences: resolveForWorkspace(allSequences, ws.id, firesByWorkspace.get(ws.id)),
         pipeline_counts: counts,
         pipeline_total_30d: (pipeline.data ?? []).length,
         sent_30d: sent30d,
@@ -313,7 +381,7 @@ export async function GET(req: NextRequest) {
     }),
   );
 
-  return NextResponse.json({ configs });
+  return NextResponse.json({ configs, sequences_error: sequencesError });
 }
 
 // Pulls the H3 strategy titles out of "## 4. The strategies" in the agent
