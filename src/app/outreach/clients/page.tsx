@@ -50,7 +50,12 @@ type SharedSequence = {
   description: string;
   trigger: string;
   excludes_global: string[];
-  steps: { id: string; wait_hours: number; template: string }[];
+  steps: {
+    id: string;
+    wait_hours: number;
+    template: string;
+    fires_7d: { ok: number; fail: number };
+  }[];
   source: "global" | "workspace";
 };
 
@@ -84,6 +89,7 @@ export default function ClientsOverviewPage() {
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [configs, setConfigs] = useState<ClientConfig[] | null>(null);
+  const [sequencesError, setSequencesError] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
@@ -117,9 +123,13 @@ export default function ClientsOverviewPage() {
           if (!cancelled) setErr(body.error ?? `HTTP ${res.status}`);
           return;
         }
-        const body = (await res.json()) as { configs: ClientConfig[] };
+        const body = (await res.json()) as {
+          configs: ClientConfig[];
+          sequences_error: string | null;
+        };
         if (!cancelled) {
           setConfigs(body.configs);
+          setSequencesError(body.sequences_error ?? null);
           setErr(null);
         }
       } catch (e) {
@@ -176,6 +186,28 @@ export default function ClientsOverviewPage() {
           rammer det rigtige flow første gang.
         </p>
       </header>
+
+      {sequencesError ? (
+        <div
+          className="mb-6 flex items-start gap-3 rounded-md border p-4"
+          style={{
+            background: "color-mix(in oklab, var(--clay) 6%, transparent)",
+            borderColor: "color-mix(in oklab, var(--clay) 50%, transparent)",
+          }}
+          role="alert"
+        >
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[var(--cream)]" style={{ background: "var(--clay)" }} aria-hidden>!</span>
+          <div className="min-w-0 flex-1">
+            <div className="tabular text-[10px] uppercase tracking-[0.22em]" style={{ color: "var(--clay)" }}>
+              Engine-fejl
+            </div>
+            <p className="mt-0.5 text-[13.5px] text-[var(--ink)]/85">{sequencesError}</p>
+            <p className="mt-1 text-[12px] text-[var(--ink)]/60">
+              Outbound-flow kortene nedenfor viser muligvis tom data. Tjek <code className="tabular text-[11.5px]">outreach_sequences</code>-tabellen og engine-logs.
+            </p>
+          </div>
+        </div>
+      ) : null}
 
       <div className="space-y-6">
         {configs.map((c) => <ClientCard key={c.workspace.id} config={c} />)}
@@ -610,9 +642,12 @@ function SequenceSteps({ sequence }: { sequence: SharedSequence | undefined }) {
             type="Auto-send"
             title={step.id}
             body={
-              <pre className="whitespace-pre-wrap rounded-sm border border-[var(--ink)]/10 bg-[var(--cream)] p-2 text-[12px] leading-snug text-[var(--ink)]/85">
-                {step.template}
-              </pre>
+              <>
+                <pre className="whitespace-pre-wrap rounded-sm border border-[var(--ink)]/10 bg-[var(--cream)] p-2 text-[12px] leading-snug text-[var(--ink)]/85">
+                  {step.template}
+                </pre>
+                <FiresBadge fires={step.fires_7d} />
+              </>
             }
             ref={
               sequence.source === "global"
@@ -724,6 +759,32 @@ function FlowCanvas({
 
 function allWorkspaceSequencesAreGlobal(sequences: SharedSequence[]): boolean {
   return sequences.length > 0 && sequences.every((s) => s.source === "global");
+}
+
+function FiresBadge({ fires }: { fires: { ok: number; fail: number } }) {
+  const total = fires.ok + fires.fail;
+  if (total === 0) {
+    return (
+      <div className="tabular mt-2 text-[10px] uppercase tracking-[0.18em] text-[var(--ink)]/35">
+        Fyrede ikke i seneste 7 d
+      </div>
+    );
+  }
+  return (
+    <div className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+      <span className="tabular text-[10px] uppercase tracking-[0.18em] text-[var(--ink)]/55">
+        Seneste 7 d:
+      </span>
+      <span className="tabular text-[11.5px]" style={{ color: "var(--forest)" }}>
+        ✓ {fires.ok} sendt
+      </span>
+      {fires.fail > 0 ? (
+        <span className="tabular text-[11.5px]" style={{ color: "var(--clay)" }}>
+          ✗ {fires.fail} fejl / afbrudt
+        </span>
+      ) : null}
+    </div>
+  );
 }
 
 function formatWait(hours: number): string {
