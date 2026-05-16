@@ -176,8 +176,8 @@ const journey: JourneyStage[] = [
     titleAccent: "til at svare.",
     body: "",
     subpoints: [
-      "Henvendelser der ikke føles kolde — research, video, en grund til at læse",
-      "Personlige LinkedIn-beskeder, én video pr. modtager",
+      "Henvendelser der føles personlige og velovervejede, ikke spam",
+      "LinkedIn-beskeder skrevet til dig, ikke til din titel",
       "Mails direkte til indbakken, uden om receptionen",
       "Meta- og Google-annoncer bygget på din ideelle kunde",
       "Genaktivering af leads der ligger kolde i databasen",
