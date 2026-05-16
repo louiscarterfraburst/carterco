@@ -2344,20 +2344,26 @@ export default function Home() {
 
                       {stage.n === "03" && (
                         <>
+                          {/* Stage 03 row-2 unified on sand — paper-print outs
+                              on the dark desk instead of dark panels. Colored
+                              state-borders dropped so the 4 cards share the
+                              same frame; narrative arc (alarm → tracking →
+                              prep → won) carried by inner signals only (flame
+                              text in card 1, forest text in card 4). */}
                           {/* Storkunde-fraled alert (Cleanstep-pattern) */}
-                          <div className="rounded-2xl border border-[#c93c0a]/35 bg-[#14110d] p-4 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.5)]">
-                            <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[#ff6b2c]">⚠ Storkunde falder fra</p>
+                          <div className="sand-scope rounded-2xl border border-[var(--ink)]/10 bg-[var(--sand)] p-4 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.5)]">
+                            <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[#c93c0a]">⚠ Storkunde falder fra</p>
                             <p className="mt-3 text-[11px] leading-snug text-[var(--cream)]/85">
-                              <span className="font-medium">Vela Wood</span> · normalt hver 14. dag · <span className="text-[#ff6b2c]">21 dage forsinket</span>
+                              <span className="font-medium">Vela Wood</span> · normalt hver 14. dag · <span className="text-[#c93c0a]">21 dage forsinket</span>
                             </p>
-                            <div className="mt-3 flex items-center gap-2 border-t border-[var(--cream)]/8 pt-2.5">
+                            <div className="mt-3 flex items-center gap-2 border-t border-[var(--cream)]/12 pt-2.5">
                               <span className="flex-1 truncate text-[10px] text-[var(--cream)]/55">Ring CFO i dag</span>
-                              <span className="text-[9px] font-bold uppercase tracking-wider text-[#ff6b2c]">→</span>
+                              <span className="text-[9px] font-bold uppercase tracking-wider text-[#c93c0a]">→</span>
                             </div>
                           </div>
 
                           {/* Attribution mini-dashboard */}
-                          <div className="rounded-2xl border border-[var(--cream)]/8 bg-[#14110d] p-4 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.5)]">
+                          <div className="sand-scope rounded-2xl border border-[var(--ink)]/10 bg-[var(--sand)] p-4 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.5)]">
                             <div className="flex items-center justify-between">
                               <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--clay)]">Sporing · 30d</p>
                               <span className="text-[9px] text-[var(--cream)]/45">13 won</span>
@@ -2369,7 +2375,7 @@ export default function Home() {
                                 { source: "Reference", count: 2, value: "380K" },
                               ].map((a) => (
                                 <div key={a.source} className="flex items-center gap-2 text-[10px]">
-                                  <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-[#ff6b2c]" />
+                                  <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-[#c93c0a]" />
                                   <span className="flex-1 truncate text-[var(--cream)]/72">{a.source}</span>
                                   <span className="font-mono tabular text-[var(--cream)]/55">{a.count} · {a.value}</span>
                                 </div>
@@ -2378,7 +2384,7 @@ export default function Home() {
                           </div>
 
                           {/* Talepunkter før opkald — AI-genereret kontekst-brief */}
-                          <div className="rounded-2xl border border-[var(--cream)]/8 bg-[#14110d] p-4 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.5)]">
+                          <div className="sand-scope rounded-2xl border border-[var(--ink)]/10 bg-[var(--sand)] p-4 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.5)]">
                             <div className="flex items-center justify-between">
                               <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--clay)]">Talepunkter</p>
                               <span className="rounded-full bg-[var(--clay)]/15 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider text-[var(--clay)]">AI</span>
@@ -2390,7 +2396,7 @@ export default function Home() {
                                 "Just shipped ny e-shop · brug som anker",
                               ].map((p) => (
                                 <li key={p} className="flex items-start gap-2">
-                                  <span aria-hidden className="mt-1 h-px w-2 shrink-0 bg-[#ff6b2c]/60" />
+                                  <span aria-hidden className="mt-1 h-px w-2 shrink-0 bg-[#c93c0a]/70" />
                                   <span>{p}</span>
                                 </li>
                               ))}
@@ -2398,7 +2404,7 @@ export default function Home() {
                           </div>
 
                           {/* Won-deal card */}
-                          <div className="rounded-2xl border border-[var(--forest)]/35 bg-[linear-gradient(135deg,rgba(25,70,58,0.18),rgba(20,17,13,0.85))] p-4 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.5)]">
+                          <div className="sand-scope rounded-2xl border border-[var(--ink)]/10 bg-[var(--sand)] p-4 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.5)]">
                             <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--forest)]">✓ Aftale lukket</p>
                             <div className="mt-4 flex items-baseline gap-2">
                               <span className="font-display text-3xl leading-none text-[var(--cream)]">32.500</span>
