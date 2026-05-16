@@ -1147,17 +1147,31 @@ export default function Home() {
                           </div>
                         </div>
 
-                        <div className="ml-auto flex items-center gap-1.5">
-                          {stage.supportingClients.map((c, idx) => (
-                            <span
-                              key={`${stage.n}-supporting-${idx}`}
-                              className="grid h-7 w-7 place-items-center rounded-full border border-[var(--cream)]/15 bg-[var(--cream)]/[0.04] text-[9px] font-bold uppercase tracking-wider text-[var(--cream)]/50"
-                              aria-label={`Also: ${c.name}`}
-                              title={c.name}
-                            >
-                              {c.initials}
-                            </span>
-                          ))}
+                        <div className="ml-auto flex items-center -space-x-2">
+                          {stage.supportingClients.map((c, idx) => {
+                            // Empty slot: portrait silhouette placeholder.
+                            // When real avatars / cropped logos land, just swap
+                            // initials from "—" to the client's letters or drop
+                            // in an <img>.
+                            const isEmpty = c.initials === "—";
+                            return (
+                              <span
+                                key={`${stage.n}-supporting-${idx}`}
+                                className="relative grid h-9 w-9 place-items-center overflow-hidden rounded-full border border-[var(--cream)]/15 bg-[radial-gradient(ellipse_at_top,rgba(255,184,107,0.10),rgba(15,13,10,0.55))] text-[10px] font-bold uppercase tracking-wider text-[var(--cream)]/65 shadow-[0_3px_8px_rgba(0,0,0,0.35)]"
+                                aria-label={isEmpty ? "Yderligere klient — kommer" : `Også: ${c.name}`}
+                                title={c.name}
+                              >
+                                {isEmpty ? (
+                                  <svg viewBox="0 0 24 24" className="h-4 w-4 text-[var(--cream)]/30" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                                    <circle cx="12" cy="8" r="3.5" />
+                                    <path d="M4.5 20c0-3.6 3.4-6.5 7.5-6.5s7.5 2.9 7.5 6.5" />
+                                  </svg>
+                                ) : (
+                                  c.initials
+                                )}
+                              </span>
+                            );
+                          })}
                         </div>
                       </div>
                     </div>
@@ -1167,7 +1181,61 @@ export default function Home() {
                       className={`relative ${isReverse ? "sm:col-span-6 sm:col-start-1 sm:row-start-1" : "sm:col-span-6 sm:col-start-7"} flex items-start justify-center pt-4`}
                     >
                       {stage.visual === "outbound" && (
-                        <div className="relative h-[28rem] w-full max-w-[34rem] sm:h-[30rem]">
+                        <div className="relative h-[32rem] w-full max-w-[34rem] sm:h-[34rem]">
+                          {/* SendSpark video thumbnail — placeholder for the
+                              video-personalization step. Sits middle-back as
+                              the third card in the fan. Real thumbnail will
+                              slot into the aspect-video shell. */}
+                          <div
+                            className="subtle-float absolute left-[10%] top-0 w-[62%] origin-bottom-right"
+                            style={{
+                              ["--float-base" as string]: "rotate(4deg)",
+                              animationDelay: "0.8s",
+                            }}
+                          >
+                            <div className="overflow-hidden rounded-2xl border border-[var(--cream)]/8 bg-[#14110d] shadow-[0_40px_80px_-30px_rgba(0,0,0,0.55)]">
+                              <div className="relative aspect-[16/10]">
+                                <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(255,184,107,0.22),rgba(0,0,0,0)_55%),linear-gradient(225deg,rgba(255,107,44,0.14),rgba(0,0,0,0)_60%),linear-gradient(180deg,#1a1612,#0f0d0a)]" />
+                                {/* placeholder grid pattern to signal "image goes here" */}
+                                <div
+                                  className="absolute inset-0 opacity-[0.06]"
+                                  style={{
+                                    backgroundImage:
+                                      "linear-gradient(45deg, #fff8ea 25%, transparent 25%), linear-gradient(-45deg, #fff8ea 25%, transparent 25%)",
+                                    backgroundSize: "14px 14px",
+                                    backgroundPosition: "0 0, 0 7px",
+                                  }}
+                                />
+                                <div className="absolute inset-0 flex items-center justify-center">
+                                  <div className="grid h-14 w-14 place-items-center rounded-full bg-[var(--cream)]/95 shadow-[0_4px_20px_rgba(0,0,0,0.45)]">
+                                    <svg viewBox="0 0 24 24" className="ml-0.5 h-6 w-6 fill-[#0f0d0a]">
+                                      <path d="M8 5v14l11-7z" />
+                                    </svg>
+                                  </div>
+                                </div>
+                                <div className="absolute bottom-2.5 right-2.5 rounded-md bg-[#0f0d0a]/85 px-1.5 py-0.5 text-[10px] font-medium text-[var(--cream)]/85">
+                                  0:23
+                                </div>
+                                <div className="absolute bottom-2.5 left-2.5 rounded-md bg-[var(--clay)]/25 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.18em] text-[var(--cream)]/85">
+                                  Personlig video
+                                </div>
+                              </div>
+                              <div className="border-t border-[var(--cream)]/8 px-3.5 py-2.5">
+                                <div className="flex items-center gap-2">
+                                  <div className="grid h-5 w-5 place-items-center rounded-full bg-[#ff6b2c]/25 text-[10px] font-bold text-[#ff6b2c]">
+                                    ▶
+                                  </div>
+                                  <div className="min-w-0 flex-1 truncate text-[11px] text-[var(--cream)]/72">
+                                    Optaget af site · sara@tagværk.dk
+                                  </div>
+                                  <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-[var(--clay)]/85">
+                                    Send
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
                           {/* Meta ad card — back, tilted right */}
                           <div
                             className="subtle-float absolute bottom-0 left-0 w-[72%] origin-top-right"
@@ -1468,7 +1536,7 @@ export default function Home() {
                       )}
 
                       {stage.visual === "pipeline" && (
-                        <div className="w-full max-w-[34rem]">
+                        <div className="flex w-full max-w-[34rem] flex-col gap-5">
                           <div className="rounded-2xl border border-[#29261f]/12 bg-[#fff8ea] p-5 shadow-[0_50px_100px_-40px_rgba(0,0,0,0.55)] sm:p-6">
                             <div className="mb-5 flex items-center justify-between">
                               <div className="flex items-center gap-3">
@@ -1565,6 +1633,67 @@ export default function Home() {
                                 Fordeling aktiv · Postnr. 1000–2999
                               </span>
                               <span className="tabular">⌘K</span>
+                            </div>
+                          </div>
+
+                          {/* Nurture / reaktiverings-flow preview — secondary
+                              mockup under the kanban so post-meeting shows
+                              both "pleje" (flows) AND "lukke" (pipeline).
+                              Compact placeholder; real flow nodes can replace
+                              the simple node-row later. */}
+                          <div className="rounded-2xl border border-[var(--cream)]/8 bg-[#14110d] p-5 shadow-[0_30px_60px_-30px_rgba(0,0,0,0.55)] sm:p-6">
+                            <div className="flex items-center justify-between border-b border-[var(--cream)]/8 pb-3">
+                              <div className="flex items-center gap-2.5">
+                                <div className="grid h-7 w-7 place-items-center rounded-md bg-[var(--clay)]/15">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-[var(--clay)] dot-pulse" />
+                                </div>
+                                <div>
+                                  <div className="text-[12px] font-semibold text-[var(--cream)]/90">
+                                    Nurture-flow · &quot;ikke klar nu&quot;
+                                  </div>
+                                  <div className="text-[10px] uppercase tracking-[0.2em] text-[var(--cream)]/45">
+                                    7 dages reaktivering · 18 i flow
+                                  </div>
+                                </div>
+                              </div>
+                              <span className="rounded-full border border-[var(--forest)]/45 bg-[var(--forest)]/20 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.18em] text-[var(--forest)]">
+                                Aktiv
+                              </span>
+                            </div>
+                            <div className="mt-5 flex items-center gap-2.5 overflow-x-auto pb-1">
+                              {[
+                                { label: "Email 1", sub: "Tak for snakken", tone: "done" },
+                                { label: "Vent 3d", sub: "auto", tone: "wait" },
+                                { label: "SMS", sub: "Personlig note", tone: "queued" },
+                                { label: "Email 2", sub: "Case-study", tone: "queued" },
+                                { label: "Engageret?", sub: "→ sælger", tone: "branch" },
+                              ].map((node, idx, arr) => (
+                                <div key={node.label} className="flex shrink-0 items-center">
+                                  <div
+                                    className={`min-w-[100px] rounded-lg border px-3 py-2 ${
+                                      node.tone === "done"
+                                        ? "border-[var(--forest)]/45 bg-[var(--forest)]/15"
+                                        : node.tone === "wait"
+                                        ? "border-[var(--cream)]/12 bg-[var(--cream)]/[0.04]"
+                                        : node.tone === "branch"
+                                        ? "border-[#ff6b2c]/45 bg-[#ff6b2c]/12"
+                                        : "border-[var(--clay)]/35 bg-[var(--clay)]/10"
+                                    }`}
+                                  >
+                                    <div className="text-[10px] font-bold uppercase tracking-[0.15em] text-[var(--cream)]/85">
+                                      {node.label}
+                                    </div>
+                                    <div className="text-[10px] text-[var(--cream)]/55">
+                                      {node.sub}
+                                    </div>
+                                  </div>
+                                  {idx < arr.length - 1 && (
+                                    <span aria-hidden className="px-1 text-[var(--cream)]/35">
+                                      →
+                                    </span>
+                                  )}
+                                </div>
+                              ))}
                             </div>
                           </div>
                         </div>
@@ -2004,13 +2133,68 @@ export default function Home() {
       <section className="relative overflow-hidden bg-[#f6efe4] py-24 text-[#29261f] sm:py-28">
         <div aria-hidden className="paper-grain" />
 
-        <div className="relative z-[1] mx-auto w-full max-w-[820px] px-8 text-center sm:px-12">
-          <p className="font-display text-[6vw] leading-[1.05] tracking-tight sm:text-4xl lg:text-[2.75rem]">
-            Tre dele. <span className="italic text-[var(--clay)]">Ét billede.</span>
-          </p>
-          <p className="mx-auto mt-8 max-w-[640px] text-[15px] leading-relaxed text-[#29261f]/72 sm:text-[17px]">
-            Sjældent samme vej for to klienter. Tresyv kører kun outbound. Murph startede med speed-to-lead. Burst byggede pleje og lukke. Engagementet er altid bygget til hvad du faktisk har brug for — den del der mangler, eller hele opbygningen.
-          </p>
+        <div className="relative z-[1] mx-auto w-full max-w-[1080px] px-8 sm:px-12">
+          <div className="mx-auto max-w-[820px] text-center">
+            <p className="font-display text-[6vw] leading-[1.05] tracking-tight sm:text-4xl lg:text-[2.75rem]">
+              Tre dele. <span className="italic text-[var(--clay)]">Ét billede.</span>
+            </p>
+            <p className="mx-auto mt-8 max-w-[640px] text-[15px] leading-relaxed text-[#29261f]/72 sm:text-[17px]">
+              Sjældent samme vej for to klienter. Engagementet er altid bygget til hvad du faktisk har brug for — den del der mangler, eller hele opbygningen.
+            </p>
+          </div>
+
+          {/* Three client-paths cards — makes "different vej for each
+              client" concrete. Each shows which delivery areas the client
+              took. Real client logo replaces the initial-circle when ready. */}
+          <div className="mt-14 grid gap-4 sm:mt-16 sm:grid-cols-3 sm:gap-5">
+            {[
+              {
+                client: "Tresyv",
+                initials: "TR",
+                uses: ["Outbound"],
+                note: "Kører den i dag",
+              },
+              {
+                client: "Murph",
+                initials: "MU",
+                uses: ["Speed-to-lead"],
+                note: "87× hurtigere end branchen",
+              },
+              {
+                client: "Burst",
+                initials: "BU",
+                uses: ["Post-meeting"],
+                note: "4× på samme budget",
+              },
+            ].map((c) => (
+              <article
+                key={c.client}
+                className="relative flex flex-col gap-4 rounded-2xl border border-[#29261f]/15 bg-[#efe6d6]/70 p-5 text-left shadow-[0_20px_50px_-30px_rgba(0,0,0,0.25)]"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="grid h-10 w-10 place-items-center rounded-full border border-[var(--clay)]/45 bg-[var(--clay)]/15 text-[11px] font-bold uppercase tracking-wider text-[#29261f]/80">
+                    {c.initials}
+                  </span>
+                  <div className="min-w-0">
+                    <div className="text-[12px] font-bold uppercase tracking-[0.2em] text-[#29261f]/85">
+                      {c.client}
+                    </div>
+                    <div className="text-[11px] text-[#29261f]/55">{c.note}</div>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {c.uses.map((u) => (
+                    <span
+                      key={u}
+                      className="rounded-full border border-[var(--clay)]/40 bg-[var(--clay)]/12 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[var(--clay)]"
+                    >
+                      {u}
+                    </span>
+                  ))}
+                </div>
+              </article>
+            ))}
+          </div>
         </div>
       </section>
 
