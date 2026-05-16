@@ -1,6 +1,6 @@
-// Outreach engagement worker. Drives leads through code-defined sequences in
-// supabase/functions/_shared/sequences.ts. Two execution paths into one
-// state-machine evaluator:
+// Outreach engagement worker. Drives leads through DB-defined sequences
+// (table outreach_sequences, resolved per-workspace by _shared/sequences.ts).
+// Two execution paths into one state-machine evaluator:
 //
 //   { mode: "scan" }                    — cron, every 5 min. Walks all open
 //                                         leads, enrols new ones, advances
@@ -23,8 +23,9 @@ import {
     type Signal,
 } from "../_shared/engagement-rules.ts";
 import {
-    SEQUENCES,
-    findSequence,
+    loadAllSequences,
+    resolveSequencesForWorkspace,
+    findSequenceIn,
     effectiveExcludes,
     type Sequence,
     type SequenceBranch,
@@ -118,7 +119,8 @@ function pausedWorkspaceIds(): Set<string> {
 }
 
 async function scan(): Promise<{ scanned: number; fires: number }> {
-    if (SEQUENCES.length === 0) return { scanned: 0, fires: 0 };
+    const allSequences = await loadAllSequences(supabase);
+    if (allSequences.length === 0) return { scanned: 0, fires: 0 };
 
     const { data, error } = await supabase
         .from("outreach_pipeline")
@@ -131,10 +133,23 @@ async function scan(): Promise<{ scanned: number; fires: number }> {
     }
 
     const paused = pausedWorkspaceIds();
+    // Cache per-workspace resolution across leads in the same tick — same
+    // workspace usually appears many times in a 500-row scan.
+    const cache = new Map<string, Sequence[]>();
+    const seqsFor = (wsId: string | null) => {
+        const key = wsId ?? "__global__";
+        let v = cache.get(key);
+        if (!v) {
+            v = resolveSequencesForWorkspace(allSequences, wsId);
+            cache.set(key, v);
+        }
+        return v;
+    };
+
     let fires = 0;
     for (const row of (data ?? []) as PipelineRow[]) {
         if (row.workspace_id && paused.has(row.workspace_id)) continue;
-        fires += await evaluateLead(row, /* bypassWait */ false);
+        fires += await evaluateLead(row, seqsFor(row.workspace_id), /* bypassWait */ false);
     }
     return { scanned: data?.length ?? 0, fires };
 }
@@ -142,8 +157,6 @@ async function scan(): Promise<{ scanned: number; fires: number }> {
 // --- Single-lead path --------------------------------------------------------
 
 async function tickLead(sendpilotLeadId: string): Promise<{ fires: number }> {
-    if (SEQUENCES.length === 0) return { fires: 0 };
-
     const { data, error } = await supabase
         .from("outreach_pipeline")
         .select("*")
@@ -160,12 +173,20 @@ async function tickLead(sendpilotLeadId: string): Promise<{ fires: number }> {
     }
     if (TERMINAL_STATUSES.has(row.status)) return { fires: 0 };
 
-    return { fires: await evaluateLead(row, /* bypassWait */ true) };
+    const allSequences = await loadAllSequences(supabase);
+    if (allSequences.length === 0) return { fires: 0 };
+    const seqs = resolveSequencesForWorkspace(allSequences, row.workspace_id);
+
+    return { fires: await evaluateLead(row, seqs, /* bypassWait */ true) };
 }
 
 // --- Per-lead state machine --------------------------------------------------
 
-async function evaluateLead(row: PipelineRow, bypassWait: boolean): Promise<number> {
+async function evaluateLead(
+    row: PipelineRow,
+    sequences: Sequence[],
+    bypassWait: boolean,
+): Promise<number> {
     const signals = signalsForLead(row);
     const now = new Date();
 
@@ -173,7 +194,7 @@ async function evaluateLead(row: PipelineRow, bypassWait: boolean): Promise<numb
     // trigger now matches. Common case: enrolled in unwatched_followup,
     // played the video later, was excluded out → eligible for watched_followup.
     if (row.sequence_id && row.sequence_completed_at) {
-        const next = findEnrolmentMatch(signals);
+        const next = findEnrolmentMatch(sequences, signals);
         if (!next || next.id === row.sequence_id) return 0;
         const firstStep = next.steps[0];
         if (!firstStep) return 0;
@@ -195,7 +216,7 @@ async function evaluateLead(row: PipelineRow, bypassWait: boolean): Promise<numb
 
     // 1. Enrolment: lead not yet in any sequence.
     if (!row.sequence_id) {
-        const seq = findEnrolmentMatch(signals);
+        const seq = findEnrolmentMatch(sequences, signals);
         if (!seq) return 0;
         const firstStep = seq.steps[0];
         if (!firstStep) return 0;
@@ -216,7 +237,7 @@ async function evaluateLead(row: PipelineRow, bypassWait: boolean): Promise<numb
     }
 
     // 2. Active sequence — locate it and the current step.
-    const seq = findSequence(row.sequence_id);
+    const seq = findSequenceIn(sequences, row.sequence_id);
     if (!seq) {
         // Sequence id no longer exists in code (renamed/removed). Mark
         // complete so the engine stops touching this lead.
@@ -358,8 +379,8 @@ async function evaluateLead(row: PipelineRow, bypassWait: boolean): Promise<numb
     return 1;
 }
 
-function findEnrolmentMatch(signals: LeadSignals): Sequence | undefined {
-    for (const seq of SEQUENCES) {
+function findEnrolmentMatch(sequences: Sequence[], signals: LeadSignals): Sequence | undefined {
+    for (const seq of sequences) {
         if (signals[seq.trigger.signal]) return seq;
     }
     return undefined;

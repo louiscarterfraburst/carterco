@@ -2,7 +2,7 @@
 
 Per-client content + briefs for the multi-tenant outreach system.
 
-Each client = one Supabase workspace + one row in `outreach_voice_playbooks` + (for AI-drafted-message clients) one bundled agent brief in the edge functions.
+Each client = one Supabase workspace + one row in `outreach_voice_playbooks` + (for AI-drafted-message clients) one bundled agent brief in the edge functions. **Follow-up sequences** live in the `outreach_sequences` DB table — see "Per-workspace sequence overrides" below.
 
 ```
 clients/
@@ -11,6 +11,8 @@ clients/
                             # mirror lives in supabase/functions/_shared/draft-first-message.ts
                             # sync via: python3 scripts/sync_odagroup_brief.py
 ```
+
+Quick read-only overview of every client's flow lives at `/outreach/clients` in the Next app (workspace selector, voice playbook, ICP, agent brief, outbound flow + sequences, pipeline status, file refs).
 
 ## Live workspaces
 
@@ -122,7 +124,7 @@ function briefForWorkspace(workspaceId: string): string | null {
 
 Also export `NEW_CLIENT_WORKSPACE_ID` from `supabase/functions/_shared/workspaces.ts`.
 
-> **TODO:** at N≥4 clients, refactor to load briefs from `outreach_voice_playbooks.agent_brief` text column at runtime instead of bundling per-client constants. The switch will get unwieldy.
+> **TODO:** at N≥4 clients, refactor to load briefs from `outreach_voice_playbooks.agent_brief` text column at runtime instead of bundling per-client constants. The switch will get unwieldy. Follow the same pattern as `outreach_sequences` (see "Per-workspace sequence overrides" below): one DB column, no code change to add a new client's brief.
 
 ### 7. (AI-drafted clients only) Branch the connection.accepted handler
 
@@ -175,3 +177,97 @@ For OdaGroup (and any future AI-drafted client):
 3. Redeploy `outreach-ai` and `sendpilot-webhook`
 
 The `--check` flag on the sync script exits non-zero if the .md and .ts have drifted — wire it into pre-deploy CI to catch the silent-drift footgun.
+
+---
+
+## Per-workspace sequence overrides
+
+Follow-up sequences (the auto-DMs the engine fires after the first message) live in the `outreach_sequences` DB table. The engine resolves which sequences apply to a lead from this table on every tick — no code change or redeploy needed when you change templates or add an override.
+
+Schema:
+- `workspace_id IS NULL` → global default, applies to every workspace
+- `workspace_id = <uuid>` → workspace-specific override. If the `id` matches a global, the workspace row wins for that workspace.
+- Resolution per workspace = (globals not overridden) ∪ (workspace rows), ordered by `position`.
+
+Current state: two globals seeded (`watched_followup_v1`, `unwatched_followup_v1`). No workspace overrides exist yet — all four clients hit the globals.
+
+### Recommended: use the CLI
+
+Use `scripts/sequences/manage.py` for any change to a sequence. It validates the JSON shape against the engine's `SequenceStep` type, shows a diff, and prompts for confirmation. Catches the silent footgun where `wait_hours` (snake_case typo) freezes leads mid-flow.
+
+```bash
+# Look at what a client is on right now
+python3 scripts/sequences/manage.py list --workspace odagroup
+
+# Override one template for one client (most common case)
+python3 scripts/sequences/manage.py set-template \
+  --workspace odagroup --sequence unwatched_followup_v1 --step qualifier \
+  --template "Hej {firstName}, vender lige tilbage på denne — er det noget i {company} har kigget på?"
+
+# Replace the whole sequence for one client (from a JSON file)
+python3 scripts/sequences/manage.py set-sequence \
+  --workspace odagroup --sequence unwatched_followup_v1 --from path/to/seq.json
+
+# Remove a workspace override — client falls back to global default
+python3 scripts/sequences/manage.py reset \
+  --workspace odagroup --sequence unwatched_followup_v1
+
+# Validate a JSON file without touching the DB
+python3 scripts/sequences/manage.py validate path/to/seq.json
+```
+
+Reads `SUPABASE_SERVICE_ROLE_KEY` from `.env.local` automatically. Pass `--yes` to skip the confirmation prompt in scripts. Templates accept `\n` and `\t` as escape sequences — they're decoded to real newlines/tabs before storage.
+
+### What the CLI does in the DB
+
+For reference / for cases the CLI doesn't cover, the underlying SQL operations are:
+
+```sql
+-- Override (workspace-specific row; same id as a global wins for that workspace)
+INSERT INTO outreach_sequences (id, workspace_id, description, trigger_signal, excludes_global, steps, position)
+VALUES ('unwatched_followup_v1', '<workspace-uuid>', '...', 'sent', ARRAY['replied'], '[...]'::jsonb, 200);
+
+-- Edit a global (affects all clients without an override)
+UPDATE outreach_sequences SET steps = '[...]'::jsonb
+WHERE id = 'unwatched_followup_v1' AND workspace_id IS NULL;
+
+-- Pause a sequence for one client (inactive override + empty steps shadows the global)
+INSERT INTO outreach_sequences (id, workspace_id, description, trigger_signal, steps, is_active, position)
+VALUES ('watched_followup_v1', '<workspace-uuid>', 'Disabled for this client.', 'played', '[]'::jsonb, false, 100);
+
+-- Drop an override (workspace falls back to global)
+DELETE FROM outreach_sequences WHERE workspace_id = '<workspace-uuid>' AND id = '<seq-id>';
+```
+
+The CLI maps to `INSERT … ON CONFLICT` (set-template, set-sequence) and `DELETE` (reset). For pause/edit-global, run the SQL directly.
+
+After any change, refresh `/outreach/clients` to see the new state — the page shows a green "Workspace override" badge next to sequences that have a workspace-specific row, so you can tell at a glance which clients are on custom flows.
+
+### Engine + UI references
+
+- Loader + resolution logic: `supabase/functions/_shared/sequences.ts`
+- Engine: `supabase/functions/outreach-engagement-tick/index.ts` (cron every 5 min; verify_jwt=false)
+- Overview UI: `src/app/outreach/clients/page.tsx` (read-only)
+- API route the overview reads from: `src/app/api/outreach/client-config/route.ts`
+
+### Step JSON shape
+
+```json
+{
+  "id": "qualifier",
+  "waitHours": 72,
+  "branches": [
+    {
+      "requires": ["played"],
+      "action": { "type": "auto_send", "template": "Hej {firstName}..." }
+    },
+    {
+      "action": { "type": "auto_send", "template": "fallback when no signal matches" }
+    }
+  ],
+  "excludes": ["replied"],
+  "maxWaitHours": 168
+}
+```
+
+`branches` are evaluated in order; first one whose `requires` are all present wins. Omit `requires` for an unconditional fallback. Templates support `{firstName}`, `{company}`, `{videoLink}`.
