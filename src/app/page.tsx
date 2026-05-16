@@ -1023,10 +1023,10 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="relative overflow-hidden bg-[#0a0907] py-32 sm:py-40">
-        {/* Atmospheric backdrop */}
+      <section className="relative overflow-hidden bg-[#0a0907] py-36 sm:py-48 lg:py-56">
+        {/* Atmospheric backdrop — top-of-section warm glow */}
         <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
-          <div className="absolute left-1/2 top-[12%] h-[700px] w-[900px] -translate-x-1/2 rounded-full bg-[radial-gradient(ellipse_at_center,rgba(255,107,44,0.10),transparent_65%)] blur-2xl" />
+          <div className="absolute left-1/2 top-[8%] h-[700px] w-[900px] -translate-x-1/2 rounded-full bg-[radial-gradient(ellipse_at_center,rgba(255,107,44,0.10),transparent_65%)] blur-2xl" />
           <div className="absolute bottom-0 left-0 right-0 h-[40%] bg-[linear-gradient(180deg,transparent,#0a0907)]" />
         </div>
 
@@ -1038,18 +1038,44 @@ export default function Home() {
               <br />
               kontakt til kontrakt.
             </h2>
+            <p className="mt-7 max-w-md text-[13px] uppercase tracking-[0.28em] text-[var(--cream)]/45">
+              Tre dele · samme værksted
+            </p>
           </div>
 
           {/* Three sections — no wire / no rail nodes. Each is its own beat;
               they read as a connected practice via the closing connective
-              line below, not via a visual spine. (Three-machines decision
-              2026-05-16: equal-weight delivery areas, bespoke per engagement.) */}
-          <div className="relative mt-28 sm:mt-36">
-            <div className="flex flex-col gap-28 sm:gap-36">
+              line below, not via a visual spine. EmberSpark dividers between
+              stages give each machine its own poster moment. */}
+          <div className="relative mt-32 sm:mt-44">
+            <div className="flex flex-col gap-36 sm:gap-48 lg:gap-56">
               {journey.map((stage, i) => {
                 const isReverse = i % 2 === 1;
+                // Per-stage atmospheric tint: subtle radial in a unique
+                // position + accent so each machine reads as its own poster
+                // without leaving the ember theme.
+                const stageBackdrop =
+                  stage.n === "01"
+                    ? (
+                      <div aria-hidden className="pointer-events-none absolute inset-0 -z-[1]">
+                        <div className="absolute -right-[10%] top-[5%] h-[420px] w-[520px] rounded-full bg-[radial-gradient(ellipse_at_center,rgba(185,112,65,0.22),transparent_70%)] blur-3xl" />
+                      </div>
+                    )
+                    : stage.n === "02"
+                    ? (
+                      <div aria-hidden className="pointer-events-none absolute inset-0 -z-[1]">
+                        <div className="absolute left-[8%] top-[20%] h-[480px] w-[600px] rounded-full bg-[radial-gradient(ellipse_at_center,rgba(255,107,44,0.18),transparent_65%)] blur-3xl" />
+                      </div>
+                    )
+                    : (
+                      <div aria-hidden className="pointer-events-none absolute inset-0 -z-[1]">
+                        <div className="absolute right-[5%] bottom-[10%] h-[460px] w-[560px] rounded-full bg-[radial-gradient(ellipse_at_center,rgba(25,70,58,0.28),transparent_68%)] blur-3xl" />
+                      </div>
+                    );
+
                 return (
                   <article key={stage.n} className="relative">
+                    {stageBackdrop}
                     {/* Ghost numeral — keep editorial weight without the rail */}
                     <span
                       aria-hidden
@@ -1064,11 +1090,14 @@ export default function Home() {
                     <div
                       className={`relative ${isReverse ? "sm:col-span-5 sm:col-start-7" : "sm:col-span-5 sm:col-start-2"} flex flex-col`}
                     >
-                      <p className="text-[10px] font-bold uppercase tracking-[0.32em] text-[#ff6b2c]">
-                        {stage.eyebrow}
-                      </p>
+                      <div className="flex items-center gap-3">
+                        <span aria-hidden className="h-px w-10 bg-[#ff6b2c]" />
+                        <p className="text-[10px] font-bold uppercase tracking-[0.32em] text-[#ff6b2c]">
+                          {stage.eyebrow}
+                        </p>
+                      </div>
 
-                      <h3 className="mt-5 font-display text-3xl leading-[1.08] tracking-tight sm:text-4xl lg:text-[2.75rem]">
+                      <h3 className="mt-7 font-display text-3xl leading-[1.08] tracking-tight sm:text-4xl lg:text-[2.75rem]">
                         {stage.title}{" "}
                         <span className="italic text-[var(--clay)]/90">
                           {stage.titleAccent}
@@ -2122,7 +2151,13 @@ export default function Home() {
                         classifier, alt-contacts, push notify, attribution,
                         churn detection, etc.). Real implementations live in
                         supabase/functions — these are visual proof. */}
-                    <div className="mt-14 grid grid-cols-1 gap-4 sm:mt-16 sm:grid-cols-2 lg:grid-cols-4 lg:gap-5">
+                    <div className="mt-24 flex items-center gap-3 sm:mt-28">
+                      <span aria-hidden className="h-px w-8 bg-[var(--clay)]/60" />
+                      <p className="text-[10px] font-bold uppercase tracking-[0.32em] text-[var(--clay)]">
+                        + andre dele af samme stack
+                      </p>
+                    </div>
+                    <div className="mt-7 grid grid-cols-1 gap-5 sm:grid-cols-2 sm:gap-6 lg:grid-cols-4">
                       {stage.n === "01" && (
                         <>
                           {/* AI-drafted DM (OdaGroup-style — no video, title-targeted) */}
@@ -2394,6 +2429,21 @@ export default function Home() {
                         </>
                       )}
                     </div>
+
+                    {/* EmberSpark divider — only between stages, not after the
+                        last one. Same flame-line + glow pattern DESIGN.md uses
+                        at sand/ember section transitions. Marks each machine
+                        as its own poster moment instead of three runs on one
+                        flat surface. */}
+                    {i < journey.length - 1 && (
+                      <div
+                        aria-hidden
+                        className="pointer-events-none relative mt-32 flex items-center justify-center sm:mt-44"
+                      >
+                        <div className="h-px w-full max-w-[min(680px,70%)] bg-[linear-gradient(90deg,transparent,rgba(255,107,44,0.35)_25%,rgba(255,107,44,0.7)_50%,rgba(255,107,44,0.35)_75%,transparent)]" />
+                        <div className="absolute h-[2px] w-[min(180px,18%)] bg-[#ff6b2c] shadow-[0_0_28px_rgba(255,107,44,0.7)]" />
+                      </div>
+                    )}
                   </article>
                 );
               })}
