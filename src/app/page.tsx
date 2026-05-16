@@ -2450,7 +2450,7 @@ export default function Home() {
                               </p>
                             </div>
                             <p className="mt-7 font-display text-[3.6rem] italic leading-[0.85] tracking-[-0.04em] text-[var(--cream)] sm:text-[4rem]">
-                              32&thinsp;500
+                              32.500
                             </p>
                             <p className="mt-1 font-display text-[1.35rem] italic leading-[1.1] tracking-tight text-[var(--cream)]/90">
                               dkk.
