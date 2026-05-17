@@ -2236,21 +2236,33 @@ export default function Home() {
                             </div>
                           </div>
 
-                          {/* Anden kontakt — embedded mini-card only, no body paragraph */}
+                          {/* Henvisning — surfaces a referred contact with the
+                              referrer's actual quote, not just "via X" subtitle.
+                              Mechanism: an existing connection mentions a name
+                              + context in a reply / Slack / Attio note, system
+                              auto-routes the new contact + the warm-intro line
+                              into the operator's queue. */}
                           <div className="crt-frame">
                             <div className="crt-screen">
                             <div className="flex items-center justify-between">
-                              <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--clay)]">Anden kontakt</p>
+                              <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--clay)]">Henvisning</p>
                               <span className="rounded-full bg-[var(--clay)]/15 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider text-[var(--clay)]">Auto</span>
                             </div>
-                            <div className="mt-3 flex items-center gap-2 rounded-lg border border-[var(--cream)]/10 bg-[var(--cream)]/[0.04] p-2.5">
-                              <div className="grid h-7 w-7 place-items-center rounded-full bg-[linear-gradient(135deg,#3a4654,#525e6c)] text-[9px] font-bold text-[#fff8ea]">MO</div>
+                            <div className="mt-3 flex items-start gap-2">
+                              <div className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-[linear-gradient(135deg,#5a4a3a,#7a6a5a)] text-[8px] font-bold text-[#fff8ea]">JU</div>
                               <div className="min-w-0 flex-1">
-                                <div className="truncate text-[11px] text-[var(--cream)]/85">Morten Otto</div>
-                                <div className="truncate text-[9px] text-[var(--cream)]/45">TechSupply ApS · via Justyna</div>
+                                <p className="text-[10px] leading-snug text-[var(--cream)]/80 italic">
+                                  &ldquo;Du burde tale med Morten — han kører ops hos TechSupply, lige flyttet til ny stack.&rdquo;
+                                </p>
+                                <p className="mt-1 text-[8px] uppercase tracking-wider text-[var(--cream)]/45">— Justyna</p>
                               </div>
                             </div>
-                            <div className="mt-3 flex justify-end border-t border-[var(--cream)]/8 pt-2.5">
+                            <div className="mt-3 flex items-center gap-2 rounded-lg border border-[var(--cream)]/10 bg-[var(--cream)]/[0.04] p-2">
+                              <div className="grid h-6 w-6 place-items-center rounded-full bg-[linear-gradient(135deg,#3a4654,#525e6c)] text-[9px] font-bold text-[#fff8ea]">MO</div>
+                              <div className="min-w-0 flex-1">
+                                <div className="truncate text-[10px] text-[var(--cream)]/85">Morten Otto</div>
+                                <div className="truncate text-[9px] text-[var(--cream)]/45">TechSupply ApS · CEO</div>
+                              </div>
                               <span className="text-[9px] font-bold uppercase tracking-wider text-[var(--forest)]">+ Invite</span>
                             </div>
                             </div>
