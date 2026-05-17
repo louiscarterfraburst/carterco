@@ -139,6 +139,69 @@ body {
   color: var(--ink);
 }
 
+/* ─── Monitor console — row-2 card chrome ─────────────────
+   Each row-2 mockup wraps in a thin steel-bezel monitor frame so
+   synthetic example data inside reads as "operator's screen output"
+   rather than "page-level metric claim." Inspired by vintage industrial
+   workstation monitors (IBM 5151 / classic terminal bezels) — quiet,
+   technical, editorial. Two-layer markup: .crt-frame is the bezel + base,
+   .screen is the recessed dark display where card content lives.
+   Visible base ("stand") below each monitor reinforces the "physical
+   device on a workbench" reading. */
+.crt-frame {
+  position: relative;
+  padding: 6px 6px 9px;
+  background: linear-gradient(180deg, #2a2620 0%, #1a1612 100%);
+  border: 1px solid rgba(255, 235, 200, 0.06);
+  border-radius: 8px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 235, 200, 0.06),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.6),
+    0 30px 50px -20px rgba(0, 0, 0, 0.55);
+  margin-bottom: 10px;
+}
+
+/* Tiny power-LED dot at the bottom-right of the bezel. Forest-green
+   default reads as "system on" without the SaaS-green status-light
+   register. */
+.crt-frame::before {
+  content: "";
+  position: absolute;
+  bottom: 3px;
+  right: 8px;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: #19463a;
+  box-shadow: 0 0 4px rgba(25, 70, 58, 0.5);
+  z-index: 2;
+}
+
+/* Stand / base extending below the bezel. Slightly narrower than the
+   monitor itself so it reads as a trapezoid pedestal. */
+.crt-frame::after {
+  content: "";
+  position: absolute;
+  bottom: -8px;
+  left: 36%;
+  right: 36%;
+  height: 9px;
+  background: linear-gradient(180deg, #1a1612 0%, #0a0907 100%);
+  border: 1px solid rgba(255, 235, 200, 0.04);
+  border-top: 0;
+  border-radius: 0 0 4px 4px;
+}
+
+/* Recessed screen surface where the actual card content lives. */
+.crt-screen {
+  background: #0f0d0a;
+  border-radius: 3px;
+  padding: 0.85rem;
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.7),
+    inset 0 2px 4px rgba(0, 0, 0, 0.5);
+}
+
 /* Paper grain — for sand/cream sections. Position: absolute inset-0
    inside a relative parent so it scrolls with the section. */
 .paper-grain {

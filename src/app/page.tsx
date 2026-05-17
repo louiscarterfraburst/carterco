@@ -2163,13 +2163,14 @@ export default function Home() {
                         + andre dele af opsætningen
                       </p>
                     </div>
-                    <div className={`mt-7 ${stage.n === "03" ? "grid grid-cols-1 gap-y-12 sm:grid-cols-2 sm:gap-x-10 sm:gap-y-14 lg:grid-cols-4 lg:gap-x-0 lg:gap-y-0" : "grid grid-cols-1 gap-5 sm:grid-cols-2 sm:gap-6 lg:grid-cols-4"}`}>
+                    <div className="mt-7 grid grid-cols-1 gap-5 sm:grid-cols-2 sm:gap-6 lg:grid-cols-4">
                       {stage.n === "01" && (
                         <>
                           {/* AI-drafted DM — preview-only, 1 line ellipsized.
                               All row-2 cards live on ember so the row reads
                               as "operator's screen" not 4 SaaS-feature tiles. */}
-                          <div className="rounded-2xl border border-[var(--cream)]/8 bg-[#14110d] p-4 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.5)]">
+                          <div className="crt-frame">
+                            <div className="crt-screen">
                             <div className="mb-3 flex items-center gap-2">
                               <div className="grid h-7 w-7 place-items-center rounded-full bg-[linear-gradient(135deg,#3a4654,#525e6c)] text-[10px] font-bold text-[#fff8ea]">JS</div>
                               <div className="min-w-0 flex-1">
@@ -2185,10 +2186,12 @@ export default function Home() {
                               <span className="text-[9px] uppercase tracking-[0.18em] text-[var(--cream)]/40">Skrevet · 12ms</span>
                               <span className="text-[9px] font-bold uppercase tracking-wider text-[var(--forest)]">Klar at sende</span>
                             </div>
+                            </div>
                           </div>
 
                           {/* ICP-score panel */}
-                          <div className="rounded-2xl border border-[var(--cream)]/8 bg-[#14110d] p-4 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.5)]">
+                          <div className="crt-frame">
+                            <div className="crt-screen">
                             <div className="flex items-center justify-between">
                               <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--clay)]">ICP-score</p>
                               <span className="rounded-full bg-[var(--clay)]/15 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider text-[var(--clay)]">Auto</span>
@@ -2209,10 +2212,12 @@ export default function Home() {
                                 </div>
                               </div>
                             </div>
+                            </div>
                           </div>
 
                           {/* Reply-intent classifier */}
-                          <div className="rounded-2xl border border-[var(--cream)]/8 bg-[#14110d] p-4 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.5)]">
+                          <div className="crt-frame">
+                            <div className="crt-screen">
                             <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--clay)]">Svar-type</p>
                             <div className="mt-3 space-y-1.5">
                               {[
@@ -2228,10 +2233,12 @@ export default function Home() {
                                 </div>
                               ))}
                             </div>
+                            </div>
                           </div>
 
                           {/* Anden kontakt — embedded mini-card only, no body paragraph */}
-                          <div className="rounded-2xl border border-[var(--cream)]/8 bg-[#14110d] p-4 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.5)]">
+                          <div className="crt-frame">
+                            <div className="crt-screen">
                             <div className="flex items-center justify-between">
                               <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--clay)]">Anden kontakt</p>
                               <span className="rounded-full bg-[var(--clay)]/15 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider text-[var(--clay)]">Auto</span>
@@ -2246,6 +2253,7 @@ export default function Home() {
                             <div className="mt-3 flex justify-end border-t border-[var(--cream)]/8 pt-2.5">
                               <span className="text-[9px] font-bold uppercase tracking-wider text-[var(--forest)]">+ Invite</span>
                             </div>
+                            </div>
                           </div>
                         </>
                       )}
@@ -2253,7 +2261,8 @@ export default function Home() {
                       {stage.n === "02" && (
                         <>
                           {/* Push-notification on mobile */}
-                          <div className="rounded-2xl border border-[var(--cream)]/8 bg-[#14110d] p-4 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.5)]">
+                          <div className="crt-frame">
+                            <div className="crt-screen">
                             <div className="flex items-center justify-between">
                               <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--clay)]">Push · mobil</p>
                               <span className="text-[9px] text-[var(--cream)]/45">nu</span>
@@ -2278,10 +2287,12 @@ export default function Home() {
                                 Senere
                               </span>
                             </div>
+                            </div>
                           </div>
 
                           {/* Lead-prioritetsliste */}
-                          <div className="rounded-2xl border border-[var(--cream)]/8 bg-[#14110d] p-4 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.5)]">
+                          <div className="crt-frame">
+                            <div className="crt-screen">
                             <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--clay)]">Prioritets-kø</p>
                             <div className="mt-3 space-y-1.5">
                               {[
@@ -2299,10 +2310,12 @@ export default function Home() {
                                 </div>
                               ))}
                             </div>
+                            </div>
                           </div>
 
                           {/* Outcome day-strip */}
-                          <div className="rounded-2xl border border-[var(--cream)]/8 bg-[#14110d] p-4 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.5)]">
+                          <div className="crt-frame">
+                            <div className="crt-screen">
                             <div className="flex items-center justify-between">
                               <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--clay)]">I dag</p>
                               <span className="text-[9px] text-[var(--cream)]/45">14 opkald</span>
@@ -2322,10 +2335,12 @@ export default function Home() {
                                 </div>
                               ))}
                             </div>
+                            </div>
                           </div>
 
                           {/* Telefon-opsporing — direkte nummer på beslutningstager */}
-                          <div className="rounded-2xl border border-[var(--cream)]/8 bg-[#14110d] p-4 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.5)]">
+                          <div className="crt-frame">
+                            <div className="crt-screen">
                             <div className="flex items-center justify-between">
                               <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--clay)]">Direkte nummer</p>
                               <span className="rounded-full bg-[var(--forest)]/15 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider text-[var(--forest)]">Fundet</span>
@@ -2338,133 +2353,100 @@ export default function Home() {
                               </div>
                               <span className="text-[9px] font-bold uppercase tracking-wider text-[#ff6b2c]">Ring</span>
                             </div>
+                            </div>
                           </div>
                         </>
                       )}
 
                       {stage.n === "03" && (
                         <>
-                          {/* Stage 03 row-2 — editorial typographic spread.
-                              The previous notebook-with-torn-edges treatment
-                              was twee for a serious infrastructure brand.
-                              No card backgrounds, borders, or decoration —
-                              just typography on the dark section, divided by
-                              hairlines like a financial-print broadsheet.
-                              Each cell anchored by one massive Fraunces
-                              italic numeral; state colors (rust storkunde,
-                              forest aftale) reserved for signal only. */}
+                          {/* Stage 03 row-2 — monitor console treatment to match
+                              stages 01+02. Synthetic mockup numbers (32.500 dkk,
+                              13 vundet, 21 dage) now sit inside operator screens
+                              instead of broadsheet display-numerals. Reads as
+                              "this is what the system outputs" rather than
+                              "this is what we claim." Same Danish copy preserved
+                              from broadsheet iteration (32.500 not 32 500,
+                              Vundet not Won, 3 talepunkter klar). */}
 
-                          {/* Cell 1 — storkunde alarm */}
-                          <div className="relative lg:pr-8">
-                            <div className="flex items-center gap-2.5">
-                              <span aria-hidden className="h-px w-7 bg-[#c93c0a]" />
-                              <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-[#c93c0a]">
-                                Storkunde · alarm
-                              </p>
+                          {/* Storkunde-fraled alert */}
+                          <div className="crt-frame">
+                            <div className="crt-screen">
+                            <div className="flex items-center justify-between">
+                              <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[#c93c0a]">⚠ Storkunde · alarm</p>
+                              <span className="text-[9px] text-[var(--cream)]/45">i dag</span>
                             </div>
-                            <p className="mt-7 font-display text-[5.5rem] italic leading-[0.85] tracking-[-0.04em] text-[#c93c0a] sm:text-[6rem]">
-                              21
+                            <p className="mt-3 text-[11px] leading-snug text-[var(--cream)]/85">
+                              <span className="font-semibold">Vela Wood</span> · <span className="text-[#c93c0a] font-medium">21 dage forsinket</span>
                             </p>
-                            <p className="mt-1 font-display text-[1.35rem] italic leading-[1.1] tracking-tight text-[var(--cream)]/90">
-                                dage forsinket.
-                            </p>
-                            <p className="mt-4 text-[12px] leading-relaxed text-[var(--cream)]/55">
-                              <span className="font-semibold text-[var(--cream)]/85">Vela Wood</span> — normalt hver 14. dag.
-                            </p>
-                            <div className="mt-6 h-px w-10 bg-[var(--cream)]/15" />
-                            <p className="mt-4 text-[10px] font-bold uppercase tracking-[0.24em] text-[#c93c0a]">
-                              Ring CFO i dag <span aria-hidden>↗</span>
-                            </p>
+                            <p className="mt-1 text-[10px] text-[var(--cream)]/55">Normalt hver 14. dag.</p>
+                            <div className="mt-3 flex items-center gap-2 border-t border-[var(--cream)]/8 pt-2.5">
+                              <span className="flex-1 truncate text-[10px] text-[var(--cream)]/70">Ring CFO i dag</span>
+                              <span className="text-[9px] font-bold uppercase tracking-wider text-[#c93c0a]">→</span>
+                            </div>
+                            </div>
                           </div>
 
-                          {/* Cell 2 — sporing 30d */}
-                          <div className="relative lg:border-l lg:border-[var(--cream)]/12 lg:px-8">
-                            <div className="flex items-center gap-2.5">
-                              <span aria-hidden className="h-px w-7 bg-[var(--clay)]" />
-                              <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-[var(--clay)]">
-                                Sporing · 30d
-                              </p>
+                          {/* Sporing · 30d attribution */}
+                          <div className="crt-frame">
+                            <div className="crt-screen">
+                            <div className="flex items-center justify-between">
+                              <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--clay)]">Sporing · 30d</p>
+                              <span className="text-[9px] text-[var(--cream)]/45">13 vundet</span>
                             </div>
-                            <p className="mt-7 font-display text-[5.5rem] italic leading-[0.85] tracking-[-0.04em] text-[var(--cream)] sm:text-[6rem]">
-                              13
-                            </p>
-                            <p className="mt-1 font-display text-[1.35rem] italic leading-[1.1] tracking-tight text-[var(--cream)]/90">
-                                aftaler vundet.
-                            </p>
-                            <p className="mt-4 text-[12px] leading-relaxed text-[var(--cream)]/55">
-                              <span className="font-semibold text-[var(--cream)]/85">1.200.000&thinsp;dkk</span> — sporet til kilde, sidste 30 dage.
-                            </p>
-                            <div className="mt-6 h-px w-10 bg-[var(--cream)]/15" />
-                            <div className="mt-4 space-y-2 font-mono text-[10.5px] tabular">
+                            <div className="mt-3 space-y-1.5">
                               {[
-                                { count: "8", source: "LinkedIn outbound", value: "640K" },
-                                { count: "3", source: "Meta ads", value: "180K" },
-                                { count: "2", source: "Reference", value: "380K" },
+                                { source: "LinkedIn outbound", count: 8, value: "640K" },
+                                { source: "Meta ads", count: 3, value: "180K" },
+                                { source: "Reference", count: 2, value: "380K" },
                               ].map((a) => (
-                                <div key={a.source} className="flex items-baseline gap-3">
-                                  <span className="w-3 text-right text-[var(--cream)]/70">{a.count}</span>
+                                <div key={a.source} className="flex items-center gap-2 text-[10px]">
+                                  <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-[#ff6b2c]" />
                                   <span className="flex-1 truncate text-[var(--cream)]/72">{a.source}</span>
-                                  <span className="text-[var(--cream)]/55">{a.value}</span>
+                                  <span className="font-mono tabular text-[var(--cream)]/55">{a.count} · {a.value}</span>
                                 </div>
                               ))}
                             </div>
+                            </div>
                           </div>
 
-                          {/* Cell 3 — talepunkter (AI brief) */}
-                          <div className="relative lg:border-l lg:border-[var(--cream)]/12 lg:px-8">
-                            <div className="flex items-center gap-2.5">
-                              <span aria-hidden className="h-px w-7 bg-[var(--clay)]" />
-                              <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-[var(--clay)]">
-                                Talepunkter · ai
-                              </p>
+                          {/* Talepunkter · AI brief for incoming call */}
+                          <div className="crt-frame">
+                            <div className="crt-screen">
+                            <div className="flex items-center justify-between">
+                              <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--clay)]">Talepunkter · Stark</p>
+                              <span className="rounded-full bg-[var(--clay)]/15 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider text-[var(--clay)]">AI</span>
                             </div>
-                            <p className="mt-7 font-display text-[5.5rem] italic leading-[0.85] tracking-[-0.04em] text-[var(--cream)] sm:text-[6rem]">
-                              3
-                            </p>
-                            <p className="mt-1 font-display text-[1.35rem] italic leading-[1.1] tracking-tight text-[var(--cream)]/90">
-                              talepunkter klar.
-                            </p>
-                            <p className="mt-4 text-[12px] leading-relaxed text-[var(--cream)]/55">
-                              <span className="font-semibold text-[var(--cream)]/85">Stark Group</span> — kontekst leveret 2 min før opkald.
-                            </p>
-                            <div className="mt-6 h-px w-10 bg-[var(--cream)]/15" />
-                            <ol className="mt-4 space-y-3 text-[12.5px] leading-snug">
+                            <ul className="mt-3 space-y-1.5 text-[10px] leading-snug text-[var(--cream)]/72">
                               {[
                                 "Sidste samtale: takkede for tilbud",
                                 "Bestilte 32K i Q4 · køber kvartalsvis",
                                 "Just shipped ny e-shop · brug som anker",
-                              ].map((p, i) => (
-                                <li key={p} className="flex items-start gap-3">
-                                  <span className="mt-[1px] w-4 shrink-0 font-mono text-[10px] tabular text-[var(--cream)]/40">
-                                    {String(i + 1).padStart(2, "0")}
-                                  </span>
-                                  <span className="text-[var(--cream)]/78">{p}</span>
+                              ].map((p) => (
+                                <li key={p} className="flex items-start gap-2">
+                                  <span aria-hidden className="mt-1 h-px w-2 shrink-0 bg-[#ff6b2c]/70" />
+                                  <span>{p}</span>
                                 </li>
                               ))}
-                            </ol>
+                            </ul>
+                            </div>
                           </div>
 
-                          {/* Cell 4 — aftale lukket */}
-                          <div className="relative lg:border-l lg:border-[var(--cream)]/12 lg:pl-8">
-                            <div className="flex items-center gap-2.5">
-                              <span aria-hidden className="h-px w-7 bg-[var(--forest)]" />
-                              <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-[var(--forest)]">
-                                Aftale · lukket
-                              </p>
+                          {/* Won-deal confirmation */}
+                          <div className="crt-frame">
+                            <div className="crt-screen">
+                            <div className="flex items-center justify-between">
+                              <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--forest)]">✓ Aftale lukket</p>
+                              <span className="text-[9px] text-[var(--cream)]/45">30. apr</span>
                             </div>
-                            <p className="mt-7 font-display text-[3.6rem] italic leading-[0.85] tracking-[-0.04em] text-[var(--cream)] sm:text-[4rem]">
-                              32.500
+                            <div className="mt-4 flex items-baseline gap-2">
+                              <span className="font-display text-2xl leading-none text-[var(--cream)]">32.500</span>
+                              <span className="text-[11px] text-[var(--cream)]/55">DKK</span>
+                            </div>
+                            <p className="mt-2 truncate text-[10px] text-[var(--cream)]/55">
+                              Stark Group · sporet til LinkedIn-DM
                             </p>
-                            <p className="mt-1 font-display text-[1.35rem] italic leading-[1.1] tracking-tight text-[var(--cream)]/90">
-                              dkk.
-                            </p>
-                            <p className="mt-4 text-[12px] leading-relaxed text-[var(--cream)]/55">
-                              <span className="font-semibold text-[var(--cream)]/85">Stark Group</span> — sporet til LinkedIn-DM.
-                            </p>
-                            <div className="mt-6 h-px w-10 bg-[var(--cream)]/15" />
-                            <p className="mt-4 text-[10px] font-bold uppercase tracking-[0.24em] text-[var(--forest)]">
-                              ✓ Vundet · lukket 30. apr
-                            </p>
+                            </div>
                           </div>
                         </>
                       )}
