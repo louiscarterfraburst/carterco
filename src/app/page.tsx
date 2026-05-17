@@ -2152,29 +2152,18 @@ export default function Home() {
                     </div>
                     </div>
 
-                    {/* Row 2 — broadsheet, stage 03 only.
-                        Variant B "heterogeneous cases" restructure (2026-05-16):
-                        each stage now carries ONE composition that matches its
-                        content. Stage 01 ends after its photo+SMS row-1, stage
-                        02 ends after its sand-band phone row-1, stage 03 keeps
-                        its row-1 (Holde dem varme + pipeline + 4× + Burst) AND
-                        adds the broadsheet 4-cell typographic spread as row-2.
-                        The "+ andre dele af opsætningen" eyebrow reads as the
-                        operator's "here's what else this machine produces"
-                        beat — only earns its keep on stage 03 where the
-                        broadsheet shows 4 actual outputs (alarm, sporing,
-                        talepunkter, vundet aftale). Dropped 8 row-2 cards on
-                        stages 01+02 (Jonas/ICP/Svar-type/Anden kontakt +
-                        Push/Prioritets-kø/I dag/Direkte nummer). */}
-                    {stage.n === "03" && (
-                      <>
+                    {/* Row 2 — supporting mockups. 3-4 smaller cards per
+                        section showing breadth of work (ICP scoring, reply
+                        classifier, alt-contacts, push notify, attribution,
+                        churn detection, etc.). Real implementations live in
+                        supabase/functions — these are visual proof. */}
                     <div className="mt-24 flex items-center gap-3 sm:mt-28">
                       <span aria-hidden className="h-px w-8 bg-[var(--clay)]/60" />
                       <p className="text-[10px] font-bold uppercase tracking-[0.32em] text-[var(--clay)]">
                         + andre dele af opsætningen
                       </p>
                     </div>
-                    <div className="mt-7 grid grid-cols-1 gap-y-12 sm:grid-cols-2 sm:gap-x-10 sm:gap-y-14 lg:grid-cols-4 lg:gap-x-0 lg:gap-y-0">
+                    <div className={`mt-7 ${stage.n === "03" ? "grid grid-cols-1 gap-y-12 sm:grid-cols-2 sm:gap-x-10 sm:gap-y-14 lg:grid-cols-4 lg:gap-x-0 lg:gap-y-0" : "grid grid-cols-1 gap-5 sm:grid-cols-2 sm:gap-6 lg:grid-cols-4"}`}>
                       {stage.n === "01" && (
                         <>
                           {/* AI-drafted DM — preview-only, 1 line ellipsized.
@@ -2480,8 +2469,6 @@ export default function Home() {
                         </>
                       )}
                     </div>
-                      </>
-                    )}
 
                     {/* EmberSpark divider — only between stages, not after the
                         last one. Same flame-line + glow pattern DESIGN.md uses
