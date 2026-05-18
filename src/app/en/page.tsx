@@ -39,7 +39,7 @@ const steps: Step[] = [
   {
     key: "name",
     index: "01",
-    question: "Navn",
+    question: "Name",
     type: "text",
     placeholder: "",
     required: true,
@@ -47,7 +47,7 @@ const steps: Step[] = [
   {
     key: "company",
     index: "02",
-    question: "Firma",
+    question: "Company",
     type: "text",
     placeholder: "",
     required: true,
@@ -55,7 +55,7 @@ const steps: Step[] = [
   {
     key: "email",
     index: "03",
-    question: "E-mail",
+    question: "Email",
     type: "email",
     placeholder: "",
     required: true,
@@ -63,7 +63,7 @@ const steps: Step[] = [
   {
     key: "phone",
     index: "04",
-    question: "Telefon",
+    question: "Phone",
     type: "tel",
     placeholder: "",
     required: true,
@@ -118,8 +118,8 @@ const cases: {
 }[] = [
   {
     metric: "31×",
-    metricLabel: "outreach-volumen",
-    copy: "31× flere outreach-beskeder. Hver med en unik video til prospecten. Tresyv ramte en skala et team aldrig kunne nå — uden at det føltes som spam.",
+    metricLabel: "outreach volume",
+    copy: "31× more outreach messages. Each with a personal video for the prospect. Tresyv hit a scale a team could never reach, without it feeling like spam.",
     client: "Tresyv",
     kind: "heat",
     logo: "/logos/logo-tresyv.svg",
@@ -127,9 +127,9 @@ const cases: {
   },
   {
     metric: "<3 min",
-    metricLabel: "gennemsnitlig responstid",
-    annotation: "87× hurtigere",
-    copy: "Murph rammer hvert nyt lead på under 3 minutter, fra annonceklik til opkald. Sælgeren får det med navn, firma og kontekst.",
+    metricLabel: "average response time",
+    annotation: "87× faster",
+    copy: "Murph hits every new lead in under 3 minutes, from ad click to call. The salesperson gets it with name, company, and context.",
     client: "Murph",
     url: "https://www.trymurph.com/",
     logo: "/logos/logo-murph.png",
@@ -138,8 +138,8 @@ const cases: {
   },
   {
     metric: "4×",
-    metricLabel: "lead-konvertering",
-    copy: "4× flere lukkede aftaler. Samme målgruppe, samme budget.",
+    metricLabel: "lead conversion",
+    copy: "4× more closed deals. Same audience, same budget.",
     client: "Burst",
     kind: "won",
     url: "https://burstcreators.com",
@@ -174,65 +174,65 @@ const journey: JourneyStage[] = [
   {
     n: "01",
     eyebrow: "01 · OUTBOUND",
-    title: "Give dem en grund",
-    titleAccent: "til at svare.",
+    title: "Give them a reason",
+    titleAccent: "to reply.",
     body: "",
     subpoints: [
-      "Personlige LinkedIn-beskeder, automatiseret per modtager",
-      "Mails direkte til beslutningstagerens indbakke",
-      "Annoncer til folk der ligner jeres bedste kunder",
-      "Genaktivering af kolde leads I allerede har samlet",
+      "Personal LinkedIn messages, automated per recipient",
+      "Email straight to the decision-maker's inbox",
+      "Ads targeting people who look like your best customers",
+      "Reactivation of cold leads you've already collected",
     ],
-    anchorClient: { name: "Tresyv", line: "31× outreach-volumen — uden at føles som spam." },
+    anchorClient: { name: "Tresyv", line: "31× outreach volume, without feeling like spam." },
     supportingClients: [],
     visual: "outbound",
-    rowTwoEyebrow: "Sendt og modtaget",
+    rowTwoEyebrow: "Sent and received",
   },
   {
     n: "02",
-    eyebrow: "02 · HASTIGHED",
-    title: "Få dem på telefonen,",
-    titleAccent: "før leadet køler.",
+    eyebrow: "02 · SPEED",
+    title: "Get them on the phone,",
+    titleAccent: "before the lead cools.",
     body: "",
     subpoints: [
-      "Lead lander på teamets mobil, ét tryk ringer dem op",
-      "Automatisk SMS hvis ingen tager, refererer til opkaldet",
-      "Mail og reaktivering hvis stadig stille",
+      "Lead lands on the team's phone, one tap dials them",
+      "Automatic SMS if no one picks up, referencing the call",
+      "Email and reactivation if still silent",
     ],
     proof: {
       metric: "21×",
-      unit: "mere kvalificeret",
-      note: "Når sælgeren svarer inden for 5 minutter — iflg. MIT-studiet.",
+      unit: "more qualified",
+      note: "When sales replies within 5 minutes, per the MIT study.",
       noteHref:
         "https://25649.fs1.hubspotusercontent-na2.net/hub/25649/file-13535879-pdf/docs/mit_study.pdf",
     },
-    anchorClient: { name: "Murph", line: "Rammer hvert lead på under 3 min — branchen tager 47 timer." },
+    anchorClient: { name: "Murph", line: "Hits every lead in under 3 min. Industry average is 47 hours." },
     supportingClients: [],
     visual: "sms",
     theme: "sand",
-    rowTwoEyebrow: "Når et lead lander",
+    rowTwoEyebrow: "When a lead lands",
   },
   {
     n: "03",
-    eyebrow: "03 · OPFØLGNING",
-    title: "Holde dem varme.",
-    titleAccent: "Lukke aftalen.",
-    body: "Møder glipper. Aftaler forsvinder. Sælgeren glemte at følge op.",
+    eyebrow: "03 · FOLLOW-UP",
+    title: "Keep them warm.",
+    titleAccent: "Close the deal.",
+    body: "Meetings get missed. Deals slip. The salesperson forgot to follow up.",
     subpoints: [
-      "Mails, accepter og opkaldsresultater markerer pipelinen. Aldrig en uge bagud.",
-      "Plejeflow til leads der ikke er klar nu",
-      "Genoptagelses-flow til tabte aftaler",
-      "Storkunder der stopper med at bestille, opdaget før konkurrenten ringer",
+      "Emails, accepts, and call outcomes update the pipeline. Never a week behind.",
+      "Nurture flows for leads who aren't ready yet",
+      "Reactivation flows for lost deals",
+      "Key accounts that stop ordering, caught before the competitor calls",
     ],
     proof: {
       metric: "4×",
       unit: "lead-konvertering",
-      note: "Samme målgruppe, samme budget — Burst på et SMS- og pleje-flow over 3 måneder.",
+      note: "Same audience, same budget. Burst on an SMS-and-nurture flow over 3 months.",
     },
-    anchorClient: { name: "Burst", line: "4× på samme budget." },
+    anchorClient: { name: "Burst", line: "4× on the same budget." },
     supportingClients: [],
     visual: "pipeline",
-    rowTwoEyebrow: "Det der tikker ind",
+    rowTwoEyebrow: "What rolls in",
   },
 ];
 
@@ -240,34 +240,34 @@ const outboundCards = [
   {
     type: "linkedin" as const,
     name: "Sara El-Khouri",
-    title: "Adm. direktør · Tagværk ApS",
+    title: "CEO · Tagværk ApS",
     initials: "SE",
     preview:
-      "Hej Sara — så at I lige har vundet udbuddet på Frederiksberg. Hvis I vil have flere lignende leads, har jeg…",
-    chip: "1. grads",
+      "Hi Sara — saw you just won the Frederiksberg tender. If you want more leads like that, I…",
+    chip: "1st-degree",
   },
   {
     type: "meta" as const,
-    sponsor: "Sponsoreret · Carter & Co",
-    headline: "Flere leads. Ringet op med det samme.",
-    body: "Jeg bygger systemet. Du lukker aftalerne.",
+    sponsor: "Sponsored · Carter & Co",
+    headline: "More leads. Called on the spot.",
+    body: "I build the system. You close the deals.",
     cta: "Book demo",
   },
 ];
 
 const pipelineColumns = [
-  { key: "ny", label: "Ny", count: 12, accent: "bg-[var(--cream)]/40" },
-  { key: "kontaktet", label: "Kontaktet", count: 7, accent: "bg-[#ffb86b]" },
-  { key: "booket", label: "Booket", count: 4, accent: "bg-[#ff6b2c]" },
-  { key: "vundet", label: "Vundet", count: 2, accent: "bg-[var(--forest)]" },
+  { key: "ny", label: "New", count: 12, accent: "bg-[var(--cream)]/40" },
+  { key: "kontaktet", label: "Contacted", count: 7, accent: "bg-[#ffb86b]" },
+  { key: "booket", label: "Booked", count: 4, accent: "bg-[#ff6b2c]" },
+  { key: "vundet", label: "Won", count: 2, accent: "bg-[var(--forest)]" },
 ] as const;
 
 const pipelineCards = [
   { col: 0, name: "Mette Sørensen", company: "Nordlys A/S", source: "LinkedIn", initials: "MS" },
   { col: 1, name: "Jonas Holm", company: "Bygma Vest", source: "Meta", initials: "JH" },
   { col: 1, name: "Sara El-Khouri", company: "Tagværk", source: "LinkedIn", initials: "SE" },
-  { col: 2, name: "Anders Kjær", company: "Boligformidling", source: "Meta", initials: "AK", note: "I morgen 10:00" },
-  { col: 3, name: "Lise Damgaard", company: "Kompas Tag", source: "LinkedIn", initials: "LD", note: "32.500 kr" },
+  { col: 2, name: "Anders Kjær", company: "Boligformidling", source: "Meta", initials: "AK", note: "Tomorrow 10:00" },
+  { col: 3, name: "Lise Damgaard", company: "Kompas Tag", source: "LinkedIn", initials: "LD", note: "kr 32,500" },
 ];
 
 type PhoneLead = {
@@ -298,12 +298,12 @@ const leadsRotation: PhoneLead[] = [
   {
     name: "Mette Sørensen",
     company: "Nordlys A/S",
-    source: "ad. Meta",
+    source: "Meta ad",
     initials: "MS",
     callDoneAt: "14:31",
-    automationDate: "i_morgen",
+    automationDate: "tomorrow",
     inviteTime: "10:00",
-    bookingLabel: "I morgen · 10:00 · 30 min",
+    bookingLabel: "Tomorrow · 10:00 · 30 min",
     slots: [
       { t: "09:00", available: false },
       { t: "09:30", available: false },
@@ -312,9 +312,9 @@ const leadsRotation: PhoneLead[] = [
       { t: "11:00", available: false },
     ],
     thread: [
-      { from: "us", text: "Hej Mette — tak for din interesse i Nordlys-pakken. Har du tid til en kort snak i morgen kl. 10?", time: "14:32" },
-      { from: "them", text: "Ja, det passer fint :)", time: "14:34" },
-      { from: "us", text: "Perfekt — jeg sender en kalenderinvitation nu.", time: "14:35" },
+      { from: "us", text: "Hi Mette — thanks for the interest in the Nordlys package. Got time for a quick call tomorrow at 10?", time: "14:32" },
+      { from: "them", text: "Yes, that works :)", time: "14:34" },
+      { from: "us", text: "Perfect — sending a calendar invite now.", time: "14:35" },
     ],
     callPath: "missed",
     outcome: "booked",
@@ -322,12 +322,12 @@ const leadsRotation: PhoneLead[] = [
   {
     name: "Jonas Holm",
     company: "Bygma Vest",
-    source: "ad. Meta",
+    source: "Meta ad",
     initials: "JH",
     callDoneAt: "11:03",
-    automationDate: "fredag",
+    automationDate: "friday",
     inviteTime: "13:30",
-    bookingLabel: "Fredag · 13:30 · 30 min",
+    bookingLabel: "Friday · 13:30 · 30 min",
     slots: [
       { t: "12:30", available: false },
       { t: "13:00", available: false },
@@ -336,9 +336,9 @@ const leadsRotation: PhoneLead[] = [
       { t: "14:30", available: false },
     ],
     thread: [
-      { from: "us", text: "Hej Jonas — tak for snakken om Bygma-tilbuddet. Har du 20 min fredag kl. 13:30?", time: "11:04" },
-      { from: "them", text: "Det fungerer fint", time: "11:06" },
-      { from: "us", text: "Top — kalenderinvitation kommer nu.", time: "11:07" },
+      { from: "us", text: "Hi Jonas — thanks for the chat about the Bygma quote. Got 20 min Friday at 13:30?", time: "11:04" },
+      { from: "them", text: "That works", time: "11:06" },
+      { from: "us", text: "Great — calendar invite coming now.", time: "11:07" },
     ],
     callPath: "answered",
     callDuration: "3:42",
@@ -350,9 +350,9 @@ const leadsRotation: PhoneLead[] = [
     source: "LinkedIn",
     initials: "SE",
     callDoneAt: "09:45",
-    automationDate: "overmorgen",
+    automationDate: "day_after",
     inviteTime: "09:30",
-    bookingLabel: "Overmorgen · 09:30 · 20 min",
+    bookingLabel: "Day after · 09:30 · 20 min",
     slots: [
       { t: "08:30", available: false },
       { t: "09:00", available: false },
@@ -361,9 +361,9 @@ const leadsRotation: PhoneLead[] = [
       { t: "10:30", available: false },
     ],
     thread: [
-      { from: "us", text: "Hej Sara — så I kiggede på altan-pakken. Passer det med en snak overmorgen 09:30?", time: "09:46" },
-      { from: "them", text: "Ja gerne", time: "09:48" },
-      { from: "us", text: "Sender invite med det samme.", time: "09:49" },
+      { from: "us", text: "Hi Sara — saw you looked at the balcony package. Up for a call day after at 09:30?", time: "09:46" },
+      { from: "them", text: "Yes please", time: "09:48" },
+      { from: "us", text: "Sending the invite now.", time: "09:49" },
     ],
     callPath: "missed",
     outcome: "booked",
@@ -779,25 +779,25 @@ export default function Home() {
             className="h-5 w-auto sm:h-6"
           />
           <span className="ml-3 hidden text-[10px] font-bold uppercase tracking-[0.3em] text-[var(--cream)]/40 sm:inline">
-            København
+            Copenhagen
           </span>
         </div>
         <div className="flex items-center gap-6 sm:gap-8">
           <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.3em]">
-            <span aria-current="true" className="text-[var(--cream)]">
+            <a href="/" className="text-[var(--cream)]/40 transition hover:text-[var(--cream)]">
               DA
-            </span>
-            <span aria-hidden className="text-[var(--cream)]/25">·</span>
-            <a href="/en" className="text-[var(--cream)]/40 transition hover:text-[var(--cream)]">
-              EN
             </a>
+            <span aria-hidden className="text-[var(--cream)]/25">·</span>
+            <span aria-current="true" className="text-[var(--cream)]">
+              EN
+            </span>
           </div>
           <a
             href="mailto:louis@carterco.dk"
             className="group flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.15em] text-[var(--cream)]/70 transition hover:text-[var(--cream)] sm:text-xs sm:tracking-[0.3em]"
           >
             <span className="hidden sm:inline">louis@carterco.dk</span>
-            <span className="sm:hidden">E-mail</span>
+            <span className="sm:hidden">Email</span>
             <span className="inline-block transition group-hover:translate-x-1">
               →
             </span>
@@ -810,11 +810,11 @@ export default function Home() {
           <span className="relative inline-block">
             <span className="absolute inset-0 -z-10 scale-125 bg-[radial-gradient(ellipse_at_center,rgba(255,107,44,0.45),transparent_65%)] blur-2xl" />
             <span className="bg-gradient-to-b from-[#ffb86b] via-[#ff6b2c] to-[#c93c0a] bg-clip-text pe-[0.18em] italic text-transparent">
-              Salgsinfrastruktur
+              Sales infrastructure
             </span>
           </span>
           <br />
-          til ambitiøse B2B-virksomheder
+          for ambitious B2B teams
         </h1>
 
         <div className="mt-10 flex flex-col gap-14 pb-10 sm:mt-12 lg:mt-14">
@@ -822,7 +822,7 @@ export default function Home() {
             className="max-w-xl text-lg leading-relaxed text-[var(--cream)]/70 sm:max-w-2xl sm:text-xl"
             style={{ textWrap: "balance" }}
           >
-            Leads køler. Møder glipper. Pipelines visner. Jeg bygger systemet, der finder dem, ringer dem op før de køler, plejer dem til de er klar, så du får flere aftaler i hus.
+            Leads cool. Meetings get missed. Pipelines wither. I build the system that finds them, calls them before they cool, nurtures them until they're ready — so you close more deals.
           </p>
 
           {/* CTA group — signature lives in the founder card per DESIGN.md
@@ -835,7 +835,7 @@ export default function Home() {
               onClick={() => setQuizOpen(true)}
               className="group inline-flex items-center gap-4 rounded-full bg-[#ff6b2c] px-8 py-5 text-sm font-bold uppercase tracking-[0.25em] text-[#0f0d0a] shadow-[0_18px_60px_rgba(255,107,44,0.35)] transition hover:-translate-y-1 hover:bg-[#ff8244] hover:shadow-[0_24px_80px_rgba(255,107,44,0.5)]"
             >
-              <span>Se hvor leads forsvinder</span>
+              <span>See where your leads leak</span>
               <span className="text-lg">→</span>
             </button>
           </div>
@@ -845,7 +845,7 @@ export default function Home() {
 
       <section className="relative border-t border-[var(--cream)]/5 bg-[#0f0d0a] py-16 sm:py-20">
         <p className="text-center text-[10px] font-bold uppercase tracking-[0.3em] text-[var(--clay)]">
-          Bag systemet hos
+          Behind the system at
         </p>
         <div className="mt-10 overflow-hidden [mask-image:linear-gradient(to_right,transparent,black_10%,black_90%,transparent)] [-webkit-mask-image:linear-gradient(to_right,transparent,black_10%,black_90%,transparent)]">
           <div className="flex w-max animate-marquee">
@@ -890,9 +890,9 @@ export default function Home() {
 
         <div className="relative z-[1] mx-auto w-full max-w-[1400px] px-8 sm:px-12">
           <h2 className="text-center font-display text-[10vw] leading-[0.9] tracking-[-0.04em] text-[#29261f] sm:text-6xl lg:text-7xl">
-            Forskellige brancher.
+            Different industries.
             <br />
-            <span className="italic text-[var(--clay)]">Samme retning.</span>
+            <span className="italic text-[var(--clay)]">Same direction.</span>
           </h2>
 
           <div className="mt-16 grid gap-px overflow-hidden rounded-2xl border border-[#29261f]/12 bg-[#29261f]/12 sm:mt-20 sm:grid-cols-3">
@@ -1031,9 +1031,9 @@ export default function Home() {
               anchor for the centered layout, no copy. */}
           <div className="text-center">
             <h2 className="font-display text-[11vw] leading-[0.88] tracking-[-0.045em] sm:text-7xl lg:text-[6rem]">
-              Hele vejen fra
+              All the way from
               <br />
-              kontakt til kontrakt.
+              first touch to contract.
             </h2>
             <div
               aria-hidden
@@ -1196,7 +1196,7 @@ export default function Home() {
                               <span
                                 key={`${stage.n}-supporting-${idx}`}
                                 className="relative grid h-9 w-9 place-items-center overflow-hidden rounded-full border border-[var(--cream)]/15 bg-[radial-gradient(ellipse_at_top,rgba(255,184,107,0.10),rgba(15,13,10,0.55))] text-[10px] font-bold uppercase tracking-wider text-[var(--cream)]/65 shadow-[0_3px_8px_rgba(0,0,0,0.35)]"
-                                aria-label={isEmpty ? "Yderligere klient — kommer" : `Også: ${c.name}`}
+                                aria-label={isEmpty ? "Additional client — coming" : `Also: ${c.name}`}
                                 title={c.name}
                               >
                                 {isEmpty ? (
@@ -1256,7 +1256,7 @@ export default function Home() {
                                   0:23
                                 </div>
                                 <div className="absolute bottom-2.5 left-2.5 rounded-md bg-[var(--clay)]/25 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.18em] text-[var(--cream)]/85">
-                                  Personlig video
+                                  Personal video
                                 </div>
                               </div>
                               <div className="border-t border-[var(--cream)]/8 px-3.5 py-2.5">
@@ -1265,7 +1265,7 @@ export default function Home() {
                                     ▶
                                   </div>
                                   <div className="min-w-0 flex-1 truncate text-[11px] text-[var(--cream)]/72">
-                                    Optaget af site · sara@tagværk.dk
+                                    Recorded from site · sara@tagværk.dk
                                   </div>
                                   <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-[var(--clay)]/85">
                                     Send
@@ -1299,7 +1299,7 @@ export default function Home() {
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
                                 <img
                                   src="/ads/lead-varmt.png"
-                                  alt="Sælg mens leadet er varmt"
+                                  alt="Sell while the lead is hot"
                                   draggable={false}
                                   className="absolute inset-0 h-full w-full object-cover"
                                 />
@@ -1364,13 +1364,13 @@ export default function Home() {
                                   type="button"
                                   className="rounded-full border border-[#29261f]/15 bg-[#29261f]/5 px-4 py-1.5 text-[11px] font-semibold text-[#29261f]/80"
                                 >
-                                  Profil
+                                  Profile
                                 </button>
                                 <button
                                   type="button"
                                   className="rounded-full bg-[var(--clay)] px-4 py-1.5 text-[11px] font-semibold text-[#fff8ea]"
                                 >
-                                  Send besked
+                                  Send message
                                 </button>
                               </div>
                             </div>
@@ -1391,15 +1391,15 @@ export default function Home() {
                                   </div>
                                   <div>
                                     <div className="text-[11px] font-semibold text-[#29261f]">
-                                      Flow · Nurture varme leads
+                                      Flow · Nurture warm leads
                                     </div>
                                     <div className="text-[9px] uppercase tracking-[0.18em] text-[#29261f]/55">
-                                      412 aktive · live
+                                      412 active · live
                                     </div>
                                   </div>
                                 </div>
                                 <span className="rounded-full border border-[var(--forest)]/35 bg-[var(--forest)]/10 px-2 py-0.5 text-[8px] font-bold uppercase tracking-[0.2em] text-[var(--forest)]">
-                                  Kører
+                                  Running
                                 </span>
                               </div>
 
@@ -1425,7 +1425,7 @@ export default function Home() {
                                       E
                                     </span>
                                     <span className="text-[11px] font-semibold text-[#29261f]">
-                                      Email · Velkomst
+                                      Email · Welcome
                                     </span>
                                   </div>
                                 </div>
@@ -1437,7 +1437,7 @@ export default function Home() {
                                     <span className="grid h-5 w-5 place-items-center rounded-md text-[10px] text-[#29261f]/45">
                                       ◷
                                     </span>
-                                    <span className="text-[11px] text-[#29261f]/65">Vent 2 dage</span>
+                                    <span className="text-[11px] text-[#29261f]/65">Wait 2 days</span>
                                   </div>
                                 </div>
                                 <div aria-hidden className="ml-[14px] h-2.5 w-px bg-[#29261f]/20" />
@@ -1449,7 +1449,7 @@ export default function Home() {
                                       S
                                     </span>
                                     <span className="text-[11px] font-semibold text-[#29261f]">
-                                      SMS · Tjek-ind
+                                      SMS · Check-in
                                     </span>
                                   </div>
                                 </div>
@@ -1462,7 +1462,7 @@ export default function Home() {
                                       ☎
                                     </span>
                                     <span className="text-[11px] font-semibold text-[#29261f]">
-                                      Opfølgende opkald
+                                      Follow-up call
                                     </span>
                                   </div>
                                 </div>
@@ -1476,7 +1476,7 @@ export default function Home() {
                                         ✓
                                       </span>
                                       <span className="text-[11px] font-semibold text-[#29261f]">
-                                        Møde · i morgen 10:00
+                                        Meeting · tomorrow 10:00
                                       </span>
                                       <span className="ml-auto rounded-full border border-[var(--forest)]/35 bg-[var(--forest)]/15 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-[0.18em] text-[var(--forest)]">
                                         + event
@@ -1494,7 +1494,7 @@ export default function Home() {
                                         ✓
                                       </span>
                                       <span className="text-[11px] font-semibold text-[#29261f]">
-                                        Kontrakt sendt · 32.500 kr
+                                        Contract sent · kr 32,500
                                       </span>
                                       <span className="ml-auto rounded-full border border-[var(--forest)]/35 bg-[var(--forest)]/15 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-[0.18em] text-[var(--forest)]">
                                         + event
@@ -1512,7 +1512,7 @@ export default function Home() {
                                         ✓
                                       </span>
                                       <span className="text-[11px] font-semibold text-[#29261f]">
-                                        Onboarding · næste mandag
+                                        Onboarding · next Monday
                                       </span>
                                       <span className="ml-auto rounded-full border border-[var(--forest)]/35 bg-[var(--forest)]/15 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-[0.18em] text-[var(--forest)]">
                                         + event
@@ -1544,22 +1544,22 @@ export default function Home() {
                                         Mette Sørensen
                                       </div>
                                       <div className="text-[8px] uppercase tracking-[0.18em] text-[#29261f]/50">
-                                        Lead-status
+                                        Lead status
                                       </div>
                                     </div>
                                   </div>
                                   <span className="relative h-[18px] min-w-[10rem]">
                                     <span className="status-pill-tilmeldt absolute inset-0 flex items-center justify-end gap-1.5 whitespace-nowrap text-[9px] font-semibold uppercase tracking-[0.12em] text-[#29261f]/75">
                                       <span className="h-1.5 w-1.5 rounded-full bg-[#ffb86b]" />
-                                      Tilmeldt
+                                      Subscribed
                                     </span>
                                     <span className="status-pill-booket absolute inset-0 flex items-center justify-end gap-1.5 whitespace-nowrap text-[9px] font-semibold uppercase tracking-[0.12em] text-[#29261f]">
                                       <span className="h-1.5 w-1.5 rounded-full bg-[#ff6b2c] dot-pulse" />
-                                      Møde booket · 10:00
+                                      Meeting booked · 10:00
                                     </span>
                                     <span className="status-pill-vundet absolute inset-0 flex items-center justify-end gap-1.5 whitespace-nowrap text-[9px] font-semibold uppercase tracking-[0.12em] text-[var(--forest)]">
                                       <span className="h-1.5 w-1.5 rounded-full bg-[var(--forest)]" />
-                                      Aftale lukket · 32.500 kr
+                                      Deal closed · kr 32,500
                                     </span>
                                   </span>
                                 </div>
@@ -1567,7 +1567,7 @@ export default function Home() {
 
                               {/* Footer */}
                               <div className="mt-4 flex items-center justify-end border-t border-[#29261f]/10 pt-3 text-[9px] text-[#29261f]/55">
-                                <span className="tabular">+38 denne uge</span>
+                                <span className="tabular">+38 this week</span>
                               </div>
                             </div>
                           </div>
@@ -1584,15 +1584,15 @@ export default function Home() {
                                 </div>
                                 <div>
                                   <div className="text-[12px] font-semibold text-[#29261f]">
-                                    Pipeline · København
+                                    Pipeline · Copenhagen
                                   </div>
                                   <div className="text-[10px] uppercase tracking-[0.2em] text-[#29261f]/55">
-                                    25 åbne · live
+                                    25 open · live
                                   </div>
                                 </div>
                               </div>
                               <span className="tabular text-[10px] text-[#29261f]/55">
-                                opdateret 14:32
+                                updated 14:32
                               </span>
                             </div>
 
@@ -1669,7 +1669,7 @@ export default function Home() {
                             <div className="mt-5 flex items-center justify-between border-t border-[#29261f]/10 pt-4 text-[10px] text-[#29261f]/55">
                               <span className="flex items-center gap-2">
                                 <span className="h-1.5 w-1.5 rounded-full bg-[var(--forest)] dot-pulse" />
-                                Fordeling aktiv · Postnr. 1000–2999
+                                Routing active · Postcode 1000-2999
                               </span>
                               <span className="tabular">⌘K</span>
                             </div>
@@ -1688,24 +1688,24 @@ export default function Home() {
                                 </div>
                                 <div>
                                   <div className="text-[12px] font-semibold text-[var(--cream)]/90">
-                                    Nurture-flow · &quot;ikke klar nu&quot;
+                                    Nurture flow · &quot;not ready yet&quot;
                                   </div>
                                   <div className="text-[10px] uppercase tracking-[0.2em] text-[var(--cream)]/45">
-                                    7 dages reaktivering · 18 i flow
+                                    7-day reactivation · 18 in flow
                                   </div>
                                 </div>
                               </div>
                               <span className="rounded-full border border-[var(--forest)]/45 bg-[var(--forest)]/20 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.18em] text-[var(--forest)]">
-                                Aktiv
+                                Active
                               </span>
                             </div>
                             <div className="mt-5 flex items-center gap-2.5 overflow-x-auto pb-1">
                               {[
-                                { label: "Email 1", sub: "Tak for snakken", tone: "done" },
-                                { label: "Vent 3d", sub: "auto", tone: "wait" },
-                                { label: "SMS", sub: "Personlig note", tone: "queued" },
-                                { label: "Email 2", sub: "Case-study", tone: "queued" },
-                                { label: "Engageret?", sub: "→ sælger", tone: "branch" },
+                                { label: "Email 1", sub: "Thanks for the call", tone: "done" },
+                                { label: "Wait 3d", sub: "auto", tone: "wait" },
+                                { label: "SMS", sub: "Personal note", tone: "queued" },
+                                { label: "Email 2", sub: "Case study", tone: "queued" },
+                                { label: "Engaged?", sub: "→ sales", tone: "branch" },
                               ].map((node, idx, arr) => (
                                 <div key={node.label} className="flex shrink-0 items-center">
                                   <div
@@ -1780,7 +1780,7 @@ export default function Home() {
                                       14:30
                                     </div>
                                     <div className="mt-1 text-[10px] uppercase tracking-[0.3em] text-[#29261f]/55">
-                                      Tirsdag · 28. apr
+                                      Tuesday · Apr 28
                                     </div>
                                   </div>
 
@@ -1794,10 +1794,10 @@ export default function Home() {
                                         C
                                       </span>
                                       Carter &amp; Co
-                                      <span className="ml-auto tabular text-[#29261f]/40">nu</span>
+                                      <span className="ml-auto tabular text-[#29261f]/40">now</span>
                                     </div>
                                     <div className="mt-2 text-[12px] font-semibold leading-tight text-[#29261f]">
-                                      Nyt lead · {currentLead.name}
+                                      New lead · {currentLead.name}
                                     </div>
                                     <div className="mt-0.5 text-[11px] text-[#29261f]/65">
                                       {currentLead.company} · {currentLead.source}
@@ -1824,7 +1824,7 @@ export default function Home() {
                                 {/* Top context — outgoing call from /leads */}
                                 <div className="flex items-center gap-2 text-[9px] font-bold uppercase tracking-[0.3em] text-[#fff8ea]/65">
                                   <span aria-hidden>↗</span>
-                                  Udgående · /leads
+                                  Outgoing · /leads
                                 </div>
 
                                 {/* Avatar with pulsing rings */}
@@ -1859,7 +1859,7 @@ export default function Home() {
                                     {currentLead.company}
                                   </div>
                                   <div className="mt-3 flex items-center gap-1 text-[11px] text-[#fff8ea]/75">
-                                    Ringer op
+                                    Calling
                                     <span className="typing-dot inline-block h-1 w-1 rounded-full bg-[#fff8ea]/75" style={{ animationDelay: "0s" }} />
                                     <span className="typing-dot inline-block h-1 w-1 rounded-full bg-[#fff8ea]/75" style={{ animationDelay: "0.18s" }} />
                                     <span className="typing-dot inline-block h-1 w-1 rounded-full bg-[#fff8ea]/75" style={{ animationDelay: "0.36s" }} />
@@ -1904,10 +1904,10 @@ export default function Home() {
                                       C
                                     </span>
                                     Carter &amp; Co
-                                    <span className="ml-auto tabular text-[#29261f]/40">nu</span>
+                                    <span className="ml-auto tabular text-[#29261f]/40">now</span>
                                   </div>
                                   <div className="mt-1.5 text-[11px] font-semibold leading-tight text-[#29261f]">
-                                    Nyt lead · {currentLead.name}
+                                    New lead · {currentLead.name}
                                   </div>
                                   <div className="mt-0.5 text-[10px] text-[#29261f]/60">
                                     {currentLead.company} · {currentLead.source}
@@ -1961,10 +1961,10 @@ export default function Home() {
                                     </span>
                                     <div className="min-w-0 flex-1">
                                       <div className="text-[10px] text-[#29261f]">
-                                        Sælger ringede · ingen svar
+                                        Sales called · no answer
                                       </div>
                                       <div className="text-[9px] text-[#29261f]/55">
-                                        23 sek &middot; SMS-flow tager over
+                                        23 sec &middot; SMS flow takes over
                                       </div>
                                     </div>
                                     <span className="tabular text-[9px] text-[#29261f]/45">{displayedLead.callDoneAt}</span>
@@ -2051,7 +2051,7 @@ export default function Home() {
                                         <span className="text-[var(--forest)]/55">{")"}</span>
                                       </span>
                                       <span className="ml-auto text-[8.5px] uppercase tracking-[0.22em] text-[var(--forest)]/70">
-                                        sendt
+                                        sent
                                       </span>
                                     </div>
                                   </div>
@@ -2094,10 +2094,10 @@ export default function Home() {
                                         </span>
                                         <div className="min-w-0 flex-1">
                                           <div className="text-[10px] text-[#29261f]">
-                                            Sælger talte med {displayedLead.name.split(" ")[0]}
+                                            Sales spoke with {displayedLead.name.split(" ")[0]}
                                           </div>
                                           <div className="text-[9px] text-[#29261f]/55">
-                                            {displayedLead.callDuration} &middot; aftale lukket på opkald
+                                            {displayedLead.callDuration} &middot; deal closed on call
                                           </div>
                                         </div>
                                         <span className="tabular text-[9px] text-[#29261f]/45">{displayedLead.callDoneAt}</span>
@@ -2137,11 +2137,11 @@ export default function Home() {
                                     </span>
                                     <div className="min-w-0 flex-1">
                                       <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-[var(--forest)]">
-                                        {displayedLead.outcome === "customer" ? "Kunde" : "Booket"}
+                                        {displayedLead.outcome === "customer" ? "Customer" : "Booked"}
                                       </div>
                                       <div className="text-[11px] text-[#29261f]">
                                         {displayedLead.outcome === "customer"
-                                          ? `Aftale lukket · ${displayedLead.bookingLabel}`
+                                          ? `Deal closed · ${displayedLead.bookingLabel}`
                                           : displayedLead.bookingLabel}
                                       </div>
                                     </div>
@@ -2185,11 +2185,11 @@ export default function Home() {
                               <span className="rounded-full bg-[var(--clay)]/15 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider text-[var(--clay)]">AI</span>
                             </div>
                             <p className="truncate text-[11px] text-[var(--cream)]/65">
-                              Hej Jonas — så at I ramper jeres pharma-felt-team…
+                              Hi Jonas — saw you're ramping your pharma field team…
                             </p>
                             <div className="mt-3 flex items-center justify-between border-t border-[var(--cream)]/8 pt-2.5">
-                              <span className="text-[9px] uppercase tracking-[0.18em] text-[var(--cream)]/40">Skrevet · 12ms</span>
-                              <span className="text-[9px] font-bold uppercase tracking-wider text-[var(--forest)]">Klar at sende</span>
+                              <span className="text-[9px] uppercase tracking-[0.18em] text-[var(--cream)]/40">Drafted · 12ms</span>
+                              <span className="text-[9px] font-bold uppercase tracking-wider text-[var(--forest)]">Ready to send</span>
                             </div>
                             </div>
                           </div>
@@ -2198,12 +2198,12 @@ export default function Home() {
                           <div className="crt-frame">
                             <div className="crt-screen">
                             <div className="flex items-center justify-between">
-                              <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--clay)]">ICP-score</p>
+                              <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--clay)]">ICP score</p>
                               <span className="rounded-full bg-[var(--clay)]/15 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider text-[var(--clay)]">Auto</span>
                             </div>
                             <div className="mt-4 grid grid-cols-2 gap-3">
                               <div>
-                                <div className="text-[8px] uppercase tracking-wider text-[var(--cream)]/55">Firma</div>
+                                <div className="text-[8px] uppercase tracking-wider text-[var(--cream)]/55">Company</div>
                                 <div className="mt-1 flex items-baseline gap-1">
                                   <span className="font-display text-3xl leading-none text-[var(--cream)]">8</span>
                                   <span className="text-[10px] text-[var(--cream)]/45">/10</span>
@@ -2223,13 +2223,13 @@ export default function Home() {
                           {/* Reply-intent classifier */}
                           <div className="crt-frame">
                             <div className="crt-screen">
-                            <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--clay)]">Svar-type</p>
+                            <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--clay)]">Reply type</p>
                             <div className="mt-3 space-y-1.5">
                               {[
-                                { label: "Interesseret", count: 18, color: "var(--forest)" },
-                                { label: "Spørgsmål", count: 24, color: "#ff6b2c" },
-                                { label: "Henvist videre", count: 12, color: "var(--clay)" },
-                                { label: "Afvist", count: 33, color: "#6c6254" },
+                                { label: "Interested", count: 18, color: "var(--forest)" },
+                                { label: "Question", count: 24, color: "#ff6b2c" },
+                                { label: "Referred on", count: 12, color: "var(--clay)" },
+                                { label: "Declined", count: 33, color: "#6c6254" },
                               ].map((r) => (
                                 <div key={r.label} className="flex items-center gap-2 text-[10px]">
                                   <span aria-hidden className="h-2 w-2 rounded-full" style={{ background: r.color }} />
@@ -2250,14 +2250,14 @@ export default function Home() {
                           <div className="crt-frame">
                             <div className="crt-screen">
                             <div className="flex items-center justify-between">
-                              <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--clay)]">Henvisning</p>
+                              <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--clay)]">Referral</p>
                               <span className="rounded-full bg-[var(--clay)]/15 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider text-[var(--clay)]">Auto</span>
                             </div>
                             <div className="mt-3 flex items-start gap-2">
                               <div className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-[linear-gradient(135deg,#5a4a3a,#7a6a5a)] text-[8px] font-bold text-[#fff8ea]">JU</div>
                               <div className="min-w-0 flex-1">
                                 <p className="text-[10px] leading-snug text-[var(--cream)]/80 italic">
-                                  &ldquo;Du burde tale med Morten — han er ansvarlig for driften hos TechSupply, lige skiftet værktøjer.&rdquo;
+                                  &ldquo;You should talk to Morten — he runs operations at TechSupply, just switched tools.&rdquo;
                                 </p>
                                 <p className="mt-1 text-[8px] uppercase tracking-wider text-[var(--cream)]/45">— Justyna</p>
                               </div>
@@ -2281,27 +2281,27 @@ export default function Home() {
                           <div className="crt-frame">
                             <div className="crt-screen">
                             <div className="flex items-center justify-between">
-                              <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--clay)]">Push · mobil</p>
-                              <span className="text-[9px] text-[var(--cream)]/45">nu</span>
+                              <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--clay)]">Push · mobile</p>
+                              <span className="text-[9px] text-[var(--cream)]/45">now</span>
                             </div>
                             <div className="mt-3 rounded-xl border border-[var(--cream)]/10 bg-[var(--cream)]/[0.04] p-3">
                               <div className="flex items-center gap-2 text-[9px] uppercase tracking-wider text-[var(--cream)]/55">
                                 <span className="h-1.5 w-1.5 rounded-full bg-[#ff6b2c]" />
-                                Carter & Co · lige nu
+                                Carter & Co · just now
                               </div>
                               <div className="mt-1.5 text-[12px] font-medium text-[var(--cream)]/92">
-                                🔔 Nyt lead: Vela Wood
+                                🔔 New lead: Vela Wood
                               </div>
                               <div className="text-[10px] text-[var(--cream)]/65">
-                                Copenhagen · 12 ansatte · ringer nu?
+                                Copenhagen · 12 staff · call now?
                               </div>
                             </div>
                             <div className="mt-2.5 flex gap-2">
                               <span className="flex-1 rounded-lg bg-[var(--forest)]/20 px-2 py-1.5 text-center text-[10px] font-bold uppercase tracking-wider text-[var(--forest)]">
-                                Jeg ringer
+                                I'll call
                               </span>
                               <span className="rounded-lg border border-[var(--cream)]/15 px-2 py-1.5 text-[10px] text-[var(--cream)]/55">
-                                Senere
+                                Later
                               </span>
                             </div>
                             </div>
@@ -2310,7 +2310,7 @@ export default function Home() {
                           {/* Lead-prioritetsliste */}
                           <div className="crt-frame">
                             <div className="crt-screen">
-                            <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--clay)]">Prioritets-kø</p>
+                            <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--clay)]">Priority queue</p>
                             <div className="mt-3 space-y-1.5">
                               {[
                                 { name: "Mette Sørensen", company: "Nordlys A/S", score: 9 },
@@ -2334,15 +2334,15 @@ export default function Home() {
                           <div className="crt-frame">
                             <div className="crt-screen">
                             <div className="flex items-center justify-between">
-                              <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--clay)]">I dag</p>
-                              <span className="text-[9px] text-[var(--cream)]/45">14 opkald</span>
+                              <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--clay)]">Today</p>
+                              <span className="text-[9px] text-[var(--cream)]/45">14 calls</span>
                             </div>
                             <div className="mt-3 grid grid-cols-2 gap-2">
                               {[
-                                { label: "Booket", count: 4, color: "var(--forest)" },
-                                { label: "Kunde", count: 1, color: "#ff6b2c" },
-                                { label: "No svar", count: 7, color: "var(--cream)" },
-                                { label: "Ikke int.", count: 2, color: "var(--clay)" },
+                                { label: "Booked", count: 4, color: "var(--forest)" },
+                                { label: "Customer", count: 1, color: "#ff6b2c" },
+                                { label: "No answer", count: 7, color: "var(--cream)" },
+                                { label: "Not int.", count: 2, color: "var(--clay)" },
                               ].map((o) => (
                                 <div key={o.label} className="rounded-lg border border-[var(--cream)]/8 bg-[var(--cream)]/[0.03] p-2">
                                   <div className="flex items-baseline gap-1.5">
@@ -2359,8 +2359,8 @@ export default function Home() {
                           <div className="crt-frame">
                             <div className="crt-screen">
                             <div className="flex items-center justify-between">
-                              <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--clay)]">Direkte nummer</p>
-                              <span className="rounded-full bg-[var(--forest)]/15 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider text-[var(--forest)]">Fundet</span>
+                              <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--clay)]">Direct number</p>
+                              <span className="rounded-full bg-[var(--forest)]/15 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider text-[var(--forest)]">Found</span>
                             </div>
                             <div className="mt-4 flex items-center gap-2.5 rounded-lg border border-[var(--cream)]/10 bg-[var(--cream)]/[0.04] p-2.5">
                               <span className="text-[14px]" aria-hidden>📞</span>
@@ -2368,7 +2368,7 @@ export default function Home() {
                                 <div className="font-mono text-[12px] tabular text-[var(--cream)]/90">+45 32 11 22 33</div>
                                 <div className="truncate text-[9px] text-[var(--cream)]/50">Karen Hjort · CFO</div>
                               </div>
-                              <span className="text-[9px] font-bold uppercase tracking-wider text-[#ff6b2c]">Ring</span>
+                              <span className="text-[9px] font-bold uppercase tracking-wider text-[#ff6b2c]">Call</span>
                             </div>
                             </div>
                           </div>
@@ -2390,14 +2390,14 @@ export default function Home() {
                           <div className="crt-frame">
                             <div className="crt-screen">
                             <div className="flex items-center justify-between">
-                              <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[#c93c0a]">⚠ Storkunde · alarm</p>
-                              <span className="text-[9px] text-[var(--cream)]/45">i dag</span>
+                              <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[#c93c0a]">⚠ Key account · alert</p>
+                              <span className="text-[9px] text-[var(--cream)]/45">today</span>
                             </div>
                             <p className="mt-3 text-[11px] leading-snug text-[var(--cream)]/85">
-                              <span className="font-semibold">Vela Wood</span> · <span className="text-[#c93c0a] font-medium">21 dage forsinket</span> (normalt hver 14.)
+                              <span className="font-semibold">Vela Wood</span> · <span className="text-[#c93c0a] font-medium">21 days late</span> (usually every 14)
                             </p>
                             <div className="mt-3 flex items-center gap-2 border-t border-[var(--cream)]/8 pt-2.5">
-                              <span className="flex-1 truncate text-[10px] text-[var(--cream)]/70">Ring CFO i dag</span>
+                              <span className="flex-1 truncate text-[10px] text-[var(--cream)]/70">Call CFO today</span>
                               <span className="text-[9px] font-bold uppercase tracking-wider text-[#c93c0a]">→</span>
                             </div>
                             </div>
@@ -2407,14 +2407,14 @@ export default function Home() {
                           <div className="crt-frame">
                             <div className="crt-screen">
                             <div className="flex items-center justify-between">
-                              <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--clay)]">Sporing · 30d</p>
-                              <span className="text-[9px] text-[var(--cream)]/45">13 vundet</span>
+                              <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--clay)]">Attribution · 30d</p>
+                              <span className="text-[9px] text-[var(--cream)]/45">13 won</span>
                             </div>
                             <div className="mt-3 space-y-1.5">
                               {[
                                 { source: "LinkedIn outbound", count: 8, value: "640K" },
                                 { source: "Meta ads", count: 3, value: "180K" },
-                                { source: "Reference", count: 2, value: "380K" },
+                                { source: "Referral", count: 2, value: "380K" },
                               ].map((a) => (
                                 <div key={a.source} className="flex items-center gap-2 text-[10px]">
                                   <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-[#ff6b2c]" />
@@ -2430,14 +2430,14 @@ export default function Home() {
                           <div className="crt-frame">
                             <div className="crt-screen">
                             <div className="flex items-center justify-between">
-                              <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--clay)]">Talepunkter · Stark</p>
+                              <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--clay)]">Talking points · Stark</p>
                               <span className="rounded-full bg-[var(--clay)]/15 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider text-[var(--clay)]">AI</span>
                             </div>
                             <ul className="mt-3 space-y-1.5 text-[10px] leading-snug text-[var(--cream)]/72">
                               {[
-                                "Sidste samtale: takkede for tilbud",
-                                "Bestilte 32K i Q4 · køber kvartalsvis",
-                                "Just shipped ny e-shop · brug som anker",
+                                "Last call: thanked for the quote",
+                                "Ordered 32K in Q4 · buys quarterly",
+                                "Just shipped new e-shop · use as anchor",
                               ].map((p) => (
                                 <li key={p} className="flex items-start gap-2">
                                   <span aria-hidden className="mt-1 h-px w-2 shrink-0 bg-[#ff6b2c]/70" />
@@ -2452,15 +2452,15 @@ export default function Home() {
                           <div className="crt-frame">
                             <div className="crt-screen">
                             <div className="flex items-center justify-between">
-                              <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--forest)]">✓ Aftale lukket</p>
-                              <span className="text-[9px] text-[var(--cream)]/45">30. apr</span>
+                              <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--forest)]">✓ Deal closed</p>
+                              <span className="text-[9px] text-[var(--cream)]/45">Apr 30</span>
                             </div>
                             <div className="mt-4 flex items-baseline gap-2">
                               <span className="font-display text-2xl leading-none text-[var(--cream)]">32.500</span>
                               <span className="text-[11px] text-[var(--cream)]/55">DKK</span>
                             </div>
                             <p className="mt-2 truncate text-[10px] text-[var(--cream)]/55">
-                              Stark Group · sporet til LinkedIn-DM
+                              Stark Group · traced to LinkedIn DM
                             </p>
                             </div>
                           </div>
@@ -2521,9 +2521,9 @@ export default function Home() {
               top of the section. Body + photo grid lives below with
               generous mt-20/lg:mt-28 breathing room. */}
           <h2 className="text-center font-display leading-[1] tracking-[-0.03em] text-[clamp(2.4rem,7vw,4.5rem)] lg:whitespace-nowrap">
-            Hej.{" "}
+            Hi.{" "}
             <span className="bg-gradient-to-b from-[#ff8244] via-[#ff6b2c] to-[#c93c0a] bg-clip-text italic text-transparent">
-              Det er mig der bygger.
+              I'm the one who builds it.
             </span>
           </h2>
 
@@ -2548,20 +2548,20 @@ export default function Home() {
                 <div className="mt-8 space-y-3 text-[15px] leading-[1.6] text-[#29261f]/85 sm:mt-10 sm:text-[16px]">
                   <p>
                     <span className="font-semibold text-[#29261f]">
-                      Du har sikkert allerede værktøjerne. CRM, annoncer, kalender, opkald.
+                      You probably already have the tools. CRM, ads, calendar, phone.
                     </span>
                   </p>
                   <p>
-                    Det er at lime dem sammen til ét flow der gør det til et salgssystem. Ikke en bunke abonnementer.
+                    Gluing them into one flow is what turns them into a sales system. Not a pile of subscriptions.
                   </p>
                   <p>
-                    Jeg bygger oven på det du har. Systemet er dit. Jeg kører det videre som din operatør.
+                    I build on top of what you have. The system is yours. I keep operating it as your operator.
                   </p>
                   <p>
-                    På timer, hver måned. Du betaler kun for det jeg laver.
+                    By the hour, every month. You only pay for what I actually do.
                   </p>
                   <p>
-                    Tag quizzen — se hvor dit eget system lækker.
+                    Take the quiz — see where your own system leaks.
                   </p>
                   <div className="pt-2">
                     <button
@@ -2569,7 +2569,7 @@ export default function Home() {
                       onClick={() => setQuizOpen(true)}
                       className="inline-flex items-center gap-3 rounded-full bg-[var(--forest)] px-7 py-3.5 text-xs font-bold uppercase tracking-[0.25em] text-[#fff8ea] shadow-[0_18px_50px_-16px_rgba(25,70,58,0.5)] transition hover:-translate-y-0.5 hover:shadow-[0_24px_60px_-16px_rgba(25,70,58,0.6)]"
                     >
-                      Tag lead-quizzen <span aria-hidden>→</span>
+                      Take the lead quiz <span aria-hidden>→</span>
                     </button>
                   </div>
                 </div>
@@ -2606,7 +2606,7 @@ export default function Home() {
                   <div className="mt-3 flex items-center gap-2 font-mono text-[9px] font-bold uppercase tracking-[0.3em] text-[#29261f]/55">
                     <span>Louis Carter</span>
                     <span aria-hidden className="h-px flex-1 bg-[#29261f]/20" />
-                    <span>København</span>
+                    <span>Copenhagen</span>
                   </div>
 
                 </div>
@@ -2621,7 +2621,7 @@ export default function Home() {
         <div className="mx-auto flex w-full max-w-[1400px] flex-col items-center justify-center gap-2 px-8 text-center text-[10px] font-bold uppercase tracking-[0.3em] text-[var(--cream)]/40 sm:flex-row sm:gap-6 sm:px-12">
           <span>© 2026 Carter &amp; Co</span>
           <span className="hidden sm:inline">·</span>
-          <span>København</span>
+          <span>Copenhagen</span>
           <span className="hidden sm:inline">·</span>
           <a
             href="mailto:louis@carterco.dk"
@@ -2634,7 +2634,7 @@ export default function Home() {
             href="/privatlivspolitik"
             className="transition hover:text-[var(--cream)]"
           >
-            Privatlivspolitik
+            Privacy policy
           </a>
         </div>
       </footer>
@@ -2643,18 +2643,20 @@ export default function Home() {
         open={quizOpen}
         onClose={() => setQuizOpen(false)}
         onConvert={resetAndOpen}
+        locale="en"
       />
 
       <ExitIntent
         onOpenQuiz={() => setQuizOpen(true)}
         suppressed={quizOpen || open}
+        locale="en"
       />
 
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <button
             type="button"
-            aria-label="Luk"
+            aria-label="Close"
             onClick={() => setOpen(false)}
             className="absolute inset-0 bg-black/80 backdrop-blur-md"
           />
@@ -2662,7 +2664,7 @@ export default function Home() {
             <div className="flex items-center justify-end px-8 pt-6">
               <button
                 type="button"
-                aria-label="Luk"
+                aria-label="Close"
                 onClick={() => setOpen(false)}
                 className="rounded-full border border-[var(--cream)]/15 p-2 text-[var(--cream)]/50 transition hover:border-[#ff6b2c] hover:text-[#ff6b2c]"
               >
@@ -2759,7 +2761,7 @@ export default function Home() {
                   {submitError ? (
                     <div className="rounded-xl border border-[#ff6b2c]/40 bg-[#ff6b2c]/10 p-4 text-sm leading-relaxed text-[var(--cream)]/80">
                       <p className="font-bold text-[#ffb86b]">
-                        Supabase kunne ikke gemme leadet.
+                        Supabase couldn't save the lead.
                       </p>
                       <p className="mt-2 break-words font-mono text-xs text-[var(--cream)]/65">
                         {submitError}
@@ -2770,7 +2772,7 @@ export default function Home() {
                         rel="noopener noreferrer"
                         className="mt-3 inline-flex text-xs font-bold uppercase tracking-[0.25em] text-[#ffb86b] underline decoration-[#ff6b2c]/70 underline-offset-4"
                       >
-                        Fortsæt til kalender →
+                        Continue to calendar →
                       </a>
                     </div>
                   ) : null}
@@ -2791,7 +2793,7 @@ export default function Home() {
                     disabled={!canAdvance || submitting}
                     className="inline-flex items-center gap-3 rounded-full bg-[#ff6b2c] px-6 py-3 text-xs font-bold uppercase tracking-[0.25em] text-[#0f0d0a] shadow-[0_18px_50px_rgba(255,107,44,0.35)] transition hover:-translate-y-0.5 hover:bg-[#ff8244] disabled:cursor-not-allowed disabled:bg-[var(--cream)]/10 disabled:text-[var(--cream)]/30 disabled:shadow-none disabled:hover:translate-y-0"
                   >
-                    {submitting ? "Gemmer" : isLast ? "Book" : "Næste"}
+                    {submitting ? "Saving" : isLast ? "Book" : "Next"}
                     <span>→</span>
                   </button>
                 </div>
@@ -2799,7 +2801,7 @@ export default function Home() {
             ) : (
               <div className="flex flex-col items-center gap-3 px-8 py-14 text-center">
                 <h3 className="font-display text-3xl leading-tight tracking-tight">
-                  Vælg et tidspunkt.
+                  Pick a time.
                 </h3>
                 <a
                   href={calendlyUrl}
@@ -2807,7 +2809,7 @@ export default function Home() {
                   rel="noopener noreferrer"
                   className="text-xs font-bold uppercase tracking-[0.3em] text-[var(--cream)]/60 underline decoration-[#ff6b2c] hover:text-[var(--cream)]"
                 >
-                  Åbn kalender →
+                  Open calendar →
                 </a>
               </div>
             )}
@@ -2948,33 +2950,33 @@ function validateField(key: StepKey, value: string) {
         ? normalizePhone(value)
         : normalizeText(value);
 
-  if (!cleanValue) return "Udfyld feltet for at fortsætte.";
+  if (!cleanValue) return "Please fill in this field.";
 
   if (key === "name") {
-    if (cleanValue.length < 2) return "Skriv et rigtigt navn.";
-    if (!/[a-zæøå]/i.test(cleanValue)) return "Navnet skal indeholde bogstaver.";
-    if (looksLikeGarbage(cleanValue)) return "Skriv et rigtigt navn.";
+    if (cleanValue.length < 2) return "Enter a real name.";
+    if (!/[a-zæøå]/i.test(cleanValue)) return "Name must contain letters.";
+    if (looksLikeGarbage(cleanValue)) return "Enter a real name.";
   }
 
   if (key === "company") {
-    if (cleanValue.length < 2) return "Skriv et rigtigt firmanavn.";
+    if (cleanValue.length < 2) return "Enter a real company name.";
     if (!/[a-zæøå0-9]/i.test(cleanValue))
-      return "Firmanavnet skal indeholde bogstaver eller tal.";
-    if (looksLikeGarbage(cleanValue)) return "Skriv et rigtigt firmanavn.";
+      return "Company name must contain letters or numbers.";
+    if (looksLikeGarbage(cleanValue)) return "Enter a real company name.";
   }
 
   if (key === "email") {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i.test(cleanValue))
-      return "Skriv en gyldig e-mailadresse.";
+      return "Enter a valid email address.";
     if (/(test|fake|asdf|qwerty|example)\@/i.test(cleanValue))
-      return "Brug en rigtig e-mailadresse.";
+      return "Use a real email address.";
   }
 
   if (key === "phone") {
     const digits = cleanValue.replace(/\D/g, "");
     if (digits.length < 8 || digits.length > 15)
-      return "Skriv et telefonnummer, der kan ringes op.";
-    if (/^(\d)\1+$/.test(digits)) return "Skriv et rigtigt telefonnummer.";
+      return "Enter a phone number that can be called.";
+    if (/^(\d)\1+$/.test(digits)) return "Enter a real phone number.";
   }
 
   return null;

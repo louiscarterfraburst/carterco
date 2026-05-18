@@ -49,6 +49,13 @@ export const metadata: Metadata = {
     icon: "/icon.png",
     apple: "/apple-icon.png",
   },
+  alternates: {
+    canonical: SITE_URL,
+    languages: {
+      da: "/",
+      en: "/en",
+    },
+  },
   openGraph: {
     type: "website",
     locale: "da_DK",

@@ -6,7 +6,23 @@ type Props = {
   onOpenQuiz: () => void;
   // Suppress the popup while another modal is open
   suppressed?: boolean;
+  locale?: "da" | "en";
 };
+
+const COPY = {
+  da: {
+    eyebrow: "Inden du går",
+    headline: "Jeg har et tal til dig.",
+    body: "Svar på 5 spørgsmål — så regner jeg hvor meget du mister.",
+    cta: "Tag lead-quizzen →",
+  },
+  en: {
+    eyebrow: "Before you go",
+    headline: "I've got a number for you.",
+    body: "Answer 5 questions — I'll work out how much you're losing.",
+    cta: "Take the lead quiz →",
+  },
+} as const;
 
 const STORAGE_KEY = "carterco_exit_intent_shown";
 const MIN_DWELL_MS = 20000; // 20s — only people who actually stayed
@@ -17,7 +33,8 @@ function isCoarsePointer(): boolean {
   return window.matchMedia?.("(pointer: coarse)").matches ?? false;
 }
 
-export function ExitIntent({ onOpenQuiz, suppressed }: Props) {
+export function ExitIntent({ onOpenQuiz, suppressed, locale = "da" }: Props) {
+  const t = COPY[locale];
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
@@ -144,13 +161,13 @@ export function ExitIntent({ onOpenQuiz, suppressed }: Props) {
         </div>
         <div className="px-7 pb-8 pt-2 text-[var(--cream)]">
           <p className="text-[10px] uppercase tracking-[0.18em] text-[var(--cream)]/45">
-            Inden du går
+            {t.eyebrow}
           </p>
           <h2 className="font-display mt-3 text-3xl leading-[1.05]">
-            Jeg har et tal til dig.
+            {t.headline}
           </h2>
           <p className="mt-4 text-[15px] leading-relaxed text-[var(--cream)]/75">
-            Svar på 5 spørgsmål — så regner jeg hvor meget du mister.
+            {t.body}
           </p>
           <button
             type="button"
@@ -160,7 +177,7 @@ export function ExitIntent({ onOpenQuiz, suppressed }: Props) {
             }}
             className="mt-6 inline-flex w-full items-center justify-center rounded-full bg-[#ff6b2c] px-5 py-3 text-sm font-medium text-[#14110d] transition hover:bg-[#ff8451]"
           >
-            Tag lead-quizzen →
+            {t.cta}
           </button>
         </div>
       </div>

@@ -251,6 +251,74 @@ export const CHANNEL_LABELS: Record<Channel, string> = {
   other: "Andet",
 };
 
+// ─── English variants ─────────────────────────────────────────────
+// Used by the /en marketing page. Same shape as the *_LABELS exports
+// above; lead-quiz.tsx picks one or the other based on its `locale` prop.
+
+export const RESPONSE_TIME_LABELS_EN: Record<ResponseTime, string> = {
+  lt5m: "Under 5 min",
+  "5to30m": "5–30 min",
+  "30mto1h": "30 min – 1 hr",
+  gt1h: "Over 1 hr",
+};
+
+export const OUTBOUND_QUALITY_LABELS_EN: Record<OutboundQuality, string> = {
+  deep: "Deep research per recipient",
+  light: "Lightly personal (name, company)",
+  templated: "Mass template — everyone gets the same",
+  none: "We don't do outbound",
+};
+
+export const FOLLOWUP_QUALITY_LABELS_EN: Record<FollowupQuality, string> = {
+  automated: "Fully automated nurture flow — every lead gets cadence",
+  partial: "Semi-automated — some reminders, inconsistent",
+  manual: "Manual — sales follows up when there's time",
+  none: "We don't nurture cold leads",
+};
+
+export const SALES_CYCLE_LABELS_EN: Record<SalesCycle, string> = {
+  lt2w: "Under 2 weeks",
+  "2to8w": "2-8 weeks",
+  "2to6mo": "2-6 months",
+  gt6mo: "Over 6 months",
+};
+
+export const LEAD_ORIGIN_LABELS_EN: Record<LeadOriginMix, string> = {
+  "mostly-inbound": "Mostly people contacting us",
+  mix: "Roughly half and half",
+  "mostly-outbound": "Mostly us contacting them",
+};
+
+export const CHANNEL_LABELS_EN: Record<Channel, string> = {
+  linkedin: "LinkedIn outreach",
+  "cold-email": "Cold email",
+  meta: "Meta ads",
+  google: "Google Ads",
+  referral: "Referrals",
+  seo: "SEO",
+  other: "Other",
+};
+
+export function formatKrEN(amount: number): string {
+  const rounded = Math.round(amount);
+  return "kr " + rounded.toLocaleString("en-US");
+}
+
+export function formatRangeEN(amount: number): string {
+  if (amount < 1000) return formatKrEN(amount);
+  const lowRaw = amount * 0.7;
+  const highRaw = amount * 1.3;
+  const step = amount >= 100_000 ? 5000 : 1000;
+  const low = Math.floor(lowRaw / step) * step;
+  const high = Math.ceil(highRaw / step) * step;
+  return (
+    "kr " +
+    low.toLocaleString("en-US") +
+    "–" +
+    high.toLocaleString("en-US")
+  );
+}
+
 export const ALL_CHANNELS: readonly Channel[] = [
   "linkedin",
   "cold-email",
