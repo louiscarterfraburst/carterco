@@ -14,6 +14,7 @@ import Link from "next/link";
 import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/utils/supabase/client";
 import { useWorkspace, type Workspace } from "@/utils/workspace";
+import { clampToBusinessHours } from "@/utils/businessHours";
 
 const VAPID_PUBLIC_KEY =
   process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ??
@@ -221,12 +222,25 @@ type Signal = {
 
 type Tab = "i_dag" | "opgaver" | "signaler" | "inbox" | "replies" | "sent" | "all" | "icp_rejected" | "icp";
 
+// Call-outcome enum, mirrors /leads.Outcome. Wider than the persisted set —
+// the UI also writes 'answered' for "talte med, intet aftalt endnu", which
+// /leads doesn't currently use but keeps room for follow-up bumping.
+type CallOutcome =
+  | "no_answer"
+  | "left_voicemail"
+  | "answered"
+  | "callback"
+  | "interested"
+  | "not_interested"
+  | "booked"
+  | "unqualified";
+
 // vw_action_queue row shape — one entry per action item across replies,
 // approvals, referrals, and signals. The "I dag" tab is the unified surface.
 type ActionQueueRow = {
   id: string;                  // composite: kind:ref_id
   workspace_id: string;
-  kind: "reply" | "approval" | "referral" | "signal";
+  kind: "reply" | "approval" | "referral" | "signal" | "call";
   subkind: string;             // draft_ready, needs_response, approve_send, ...
   ref_lead_id: string | null;  // sendpilot_lead_id or null
   ref_id: string;              // underlying table PK as text
@@ -748,6 +762,32 @@ export default function OutreachPage() {
     else await load();
   }
 
+  // Persists a call outcome on outreach_pipeline. last_called_at always
+  // stamps now() so the rate-limit predicates in vw_action_queue can hide
+  // a no_answer for 20 hours or a left_voicemail for 3 days. Callback
+  // outcomes also stamp callback_at (clamped business-hours upstream).
+  async function recordCallOutcome(
+    leadId: string,
+    outcome: CallOutcome,
+    callbackAt?: string,
+  ) {
+    setBusyLead(leadId); setErr(null);
+    const now = new Date().toISOString();
+    const patch: Record<string, string | null> = {
+      call_outcome: outcome,
+      call_outcome_at: now,
+      last_called_at: now,
+      callback_at: outcome === "callback" ? (callbackAt ?? null) : null,
+    };
+    const { error } = await supabase
+      .from("outreach_pipeline")
+      .update(patch)
+      .eq("sendpilot_lead_id", leadId);
+    setBusyLead(null);
+    if (error) setErr(error.message);
+    else await load();
+  }
+
   async function markReplyHandled(replyId: string) {
     const { error } = await supabase
       .from("outreach_replies")
@@ -1132,7 +1172,12 @@ export default function OutreachPage() {
 
       <section className="mx-auto w-full max-w-[1400px] px-4 pb-12 sm:px-8 lg:px-12">
         {tab === "i_dag" ? (
-          <IDagTab queue={actionQueue} onJumpTo={setTab} />
+          <IDagTab
+            queue={actionQueue}
+            onJumpTo={setTab}
+            onCallOutcome={(leadId, outcome, callbackAt) =>
+              void recordCallOutcome(leadId, outcome, callbackAt)}
+          />
         ) : tab === "opgaver" ? (
           <OpgaverTab
             tasks={opgaver}
@@ -1656,10 +1701,12 @@ function AcceptedTab({ rows, busyLead, onRender, onReject }: {
 // "I dag" — the unified action queue. Renders rows from vw_action_queue,
 // already sorted server-side by priority_score desc then surfaced_at desc.
 // Each row is one thing to act on today. Clicking "Gå til" jumps to the tab
-// that actually performs the action (we don't duplicate action UI here yet).
-function IDagTab({ queue, onJumpTo }: {
+// that actually performs the action; rows with a phone get inline outcome
+// buttons so you can run a call-sprint without leaving the queue.
+function IDagTab({ queue, onJumpTo, onCallOutcome }: {
   queue: ActionQueueRow[];
   onJumpTo: (t: Tab) => void;
+  onCallOutcome: (leadId: string, outcome: CallOutcome, callbackAt?: string) => void;
 }) {
   if (queue.length === 0) {
     return (
@@ -1674,6 +1721,7 @@ function IDagTab({ queue, onJumpTo }: {
     approval: "inbox",
     referral: "replies",
     signal: "signaler",
+    call: "i_dag",  // call rows stay on i_dag; outcome buttons handle the action inline
   };
 
   const kindLabel: Record<ActionQueueRow["kind"], string> = {
@@ -1681,6 +1729,7 @@ function IDagTab({ queue, onJumpTo }: {
     approval: "GODKEND",
     referral: "HENVIST",
     signal: "SIGNAL",
+    call: "RING",
   };
 
   const kindColor: Record<ActionQueueRow["kind"], string> = {
@@ -1688,6 +1737,7 @@ function IDagTab({ queue, onJumpTo }: {
     approval: "bg-[var(--forest)]/15 text-[var(--forest)]",
     referral: "bg-[var(--ink)]/10 text-[var(--ink)]/80",
     signal: "bg-[var(--ink)]/10 text-[var(--ink)]/80",
+    call: "bg-[var(--clay)]/20 text-[var(--clay)]",
   };
 
   function subkindLabel(row: ActionQueueRow): string {
@@ -1699,6 +1749,17 @@ function IDagTab({ queue, onJumpTo }: {
     }
     if (row.kind === "referral") {
       return row.subkind === "find_linkedin" ? "find LinkedIn" : "send invite";
+    }
+    if (row.kind === "call") {
+      const map: Record<string, string> = {
+        new_accept: "ny accept",
+        no_answer: "intet svar",
+        left_voicemail: "lagt voicemail",
+        answered: "talt med",
+        callback: "callback",
+        interested: "interesseret",
+      };
+      return map[row.subkind] ?? row.subkind;
     }
     return row.subkind;
   }
@@ -1765,26 +1826,85 @@ function IDagTab({ queue, onJumpTo }: {
             </div>
           </div>
 
-          <div className="flex shrink-0 flex-col gap-1.5">
-            {row.phone_direct || row.phone_office ? (
-              <a
-                href={`tel:${row.phone_direct || row.phone_office}`}
-                className="rounded border border-[var(--clay)]/40 bg-[var(--clay)]/10 px-3 py-1.5 text-center text-[11px] uppercase tracking-[0.22em] text-[var(--clay)] hover:bg-[var(--clay)]/20"
-              >
-                📞 Ring
-              </a>
+          <div className="flex shrink-0 flex-col gap-1.5 min-w-[180px]">
+            {(row.phone_direct || row.phone_office) && row.ref_lead_id ? (
+              <>
+                <a
+                  href={`tel:${row.phone_direct || row.phone_office}`}
+                  className="rounded border border-[var(--clay)]/40 bg-[var(--clay)]/10 px-3 py-1.5 text-center text-[11px] uppercase tracking-[0.22em] text-[var(--clay)] hover:bg-[var(--clay)]/20"
+                >
+                  📞 Ring
+                </a>
+                <CallOutcomeBar
+                  leadId={row.ref_lead_id}
+                  onOutcome={onCallOutcome}
+                />
+              </>
             ) : null}
-            <button
-              type="button"
-              onClick={() => onJumpTo(tabForKind[row.kind])}
-              className="rounded border border-[var(--ink)]/20 px-3 py-1.5 text-[11px] uppercase tracking-[0.22em] text-[var(--ink)]/70 hover:bg-[var(--ink)]/5"
-            >
-              Gå til →
-            </button>
+            {row.kind !== "call" ? (
+              <button
+                type="button"
+                onClick={() => onJumpTo(tabForKind[row.kind])}
+                className="rounded border border-[var(--ink)]/20 px-3 py-1.5 text-[11px] uppercase tracking-[0.22em] text-[var(--ink)]/70 hover:bg-[var(--ink)]/5"
+              >
+                Gå til →
+              </button>
+            ) : null}
           </div>
         </li>
       ))}
     </ul>
+  );
+}
+
+// Compact outcome bar shown next to the Ring button. First click logs a
+// terminal outcome — re-clicking after the row has updated lets you bump
+// between states. "Callback" prompts for a number of hours (clamped to
+// business hours via clampToBusinessHours so 22:00 → 09:00 next day).
+function CallOutcomeBar({ leadId, onOutcome }: {
+  leadId: string;
+  onOutcome: (leadId: string, outcome: CallOutcome, callbackAt?: string) => void;
+}) {
+  function handleCallback() {
+    const raw = window.prompt("Ring tilbage om hvor mange timer? (fx 24 = i morgen)", "24");
+    if (!raw) return;
+    const hours = parseFloat(raw);
+    if (!Number.isFinite(hours) || hours <= 0) return;
+    const requested = new Date(Date.now() + hours * 3600_000).toISOString();
+    const clamped = clampToBusinessHours(requested);
+    onOutcome(leadId, "callback", clamped);
+  }
+  return (
+    <div className="flex flex-wrap gap-1">
+      <OutcomeChip label="Intet svar" onClick={() => onOutcome(leadId, "no_answer")} />
+      <OutcomeChip label="VM lagt" onClick={() => onOutcome(leadId, "left_voicemail")} />
+      <OutcomeChip label="Talt" onClick={() => onOutcome(leadId, "answered")} />
+      <OutcomeChip label="Callback" onClick={handleCallback} />
+      <OutcomeChip label="Ikke rel." onClick={() => onOutcome(leadId, "not_interested")} muted />
+      <OutcomeChip label="Booked" onClick={() => onOutcome(leadId, "booked")} forest />
+    </div>
+  );
+}
+
+function OutcomeChip({ label, onClick, muted, forest }: {
+  label: string;
+  onClick: () => void;
+  muted?: boolean;
+  forest?: boolean;
+}) {
+  const cls = forest
+    ? "border-[var(--forest)]/40 bg-[var(--forest)]/10 text-[var(--forest)] hover:bg-[var(--forest)]/20"
+    : muted
+    ? "border-[var(--ink)]/15 bg-[var(--ink)]/5 text-[var(--ink)]/50 hover:bg-[var(--ink)]/10"
+    : "border-[var(--ink)]/20 text-[var(--ink)]/70 hover:bg-[var(--ink)]/5";
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded border px-1.5 py-0.5 text-[9px] uppercase tracking-[0.18em] ${cls}`}
+    >
+      {label}
+    </button>
   );
 }
 
