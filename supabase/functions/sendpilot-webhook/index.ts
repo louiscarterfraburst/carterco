@@ -168,6 +168,7 @@ Deno.serve(async (request) => {
         campaign_id: campaignId || null,
         sendpilot_sender_id: senderId || null,
       }, { onConflict: "sendpilot_lead_id" });
+      scheduleScoutPhones("pipeline", leadId);
       return json({ ok: true, recorded: "pre_connected_skipped" });
     }
 
@@ -219,6 +220,7 @@ Deno.serve(async (request) => {
         }).eq("sendpilot_lead_id", leadId);
         return json({ ok: false, recorded: "accepted_draft_failed", error: draft.error });
       }
+      scheduleScoutPhones("pipeline", leadId);
       return json({
         ok: true,
         recorded: "accepted_drafted_pending_approval",
@@ -268,6 +270,7 @@ Deno.serve(async (request) => {
       referred_from_pipeline_lead_id: referredFrom,
     }, { onConflict: "sendpilot_lead_id" });
 
+    scheduleScoutPhones("pipeline", leadId);
     return json({ ok: true, recorded: "accepted_pending_pre_render", cold: true, referred_from: referredFrom });
   }
 
@@ -441,6 +444,34 @@ async function classifyReplyAsync(
   } catch (e) {
     console.error("classifyReplyAsync error", e);
   }
+}
+
+// Fire scout-phones in the background. Best-effort: failures are logged
+// but don't fail the webhook. EdgeRuntime.waitUntil keeps the request open
+// long enough for the scout call to complete before the function shuts down,
+// which matters for both Supabase metering and avoiding orphaned fetches.
+function scheduleScoutPhones(kind: "pipeline" | "alt", id: string): void {
+  // deno-lint-ignore no-explicit-any
+  const er: any = (globalThis as any).EdgeRuntime;
+  const task = (async () => {
+    try {
+      const url = `${Deno.env.get("SUPABASE_URL")}/functions/v1/scout-phones`;
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ kind, id }),
+      });
+      if (!res.ok) {
+        console.warn("scout-phones non-200", res.status, await res.text());
+      }
+    } catch (e) {
+      console.error("scout-phones fire error", kind, id, e);
+    }
+  })();
+  if (er && typeof er.waitUntil === "function") er.waitUntil(task);
 }
 
 async function lookupLead(sendpilotLeadId: string, linkedinUrl: string) {
