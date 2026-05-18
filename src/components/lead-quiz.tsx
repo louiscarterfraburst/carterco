@@ -437,13 +437,18 @@ function UrlStep({
     <StepShell
       question="Din hjemmeside?"
       footer={
-        <PrimaryButton
-          type="button"
-          onClick={onSubmit}
-          disabled={!valid}
-        >
-          Næste →
-        </PrimaryButton>
+        <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:gap-5">
+          <PrimaryButton
+            type="button"
+            onClick={onSubmit}
+            disabled={!valid}
+          >
+            Næste →
+          </PrimaryButton>
+          <span className="text-[10px] font-bold uppercase tracking-[0.25em] text-[var(--cream)]/45">
+            3 min · du får et tal for hvor meget du taber
+          </span>
+        </div>
       }
     >
       <input
