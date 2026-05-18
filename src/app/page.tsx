@@ -2635,14 +2635,14 @@ export default function Home() {
         <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-[linear-gradient(0deg,rgba(255,107,44,0.18),transparent)]" />
         <div aria-hidden className="pointer-events-none absolute bottom-0 left-1/2 h-[2px] w-[min(680px,60%)] -translate-x-1/2 bg-[linear-gradient(90deg,transparent,#ff6b2c_30%,#ff6b2c_70%,transparent)] shadow-[0_0_28px_rgba(255,107,44,0.7)]" />
 
-        <div className="relative z-[1] mx-auto h-[min(820px,90vh)] w-full max-w-[1280px] px-8 sm:px-12">
-          {/* Centered headline + CTA — anchors the scatter */}
-          <div className="absolute left-1/2 top-1/2 z-[3] w-[calc(100%-4rem)] max-w-[40rem] -translate-x-1/2 -translate-y-1/2 text-center sm:w-[calc(100%-7.5rem)]">
+        <div className="relative z-[1] mx-auto w-full max-w-[1080px] px-8 sm:px-12">
+          {/* Headline + CTA — centered top of section */}
+          <div className="mx-auto max-w-[44rem] text-center">
             <h2 className="font-display text-4xl leading-[0.96] tracking-[-0.035em] sm:text-5xl lg:text-[3.75rem]">
               Du beholder alt <span className="italic text-[var(--clay)]">du har.</span>
             </h2>
-            <p className="mx-auto mt-6 max-w-[28rem] text-[15px] leading-relaxed text-[var(--cream)]/70">
-              Du behøver ikke nye værktøjer. Annonce → CRM → kalender — jeg kobler det I allerede har, lægger systemet oven på.
+            <p className="mx-auto mt-6 max-w-[34rem] text-[15px] leading-relaxed text-[var(--cream)]/70">
+              Du behøver ikke nye værktøjer. Jeg kobler annonce, CRM og kalender til ét flow oven på det I allerede har.
             </p>
 
             {/* CTA stack — forest-green pill (won-color CTA on paper) + email link */}
@@ -2661,56 +2661,103 @@ export default function Home() {
                 louis@carterco.dk →
               </a>
             </div>
-
-            <p className="mt-8 text-[10px] font-bold uppercase tracking-[0.3em] text-[var(--cream)]/45">
-              + 30 andre · Calendly · Twilio · Gmail · Outlook · Aircall · Slack · Notion · …
-            </p>
           </div>
 
-          {/* Scattered tiles — desktop only (mobile gets the text caption above as substitute) */}
-          <div aria-hidden className="hidden sm:block">
-            {integrationTiles.map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                aria-label={t.id}
-                className="absolute z-[2] grid origin-center place-items-center transition-transform duration-300"
-                style={{
-                  left: `${t.x}%`,
-                  top: `${t.y}%`,
-                  width: t.size,
-                  height: t.size,
-                  borderRadius: t.size * 0.22,
-                  background: t.bg,
-                  border: t.border ? `1px solid ${t.border}` : undefined,
-                  transform: `translate(-50%, -50%) rotate(${t.rot}deg)`,
-                  boxShadow: `0 ${t.size * 0.18}px ${t.size * 0.4}px -${t.size * 0.12}px rgba(41,38,31,0.18)`,
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform =
-                    "translate(-50%, -50%) rotate(0deg) scale(1.08)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = `translate(-50%, -50%) rotate(${t.rot}deg)`;
-                }}
-              >
-                {t.iconSrc ? (
-                  /* eslint-disable-next-line @next/next/no-img-element */
-                  <img
-                    src={t.iconSrc}
-                    alt=""
-                    width={t.size * 0.55}
-                    height={t.size * 0.55}
-                    className="select-none"
-                    draggable={false}
-                  />
-                ) : (
-                  <svg viewBox="0 0 24 24" width={t.size * 0.55} height={t.size * 0.55} aria-hidden>
-                    {t.glyph}
-                  </svg>
-                )}
-              </button>
-            ))}
+          {/* The connected row — replaces the previous scattered-tile chaos.
+              Per DESIGN.md: "Replace scattered tile chaos with a single neat
+              row, recognizable tools connected with thin lines through a
+              central Carter & Co dot pulse." The new layout demonstrates the
+              section's claim — orderly connection oven på det du har, ikke
+              random værktøjs-konfetti. Tiles selected to span outbound (Meta,
+              LinkedIn), CRM (HubSpot, Pipedrive), and automation (Zapier,
+              Make). The Carter pulse in the middle is the new center of
+              gravity — the operator threading them together. */}
+          <div className="relative mt-20 sm:mt-28" aria-hidden>
+            {/* Hairline through the center — the "thread" connecting the tools */}
+            <div className="pointer-events-none absolute left-[6%] right-[6%] top-1/2 h-px -translate-y-1/2 bg-[linear-gradient(90deg,transparent,rgba(255,248,234,0.16)_18%,rgba(255,248,234,0.16)_82%,transparent)]" />
+
+            {/* Tile row */}
+            <div className="relative flex items-center justify-between gap-3 sm:gap-5">
+              {(["meta", "linkedin", "hubspot"] as const).map((id) => {
+                const t = integrationTiles.find((i) => i.id === id)!;
+                return (
+                  <div
+                    key={t.id}
+                    className="grid h-14 w-14 place-items-center rounded-xl sm:h-16 sm:w-16"
+                    style={{
+                      background: t.bg,
+                      border: t.border ? `1px solid ${t.border}` : undefined,
+                      boxShadow: "0 12px 28px -8px rgba(0,0,0,0.45)",
+                    }}
+                  >
+                    {t.iconSrc ? (
+                      /* eslint-disable-next-line @next/next/no-img-element */
+                      <img
+                        src={t.iconSrc}
+                        alt=""
+                        width={28}
+                        height={28}
+                        className="sm:h-[34px] sm:w-[34px]"
+                        draggable={false}
+                      />
+                    ) : (
+                      <svg viewBox="0 0 24 24" width={28} height={28} className="sm:h-[34px] sm:w-[34px]">
+                        {t.glyph}
+                      </svg>
+                    )}
+                  </div>
+                );
+              })}
+
+              {/* Carter & Co pulse — the hub */}
+              <div className="relative grid h-20 w-20 shrink-0 place-items-center sm:h-24 sm:w-24">
+                <span className="absolute inset-0 rounded-full bg-[radial-gradient(circle,rgba(255,107,44,0.35),transparent_70%)] blur-md" />
+                <span className="absolute inset-3 rounded-full border border-[#ff6b2c]/40" />
+                <span className="absolute inset-5 rounded-full border border-[#ff6b2c]/25" />
+                <span className="dot-pulse grid h-9 w-9 place-items-center rounded-full bg-[var(--flame-500,#ff6b2c)] shadow-[0_0_28px_rgba(255,107,44,0.6)] sm:h-11 sm:w-11">
+                  <span className="font-display text-[11px] font-bold text-[#0f0d0a] sm:text-[13px]">C&amp;C</span>
+                </span>
+              </div>
+
+              {(["pipedrive", "zapier", "make"] as const).map((id) => {
+                const t = integrationTiles.find((i) => i.id === id)!;
+                return (
+                  <div
+                    key={t.id}
+                    className="grid h-14 w-14 place-items-center rounded-xl sm:h-16 sm:w-16"
+                    style={{
+                      background: t.bg,
+                      border: t.border ? `1px solid ${t.border}` : undefined,
+                      boxShadow: "0 12px 28px -8px rgba(0,0,0,0.45)",
+                    }}
+                  >
+                    {t.iconSrc ? (
+                      /* eslint-disable-next-line @next/next/no-img-element */
+                      <img
+                        src={t.iconSrc}
+                        alt=""
+                        width={28}
+                        height={28}
+                        className="sm:h-[34px] sm:w-[34px]"
+                        draggable={false}
+                      />
+                    ) : (
+                      <svg viewBox="0 0 24 24" width={28} height={28} className="sm:h-[34px] sm:w-[34px]">
+                        {t.glyph}
+                      </svg>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Caption — DESIGN.md prescribed */}
+            <p className="mt-10 text-center font-display text-[1.1rem] italic text-[var(--cream)]/70 sm:text-[1.25rem]">
+              Forbinder, ikke erstatter.
+            </p>
+            <p className="mt-3 text-center text-[10px] font-bold uppercase tracking-[0.3em] text-[var(--cream)]/40">
+              + 30 andre i flowet
+            </p>
           </div>
         </div>
       </section>
