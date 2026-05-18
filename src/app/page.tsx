@@ -2457,20 +2457,23 @@ export default function Home() {
                       )}
                     </div>
 
-                    {/* EmberSpark divider — only between stages, not after the
-                        last one. Same flame-line + glow pattern DESIGN.md uses
-                        at sand/ember section transitions. Marks each machine
-                        as its own poster moment instead of three runs on one
-                        flat surface. */}
-                    {i < journey.length - 1 && (
-                      <div
-                        aria-hidden
-                        className="pointer-events-none relative mt-32 flex items-center justify-center sm:mt-44"
-                      >
-                        <div className="h-px w-full max-w-[min(680px,70%)] bg-[linear-gradient(90deg,transparent,rgba(255,107,44,0.35)_25%,rgba(255,107,44,0.7)_50%,rgba(255,107,44,0.35)_75%,transparent)]" />
-                        <div className="absolute h-[2px] w-[min(180px,18%)] bg-[#ff6b2c] shadow-[0_0_28px_rgba(255,107,44,0.7)]" />
-                      </div>
-                    )}
+                    {/* EmberSpark divider — only between stages that share the
+                        same surface theme. When the next stage flips to sand
+                        (stage 02 is themed sand), the bg-color shift already
+                        is the divider; drawing a flame line on top of that
+                        was the doubled-divider bug we just stamped out across
+                        the rest of the page. Same rule applied here. */}
+                    {i < journey.length - 1 &&
+                      stage.theme !== "sand" &&
+                      journey[i + 1].theme !== "sand" && (
+                        <div
+                          aria-hidden
+                          className="pointer-events-none relative mt-32 flex items-center justify-center sm:mt-44"
+                        >
+                          <div className="h-px w-full max-w-[min(680px,70%)] bg-[linear-gradient(90deg,transparent,rgba(255,107,44,0.35)_25%,rgba(255,107,44,0.7)_50%,rgba(255,107,44,0.35)_75%,transparent)]" />
+                          <div className="absolute h-[2px] w-[min(180px,18%)] bg-[#ff6b2c] shadow-[0_0_28px_rgba(255,107,44,0.7)]" />
+                        </div>
+                      )}
                   </article>
                 );
               })}
