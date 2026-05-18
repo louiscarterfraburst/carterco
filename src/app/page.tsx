@@ -1046,21 +1046,13 @@ export default function Home() {
                 const stageBackdrop = isSand
                   ? (
                     // Full-bleed sand band. Top extends 8rem above article;
-                    // bottom stops 14rem above article-bottom so row-2 CRT
-                    // monitors sit on ember (operator workstation metaphor:
-                    // dark screens on dark desk, not on paper). The sand-to-
-                    // ember transitions at top and bottom of the band get
-                    // soft 4rem gradient bleeds so they blend rather than
-                    // cut sharply — same fix pattern as the doubled-divider
-                    // sweep applied elsewhere.
-                    <div aria-hidden className="pointer-events-none absolute -z-[1]" style={{ top: "-8rem", bottom: "14rem", left: "calc(50% - 50vw)", right: "calc(50% - 50vw)" }}>
-                      <div className="absolute inset-0 bg-[var(--sand)]" />
+                    // bottom extends almost to article-bottom (was 14rem
+                    // above, which left a big dark gap above the row-2 CRT
+                    // monitors). Hard sand-to-ember cutoff at top and bottom
+                    // is intentional — bg-shift IS the transition signal.
+                    <div aria-hidden className="pointer-events-none absolute -z-[1] bg-[var(--sand)]" style={{ top: "-8rem", bottom: "-2rem", left: "calc(50% - 50vw)", right: "calc(50% - 50vw)" }}>
                       <div className="paper-grain" />
                       <div className="absolute left-[8%] top-[15%] h-[460px] w-[560px] rounded-full bg-[radial-gradient(ellipse_at_center,rgba(185,112,65,0.16),transparent_70%)] blur-3xl" />
-                      {/* Soft sand → ember gradient at top edge */}
-                      <div className="absolute inset-x-0 top-0 h-16 bg-[linear-gradient(180deg,#0a0907,transparent)]" />
-                      {/* Soft sand → ember gradient at bottom edge */}
-                      <div className="absolute inset-x-0 bottom-0 h-20 bg-[linear-gradient(0deg,#0a0907,transparent)]" />
                     </div>
                   )
                   : stage.n === "01"
