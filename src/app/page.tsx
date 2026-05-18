@@ -2503,25 +2503,25 @@ export default function Home() {
           <div className="absolute -left-[8%] bottom-[8%] h-[480px] w-[480px] rounded-full bg-[radial-gradient(ellipse_at_center,rgba(25,70,58,0.08),transparent_65%)] blur-2xl" />
         </div>
 
-        <div className="relative mx-auto w-full max-w-[1080px] px-4 sm:px-8">
-          <div className="relative">
+        <div className="relative mx-auto w-full max-w-[1200px] px-6 sm:px-10 lg:px-16">
+          {/* Centered page-wide headline. "Hej." (upright) and the italic
+              gradient phrase sit on a single horizontal line at lg+ so the
+              whole sentence reads as one editorial salutation across the
+              top of the section. Body + photo grid lives below with
+              generous mt-20/lg:mt-28 breathing room. */}
+          <h2 className="text-center font-display leading-[1] tracking-[-0.03em] text-[clamp(2.4rem,8vw,5rem)] lg:whitespace-nowrap">
+            Hej.{" "}
+            <span className="bg-gradient-to-b from-[#ff8244] via-[#ff6b2c] to-[#c93c0a] bg-clip-text italic text-transparent">
+              Det er mig der bygger.
+            </span>
+          </h2>
+
+          <div className="relative mt-20 sm:mt-24 lg:mt-32">
             {/* Letter on left, photo on right */}
-            <div className="relative z-[1] grid items-end gap-12 p-8 sm:gap-14 sm:p-14 lg:grid-cols-[3fr_2fr] lg:gap-16 lg:p-20">
+            <div className="relative z-[1] grid items-end gap-12 sm:gap-16 lg:grid-cols-[3fr_2fr] lg:gap-20">
 
               {/* LEFT — the letter */}
               <div>
-
-                {/* Headline: "Hej." on its own upright line, then the italic
-                    phrase wraps naturally (no forced break) so we get one
-                    italic line on wide screens or a graceful two-line wrap
-                    only when the column genuinely demands it. */}
-                <h2 className="font-display text-[13vw] leading-[0.95] tracking-[-0.04em] sm:text-[6vw] lg:text-[4.25rem]">
-                  Hej.
-                  <br />
-                  <span className="bg-gradient-to-b from-[#ff8244] via-[#ff6b2c] to-[#c93c0a] bg-clip-text italic text-transparent">
-                    Det er mig der bygger.
-                  </span>
-                </h2>
 
                 {/* Body — thesis first, then craft + ongoing-operator model.
                     Opens with the POV: most teams know what tools to buy;
