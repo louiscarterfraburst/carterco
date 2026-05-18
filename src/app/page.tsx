@@ -2516,7 +2516,7 @@ export default function Home() {
             </span>
           </h2>
 
-          <div className="relative mt-20 sm:mt-24 lg:mt-32">
+          <div className="relative mt-12 sm:mt-16 lg:mt-20">
             {/* Letter on left, photo on right */}
             <div className="relative z-[1] grid items-end gap-12 sm:gap-16 lg:grid-cols-2 lg:gap-12">
 
@@ -2598,39 +2598,6 @@ export default function Home() {
                     <span>København</span>
                   </div>
 
-                  {/* Handwritten margin note + arrow — anchored below the
-                      Polaroid, on the right, with the arrow pointing up-
-                      left at the photo. Reads like a hand-scribbled P.S.
-                      under the printed archival caption. */}
-                  <div
-                    className="pointer-events-none absolute -bottom-14 right-0 hidden items-end gap-1 whitespace-nowrap text-[#29261f] sm:flex"
-                    style={{
-                      fontFamily: "var(--font-handwritten)",
-                      fontSize: "1.1rem",
-                      transform: "rotate(-4deg)",
-                    }}
-                  >
-                    <span
-                      aria-hidden
-                      className="mr-1 inline-block h-[1.4em] w-[1.4em] shrink-0 bg-[#ff6b2c]"
-                      style={{
-                        maskImage: "url(/annotation-arrow.png)",
-                        maskSize: "contain",
-                        maskRepeat: "no-repeat",
-                        maskPosition: "center",
-                        WebkitMaskImage: "url(/annotation-arrow.png)",
-                        WebkitMaskSize: "contain",
-                        WebkitMaskRepeat: "no-repeat",
-                        WebkitMaskPosition: "center",
-                        transform: "translate(0, -6px) scaleX(-1) rotate(-45deg)",
-                      }}
-                    />
-                    <span className="leading-tight">
-                      det er mig
-                      <br />
-                      der svarer
-                    </span>
-                  </div>
                 </div>
               </div>
             </div>
