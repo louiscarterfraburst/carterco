@@ -16,6 +16,7 @@ import {
   RESPONSE_TIME_LABELS,
   computeLoss,
   formatKr,
+  formatRange,
 } from "@/lib/quiz-calc";
 
 type WebsiteAnalysis = {
@@ -831,23 +832,21 @@ function ResultStep({
   analysis: AnalysisState;
   onConvert: () => void;
 }) {
-  const animatedLoss = useCountUp(result.totalLoss);
-
   const missingLabels = result.missingChannels.map((c) => CHANNEL_LABELS[c]);
 
   return (
     <div className="flex flex-col gap-7">
       <div>
         <p className="font-mono text-[10px] font-bold uppercase tracking-[0.3em] text-[#ff6b2c]/85">
-          Du taber
+          Du taber omkring
         </p>
-        <p className="mt-1 font-display text-[2.25rem] leading-none tracking-tight text-[var(--cream)] tabular-nums sm:text-7xl">
+        <p className="mt-1 font-display text-[1.75rem] leading-[1.05] tracking-tight text-[var(--cream)] tabular-nums sm:text-[3.5rem]">
           <span className="bg-gradient-to-b from-[#ffb86b] via-[#ff6b2c] to-[#c93c0a] bg-clip-text italic text-transparent">
-            {formatKr(animatedLoss)}
+            {formatRange(result.totalLoss)}
           </span>
         </p>
         <p className="mt-2 text-[13px] text-[var(--cream)]/55">
-          om måneden — baseret på dine tal.
+          om måneden, baseret på dine tal. Spændet afspejler at lukkerate og volumen er estimater.
         </p>
       </div>
 
@@ -898,8 +897,8 @@ function ResultStep({
               <span className="text-[9px] font-bold uppercase tracking-[0.3em] text-[var(--clay)]">
                 Outbound
               </span>
-              <span className="font-display text-lg font-semibold tabular text-[#ff6b2c]">
-                {formatKr(result.outboundLoss)}
+              <span className="font-display text-base font-semibold tabular text-[#ff6b2c]">
+                {formatRange(result.outboundLoss)}
               </span>
             </div>
             <span className="flex-1 text-[var(--cream)]/72">
@@ -920,8 +919,8 @@ function ResultStep({
               <span className="text-[9px] font-bold uppercase tracking-[0.3em] text-[#ff6b2c]">
                 Hastighed
               </span>
-              <span className="font-display text-lg font-semibold tabular text-[#ff6b2c]">
-                {formatKr(result.hastighedLoss)}
+              <span className="font-display text-base font-semibold tabular text-[#ff6b2c]">
+                {formatRange(result.hastighedLoss)}
               </span>
             </div>
             <span className="flex-1 text-[var(--cream)]/72">
@@ -944,8 +943,8 @@ function ResultStep({
               <span className="text-[9px] font-bold uppercase tracking-[0.3em] text-[var(--forest)]">
                 Opfølgning
               </span>
-              <span className="font-display text-lg font-semibold tabular text-[#ff6b2c]">
-                {formatKr(result.opfølgningLoss)}
+              <span className="font-display text-base font-semibold tabular text-[#ff6b2c]">
+                {formatRange(result.opfølgningLoss)}
               </span>
             </div>
             <span className="flex-1 text-[var(--cream)]/72">

@@ -220,3 +220,27 @@ export function formatKr(amount: number): string {
   const rounded = Math.round(amount);
   return rounded.toLocaleString("da-DK") + " kr";
 }
+
+// Display a loss as an honest range, not false-precise single number.
+// The point-estimate is built on 4 rough estimates from the visitor (leads,
+// deal value, close rate, response time), so claiming "63.847 kr" is wrong
+// even if the math gives that exact figure. Conservative ±30% spread,
+// rounded to clean step sizes so the bounds feel like real estimates.
+//
+// < 1.000 kr   → single number (no range — too small to meaningfully bound)
+// < 100.000 kr → rounded to nearest 1.000
+// ≥ 100.000 kr → rounded to nearest 5.000
+export function formatRange(amount: number): string {
+  if (amount < 1000) return formatKr(amount);
+  const lowRaw = amount * 0.7;
+  const highRaw = amount * 1.3;
+  const step = amount >= 100_000 ? 5000 : 1000;
+  const low = Math.floor(lowRaw / step) * step;
+  const high = Math.ceil(highRaw / step) * step;
+  return (
+    low.toLocaleString("da-DK") +
+    "–" +
+    high.toLocaleString("da-DK") +
+    " kr"
+  );
+}
