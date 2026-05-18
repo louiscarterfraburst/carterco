@@ -2507,16 +2507,15 @@ export default function Home() {
         <div className="relative mx-auto w-full max-w-[1080px] px-4 sm:px-8">
           <div className="relative">
             {/* Letter on left, photo on right */}
-            <div className="relative z-[1] grid gap-12 p-8 sm:gap-14 sm:p-14 lg:grid-cols-2 lg:gap-16 lg:p-20">
+            <div className="relative z-[1] grid items-end gap-12 p-8 sm:gap-14 sm:p-14 lg:grid-cols-[3fr_2fr] lg:gap-16 lg:p-20">
 
               {/* LEFT — the letter */}
               <div>
 
-                {/* Headline line break tuned: "Det er mig der" + "bygger." so
-                    the verb stands alone in italic at the end. Previous
-                    layout wrapped naturally at "mig" which broke the rhythm
-                    in the middle of the noun phrase. */}
-                <h2 className="font-display text-[14vw] leading-[0.92] tracking-[-0.045em] sm:text-[7vw] lg:text-[5.25rem]">
+                {/* Headline at 4.25rem fits "Det er mig der" on a single line
+                    in the new 3fr-column. Verb "bygger." stands alone on
+                    its own italic line as the closing beat. */}
+                <h2 className="font-display text-[13vw] leading-[0.95] tracking-[-0.04em] sm:text-[6vw] lg:text-[4.25rem]">
                   Hej.
                   <br />
                   <span className="bg-gradient-to-b from-[#ff8244] via-[#ff6b2c] to-[#c93c0a] bg-clip-text italic text-transparent">
@@ -2580,14 +2579,12 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* RIGHT — polaroid. Equal-width grid (lg:grid-cols-2) with
-                  the photo set wider (max-w-[26rem] vs previous 22rem) so
-                  the right side carries comparable visual weight to the
-                  letter, instead of the previous 7/5 text-favored split
-                  that left a lot of empty space between the body column
-                  and a too-small photo. */}
+              {/* RIGHT — polaroid. 3fr/2fr grid (text-favored 60/40) with
+                  items-end so the photo bottom-aligns with the CTA at the
+                  bottom of the letter. Photo capped at max-w-[22rem] which
+                  is right for the narrower 2fr column. */}
               <div>
-                <div className="relative mx-auto w-full max-w-[26rem] lg:ml-auto lg:mr-0">
+                <div className="relative mx-auto w-full max-w-[22rem] lg:ml-auto lg:mr-0">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src="/louis.jpeg"
