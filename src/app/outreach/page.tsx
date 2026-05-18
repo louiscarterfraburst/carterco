@@ -392,6 +392,7 @@ export default function OutreachPage() {
   const [signalLeadMatches, setSignalLeadMatches] = useState<Record<string, SignalLeadMatch[]>>({});
   const [altContacts, setAltContacts] = useState<AltContact[]>([]);
   const [actionQueue, setActionQueue] = useState<ActionQueueRow[]>([]);
+  const [gmailConnected, setGmailConnected] = useState<boolean>(false);
   const [activeIcp, setActiveIcp] = useState<IcpVersion | null>(null);
   const [icpProposals, setIcpProposals] = useState<IcpProposal[]>([]);
   const [identity, setIdentity] = useState<Identity>({
@@ -615,6 +616,43 @@ export default function OutreachPage() {
   useEffect(() => {
     if (user && activeWorkspaceId) void Promise.resolve().then(load);
   }, [user, activeWorkspaceId, load]);
+
+  // Gmail connection status — checks once per session. Reads gmail_tokens
+  // scoped to the signed-in user's email via RLS.
+  useEffect(() => {
+    if (!user?.email) return;
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from("gmail_tokens")
+        .select("user_email")
+        .eq("user_email", user.email)
+        .maybeSingle();
+      if (!cancelled) setGmailConnected(!!data);
+    })();
+    return () => { cancelled = true; };
+  }, [user, supabase]);
+
+  // Surface ?gmail_connected=1 / ?gmail_error=... from the OAuth callback.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("gmail_connected") === "1") {
+      setInfo("Gmail forbundet — svar fra prospekter dukker op i Svar-fanen indenfor 5 min.");
+      setGmailConnected(true);
+      // strip the param from the URL so a refresh doesn't re-show
+      const url = new URL(window.location.href);
+      url.searchParams.delete("gmail_connected");
+      window.history.replaceState({}, "", url.toString());
+    }
+    const err = params.get("gmail_error");
+    if (err) {
+      setErr(`Gmail-forbindelse fejlede: ${err}`);
+      const url = new URL(window.location.href);
+      url.searchParams.delete("gmail_error");
+      window.history.replaceState({}, "", url.toString());
+    }
+  }, []);
 
   // Workspaces without an active ICP version don't have ICP tabs. Snap back
   // to inbox if the user switches to such a workspace while parked on one.
@@ -1188,6 +1226,7 @@ export default function OutreachPage() {
         workspaces={workspaces}
         activeWorkspace={activeWorkspace}
         onWorkspaceChange={chooseWorkspace}
+        gmailConnected={gmailConnected}
       />
 
       <section className="mx-auto w-full max-w-[1400px] px-4 pt-10 pb-6 sm:px-8 sm:pt-14 lg:px-12">
@@ -1309,12 +1348,13 @@ export default function OutreachPage() {
 
 // ============================== sub-components ==============================
 
-function Header({ pushStatus, onEnablePush, onReload, onSignOut, workspaces, activeWorkspace, onWorkspaceChange }: {
+function Header({ pushStatus, onEnablePush, onReload, onSignOut, workspaces, activeWorkspace, onWorkspaceChange, gmailConnected }: {
   pushStatus: string; onEnablePush: () => Promise<void>;
   onReload: () => Promise<void>; onSignOut: () => Promise<void>;
   workspaces: Workspace[];
   activeWorkspace: Workspace | null;
   onWorkspaceChange: (id: string) => void;
+  gmailConnected: boolean;
 }) {
   return (
     <div className="safe-pad-top sticky top-0 z-20 border-b border-[var(--ink)]/[0.10] bg-[var(--sand)]/85 backdrop-blur-xl">
@@ -1345,6 +1385,18 @@ function Header({ pushStatus, onEnablePush, onReload, onSignOut, workspaces, act
             className="focus-cream tabular rounded-sm border border-[var(--ink)]/15 px-3 py-1.5 text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/65 hover:border-[var(--ink)]/35 hover:text-[var(--ink)]"
             title="Push-notifikationer"
           >Push: {pushStatus}</button>
+          {gmailConnected ? (
+            <span className="tabular rounded-sm border border-[var(--forest)]/30 bg-[var(--forest)]/10 px-3 py-1.5 text-[10px] uppercase tracking-[0.22em] text-[var(--forest)]"
+              title="Email-svar fra prospekter pulles ind i Svar-fanen automatisk">
+              📧 Gmail ✓
+            </span>
+          ) : (
+            <a href="/api/auth/gmail/start"
+              className="focus-cream tabular rounded-sm border border-[var(--clay)]/30 bg-[var(--clay)]/10 px-3 py-1.5 text-[10px] uppercase tracking-[0.22em] text-[var(--clay)] hover:bg-[var(--clay)]/20"
+              title="Forbind Gmail så email-svar fra prospekter pulles automatisk ind i Svar-fanen">
+              📧 Forbind Gmail
+            </a>
+          )}
           <button type="button" onClick={() => void onReload()}
             className="focus-cream tabular rounded-sm border border-[var(--ink)]/15 px-3 py-1.5 text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/65 hover:border-[var(--ink)]/35 hover:text-[var(--ink)]">Opdater</button>
           <button type="button" onClick={() => void onSignOut()}
