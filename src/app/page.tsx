@@ -811,7 +811,7 @@ export default function Home() {
             className="max-w-xl text-lg leading-relaxed text-[var(--cream)]/70 sm:max-w-2xl sm:text-xl"
             style={{ textWrap: "balance" }}
           >
-            Tre dele af salgsinfrastrukturen, bygget og driftet på din egen opsætning. Outbound. Hastighed. Opfølgning. Det fulde billede eller bare den del der mangler.
+            Leads køler. Møder glipper. Pipelines visner. Jeg bygger systemet, der finder dem, ringer dem op før de køler, plejer dem til de er klar, så du får flere aftaler i hus.
           </p>
 
           <div className="flex flex-col-reverse items-start justify-between gap-8 sm:flex-row sm:items-end">
