@@ -45,15 +45,28 @@ type Target = {
   id: string;                       // sendpilot_lead_id (pipeline) | alt_contact uuid | signal uuid
   linkedinUrl: string | null;
   companyDomain: string | null;     // for scrape
-  personName: string | null;        // for log / future LinkedIn step
+  companyName: string | null;       // for CVR lookup (DK leads)
+  personName: string | null;        // for proximity matching / log
+  firstName: string | null;
+  lastName: string | null;
   contactEmail: string | null;
 };
 
 type Trace = {
   target: { kind: Kind; id: string; linkedinUrl: string | null; companyDomain: string | null };
-  scrape: { tried: string[]; directs: string[]; offices: string[]; error?: string };
+  scrape: {
+    tried: string[];
+    directs: string[]; offices: string[];
+    emails_personal: string[];   // looks like first.last@domain or matches the person's name
+    emails_generic: string[];    // info@, contact@, kontakt@, etc.
+    error?: string;
+  };
+  cvr?: { tried?: boolean; cvr_number?: string | null; owner_email?: string | null; office_phone?: string | null; error?: string };
   apify: { skipped?: string; error?: string; mobile?: string | null; raw?: unknown };
-  decision: { phone_direct: string | null; phone_office: string | null; phone_source: string | null };
+  decision: {
+    phone_direct: string | null; phone_office: string | null; phone_source: string | null;
+    email_direct: string | null; email_office: string | null; email_source: string | null;
+  };
 };
 
 Deno.serve(async (request) => {
@@ -69,17 +82,20 @@ Deno.serve(async (request) => {
   const target = await resolveTarget(body.kind, body.id);
   if (!target) return json({ error: "target not found" }, 404);
 
-  // ---------- Source 1: website scrape ----------
+  // ---------- Source 1: website scrape (phone + email) ----------
   const trace: Trace = {
     target: { kind: target.kind, id: target.id, linkedinUrl: target.linkedinUrl, companyDomain: target.companyDomain },
-    scrape: { tried: [], directs: [], offices: [] },
+    scrape: { tried: [], directs: [], offices: [], emails_personal: [], emails_generic: [] },
     apify: {},
-    decision: { phone_direct: null, phone_office: null, phone_source: null },
+    decision: {
+      phone_direct: null, phone_office: null, phone_source: null,
+      email_direct: null, email_office: null, email_source: null,
+    },
   };
 
   if (target.companyDomain) {
     try {
-      const r = await scrapeWebsite(target.companyDomain, target.personName);
+      const r = await scrapeWebsite(target.companyDomain, target.firstName, target.lastName);
       trace.scrape = { ...r };
       if (r.directs.length > 0) {
         trace.decision.phone_direct = r.directs[0];
@@ -88,11 +104,46 @@ Deno.serve(async (request) => {
       if (r.offices.length > 0) {
         trace.decision.phone_office = r.offices[0];
       }
+      if (r.emails_personal.length > 0) {
+        trace.decision.email_direct = r.emails_personal[0];
+        trace.decision.email_source = "scrape";
+      }
+      if (r.emails_generic.length > 0) {
+        trace.decision.email_office = r.emails_generic[0];
+      }
     } catch (e) {
       trace.scrape.error = `${(e as Error).message}`;
     }
   } else {
     trace.scrape.error = "no company_domain";
+  }
+
+  // ---------- Source 1b: CVR.dk lookup (DK companies only) ----------
+  // Returns company-registered phone + email. Often the owner's personal email
+  // for sole-trader companies (e.g. mark@futureable.dk, petertrollebonnesen@me.com).
+  // Free, no auth required for cvrapi.dk (1000 reqs/day rate limit).
+  if (target.companyName && /\.(dk)\/?$/i.test(target.companyDomain ?? "") || (target.companyName && !target.companyDomain)) {
+    try {
+      const cvr = await cvrLookup(target.companyName);
+      trace.cvr = { tried: true, cvr_number: cvr.vat, owner_email: cvr.email, office_phone: cvr.phone };
+      if (!trace.decision.email_direct && cvr.email) {
+        // CVR-registered email — often direct/personal for small businesses
+        const isGeneric = /^(info|kontakt|contact|hello|support|admin)@/i.test(cvr.email);
+        if (isGeneric && !trace.decision.email_office) {
+          trace.decision.email_office = cvr.email;
+        } else if (!isGeneric) {
+          trace.decision.email_direct = cvr.email;
+          trace.decision.email_source = "cvr";
+        }
+      }
+      if (!trace.decision.phone_direct && cvr.phone) {
+        trace.decision.phone_office = trace.decision.phone_office ?? cvr.phone;
+      }
+    } catch (e) {
+      trace.cvr = { tried: true, error: `${(e as Error).message}` };
+    }
+  } else {
+    trace.cvr = { tried: false };
   }
 
   // ---------- Source 2: Apify parvenu mobile-phone-enrichment ----------
@@ -142,15 +193,19 @@ async function resolveTarget(kind: Kind, id: string): Promise<Target | null> {
   if (kind === "signal") {
     const { data: s } = await supabase
       .from("outreach_signals")
-      .select("id, person_linkedin_url, person_name, company_domain, person_email")
+      .select("id, person_linkedin_url, person_name, company_domain, company_name, person_email")
       .eq("id", id)
       .single();
     if (!s) return null;
+    const [fn, ...rest] = (s.person_name ?? "").split(/\s+/).filter(Boolean);
     return {
       kind, id,
       linkedinUrl: s.person_linkedin_url,
       companyDomain: s.company_domain,
+      companyName: s.company_name,
       personName: s.person_name,
+      firstName: fn ?? null,
+      lastName: rest.length > 0 ? rest.join(" ") : null,
       contactEmail: s.person_email,
     };
   }
@@ -162,20 +217,20 @@ async function resolveTarget(kind: Kind, id: string): Promise<Target | null> {
       .eq("id", id)
       .single();
     if (!a) return null;
-    // alt_contacts don't track a website. Best-effort: derive domain from the
-    // company name later if needed. For now scrape may be skipped for alts.
+    const [fn, ...rest] = (a.name ?? "").split(/\s+/).filter(Boolean);
     return {
       kind, id,
       linkedinUrl: a.linkedin_url,
-      companyDomain: null,   // future: resolve via Apollo or manual lookup
+      companyDomain: null,   // alts don't track website; CVR may still hit by company name
+      companyName: a.company,
       personName: a.name,
+      firstName: fn ?? null,
+      lastName: rest.length > 0 ? rest.join(" ") : null,
       contactEmail: null,
     };
   }
 
   if (kind === "pipeline") {
-    // For pipeline rows the id is sendpilot_lead_id. Resolve LinkedIn URL
-    // from pipeline itself; resolve company_domain via outreach_leads.website.
     const { data: p } = await supabase
       .from("outreach_pipeline")
       .select("sendpilot_lead_id, linkedin_url, contact_email, workspace_id")
@@ -184,24 +239,31 @@ async function resolveTarget(kind: Kind, id: string): Promise<Target | null> {
     if (!p) return null;
 
     let domain: string | null = null;
-    let name: string | null = null;
+    let companyName: string | null = null;
+    let firstName: string | null = null;
+    let lastName: string | null = null;
     if (p.contact_email) {
       const { data: l } = await supabase
         .from("outreach_leads")
-        .select("first_name, last_name, website")
+        .select("first_name, last_name, website, company")
         .eq("contact_email", p.contact_email)
         .eq("workspace_id", p.workspace_id)
         .maybeSingle();
       if (l) {
         domain = l.website ?? null;
-        name = [l.first_name, l.last_name].filter(Boolean).join(" ") || null;
+        companyName = l.company ?? null;
+        firstName = l.first_name ?? null;
+        lastName = l.last_name ?? null;
       }
     }
+    const personName = [firstName, lastName].filter(Boolean).join(" ") || null;
     return {
       kind, id,
       linkedinUrl: p.linkedin_url,
       companyDomain: domain,
-      personName: name,
+      companyName,
+      personName,
+      firstName, lastName,
       contactEmail: p.contact_email,
     };
   }
@@ -210,18 +272,33 @@ async function resolveTarget(kind: Kind, id: string): Promise<Target | null> {
 }
 
 async function writeBack(target: Target, trace: Trace): Promise<boolean> {
-  const patch = {
+  const now = new Date().toISOString();
+  const patch: Record<string, unknown> = {
     phone_direct: trace.decision.phone_direct,
     phone_office: trace.decision.phone_office,
     phone_source: trace.decision.phone_source,
-    phone_scouted_at: new Date().toISOString(),
+    phone_scouted_at: now,
     phone_scout_details: trace as unknown as Record<string, unknown>,
+    email_direct: trace.decision.email_direct,
+    email_office: trace.decision.email_office,
+    email_source: trace.decision.email_source,
+    email_scouted_at: now,
+    email_scout_details: trace as unknown as Record<string, unknown>,
   };
 
   if (target.kind === "signal") {
+    // outreach_signals has phone columns but not email_direct/email_office —
+    // person_email is the existing field. Strip email_* keys before writing.
+    const signalPatch: Record<string, unknown> = {
+      phone_direct: patch.phone_direct,
+      phone_office: patch.phone_office,
+      phone_source: patch.phone_source,
+      phone_scouted_at: patch.phone_scouted_at,
+      phone_scout_details: patch.phone_scout_details,
+    };
     const { error } = await supabase
       .from("outreach_signals")
-      .update(patch)
+      .update(signalPatch)
       .eq("id", target.id);
     if (error) { console.error("signal update", error); return false; }
     return true;
@@ -249,10 +326,15 @@ async function writeBack(target: Target, trace: Trace): Promise<boolean> {
 
 async function scrapeWebsite(
   domain: string,
-  _personName: string | null,
-): Promise<{ tried: string[]; directs: string[]; offices: string[] }> {
+  firstName: string | null,
+  lastName: string | null,
+): Promise<{
+  tried: string[];
+  directs: string[]; offices: string[];
+  emails_personal: string[]; emails_generic: string[];
+}> {
   const clean = domain.replace(/^https?:\/\//, "").replace(/\/.*$/, "").trim();
-  if (!clean) return { tried: [], directs: [], offices: [] };
+  if (!clean) return { tried: [], directs: [], offices: [], emails_personal: [], emails_generic: [] };
 
   const candidates = [
     `https://${clean}/`,
@@ -270,6 +352,11 @@ async function scrapeWebsite(
   const tried: string[] = [];
   const directs = new Set<string>();
   const offices = new Set<string>();
+  const emailsPersonal = new Set<string>();
+  const emailsGeneric = new Set<string>();
+
+  const fnLower = (firstName ?? "").toLowerCase().replace(/[^a-z]/g, "");
+  const lnLower = (lastName ?? "").toLowerCase().replace(/[^a-z]/g, "");
 
   for (const url of candidates) {
     try {
@@ -277,7 +364,7 @@ async function scrapeWebsite(
       tried.push(url);
       if (!html) continue;
 
-      // tel: links — most reliable signal of a callable number
+      // ---- phones ----
       const telMatches = html.matchAll(/href=["']tel:([+\d\s().\-]+)["']/gi);
       for (const m of telMatches) {
         const phone = normalizePhone(m[1]);
@@ -291,13 +378,11 @@ async function scrapeWebsite(
         }
       }
 
-      // Inline DK phones (+45 + 8 digits)
       const dkMatches = html.match(/\+45[\s.\-]?\d{2}[\s.\-]?\d{2}[\s.\-]?\d{2}[\s.\-]?\d{2}/g) ?? [];
       for (const raw of dkMatches) {
         const phone = normalizePhone(raw);
         if (phone) (url === `https://${clean}/` ? offices : directs).add(phone);
       }
-      // Generic international
       const intlMatches = html.match(/\+\d{1,3}[\s.\-]?\(?\d{1,4}\)?[\s.\-]?\d{2,4}[\s.\-]?\d{2,4}[\s.\-]?\d{0,4}/g) ?? [];
       for (const raw of intlMatches) {
         const phone = normalizePhone(raw);
@@ -305,12 +390,89 @@ async function scrapeWebsite(
           (url === `https://${clean}/` ? offices : directs).add(phone);
         }
       }
+
+      // ---- emails ----
+      // mailto: links first (most reliable, includes intent)
+      const mailtoMatches = html.matchAll(/href=["']mailto:([^"'?]+)/gi);
+      for (const m of mailtoMatches) {
+        const email = m[1].toLowerCase().trim();
+        if (!isValidEmail(email)) continue;
+        if (emailLooksPersonal(email, fnLower, lnLower)) emailsPersonal.add(email);
+        else emailsGeneric.add(email);
+      }
+
+      // Inline email regex (catches text-only emails not wrapped in mailto:)
+      const inlineEmails = html.match(/[a-z0-9._-]+@[a-z0-9.-]+\.[a-z]{2,}/gi) ?? [];
+      for (const raw of inlineEmails) {
+        const email = raw.toLowerCase();
+        if (!isValidEmail(email)) continue;
+        // Skip emails not on the company's domain (avoid leaking 3rd-party services)
+        const emailDomain = email.split("@")[1] ?? "";
+        if (!emailDomain.includes(clean.replace(/^www\./, ""))) continue;
+        if (emailLooksPersonal(email, fnLower, lnLower)) emailsPersonal.add(email);
+        else emailsGeneric.add(email);
+      }
     } catch {
       // 404s and timeouts expected — keep iterating
     }
   }
 
-  return { tried, directs: Array.from(directs), offices: Array.from(offices) };
+  return {
+    tried,
+    directs: Array.from(directs), offices: Array.from(offices),
+    emails_personal: Array.from(emailsPersonal),
+    emails_generic: Array.from(emailsGeneric),
+  };
+}
+
+function isValidEmail(email: string): boolean {
+  if (email.length > 120) return false;
+  if (email.endsWith(".png") || email.endsWith(".jpg") || email.endsWith(".gif")) return false;
+  if (email.includes("example.") || email.includes("yourdomain")) return false;
+  return /^[a-z0-9._-]+@[a-z0-9.-]+\.[a-z]{2,}$/i.test(email);
+}
+
+function emailLooksPersonal(email: string, fn: string, ln: string): boolean {
+  const local = email.split("@")[0]?.toLowerCase() ?? "";
+  if (/^(info|kontakt|contact|hello|hej|support|admin|sales|salg|hr|career|jobs?|noreply|no-reply)@?/.test(email)) {
+    return false;
+  }
+  if (fn && local.includes(fn)) return true;
+  if (ln && local.includes(ln)) return true;
+  // Pattern like firstname.lastname / firstname_lastname / firstinitial+lastname
+  if (/^[a-z]{2,}\.[a-z]{2,}/.test(local)) return true;
+  // First name only (no dots) — common for small companies
+  if (/^[a-z]{2,12}$/.test(local) && !/(info|sales|admin)/.test(local)) return true;
+  return false;
+}
+
+// CVR.dk free public API — returns company info incl. directors/owners,
+// office phone, and company-registered email (often owner's personal email
+// for sole-trader companies). Rate limit: 1000 req/day per IP.
+async function cvrLookup(companyName: string): Promise<{
+  vat?: string | null; phone?: string | null; email?: string | null;
+}> {
+  const q = encodeURIComponent(companyName.trim());
+  const url = `https://cvrapi.dk/api?country=dk&search=${q}`;
+  const ctrl = new AbortController();
+  const timeout = setTimeout(() => ctrl.abort(), 8000);
+  try {
+    const res = await fetch(url, {
+      headers: { "User-Agent": "CarterCo phone-scout/1.0" },
+      signal: ctrl.signal,
+    });
+    if (!res.ok) return {};
+    const d = await res.json() as { vat?: string; phone?: string | number; email?: string };
+    return {
+      vat: d.vat ? String(d.vat) : null,
+      phone: d.phone ? `+45${String(d.phone).replace(/\D/g, "")}` : null,
+      email: d.email ? d.email.toLowerCase() : null,
+    };
+  } catch {
+    return {};
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 async function fetchHtml(url: string): Promise<string | null> {
