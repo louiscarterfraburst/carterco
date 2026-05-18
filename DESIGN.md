@@ -238,12 +238,32 @@ All other section accents use solid italic Fraunces in `var(--clay)` or `var(--c
 
 ## Voice (copy rules)
 
-- **Danish first.** All visitor-facing copy in da_DK. Operator UI can switch to en_US where conventions are stronger (e.g. Pipeline statuses).
-- **Speak as the operator, not the brand.** First-person singular ("Jeg bygger systemet") is correct for the hero and founder card. Plural "vi" is forbidden — there is no "vi."
-- **Use the customer's vocabulary.** "Lead-konvertering", "responstid", "outreach-volumen", "pipeline" beat "Salgsinfrastruktur" in body copy. Display headlines can be aspirational; body copy is operational.
+- **Native Danish, ICP-readable.** The site is built for founders and sales leaders at 5–50 person Danish B2B companies. They read Danish business press, not TechCrunch. Every word in body copy must pass two filters: (a) it sounds natively Danish, not translated-from-English; (b) a 45-year-old salgschef i en 30-mands dansk virksomhed forstår det uden at slå op. Display headlines can be aspirational; body copy is operational and plain.
+- **No startup / consulting / SaaS-investor loanwords.** These read as anglo-pitch-deck-mush to the actual ICP. Forbidden in body copy:
+
+| Don't write | Write instead |
+|---|---|
+| Fractional | Deltids · på timer · ekstern · hyret ind for en periode |
+| GTM engineer / GTM-engineer | Salgssystem-bygger · operator · jeg bygger og kører salgssystemet |
+| Stack (when not a strict tech term) | Værktøjer · setup · de værktøjer I bruger |
+| Onboarding | Opstart · indkøring |
+| Insight / insights | Indsigt · indblik |
+| Mindset | Tilgang · syn |
+| Ops (as in "kører ops") | Drift · driften |
+| Touchpoint | Kontaktpunkt · berøring |
+| Vibe / vibe coding | (never; rewrite the sentence) |
+| Empower / unlock / leverage | (rewrite the sentence) |
+
+  The kept-anglicisms list (these are *already* the customer's working vocabulary in Danish B2B sales and so they earn their place): `lead`, `pipeline`, `CRM`, `outbound`, `outreach`, `responstid`, `lead-konvertering`, `booket`, `SMS`. If a new English-flavored word isn't on this list, find a Danish word.
+
+- **Speak as the operator, not the brand.** First-person singular ("Jeg bygger systemet") is correct for the hero and founder card. Plural "vi" is forbidden — there is no "vi." Passive voice ("Hvert system bygges") collapses operator-voice into brand-voice. Active first-person every time.
 - **No AI vocabulary.** No "comprehensive", "robust", "seamless", "intricate", "vibrant", "leverage", "unlock", "empower."
 - **No em dashes in body copy.** Periods or semicolons. Reserved exception: the founder letter uses em dashes deliberately as a letter device.
 - **Citations live inline.** "21× mere kvalificeret · iflg. MIT-studiet →" with the link. Not in a footer, not in a footnote.
+
+### Litmus test before shipping copy
+
+Read each sentence aloud as if you're a 45-year-old Danish salgschef. Pause at every word. If you'd say "hvad betyder det?" or "det lyder amerikansk," the word is wrong even if the sentence is technically grammatical Danish. Rewrite until every word is one you'd actually say to a colleague over coffee.
 
 ---
 

@@ -2256,7 +2256,7 @@ export default function Home() {
                               <div className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-[linear-gradient(135deg,#5a4a3a,#7a6a5a)] text-[8px] font-bold text-[#fff8ea]">JU</div>
                               <div className="min-w-0 flex-1">
                                 <p className="text-[10px] leading-snug text-[var(--cream)]/80 italic">
-                                  &ldquo;Du burde tale med Morten — han kører ops hos TechSupply, lige flyttet til ny stack.&rdquo;
+                                  &ldquo;Du burde tale med Morten — han er ansvarlig for driften hos TechSupply, lige skiftet værktøjer.&rdquo;
                                 </p>
                                 <p className="mt-1 text-[8px] uppercase tracking-wider text-[var(--cream)]/45">— Justyna</p>
                               </div>
@@ -2801,7 +2801,7 @@ export default function Home() {
                     Fra første dag til den dag det kører selv.
                   </p>
                   <p>
-                    Jeg er din fractional GTM-engineer i 3-6 måneder. Du har mig fra dag ét. Du beholder systemet efter overdragelsen.
+                    Jeg er hyret ind i 3-6 måneder for at bygge og køre salgssystemet. Du har mig fra dag ét. Du beholder systemet bagefter.
                   </p>
                   <p>
                     Tag quizzen — oplev flowet fra kundens side, og se hvad dit eget system mangler.
