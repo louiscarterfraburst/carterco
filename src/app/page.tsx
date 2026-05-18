@@ -2618,13 +2618,14 @@ export default function Home() {
       </section>
       )}
       <section className="relative overflow-hidden bg-[#0a0907] py-32 text-[var(--cream)] sm:py-44">
-        {/* EmberSpark — top */}
+        {/* Soft top + bottom atmospheric glows — flame-line dividers
+            removed 2026-05-18 because the bg changes above (sand bridge)
+            and below (sand founder) are already the section markers.
+            Keeping a flame line ON TOP of those was a doubled divider.
+            DESIGN.md: EmberSpark is for ember-to-ember transitions, not
+            for sections sandwiched between sand. */}
         <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-10 bg-[linear-gradient(180deg,rgba(255,107,44,0.18),transparent)]" />
-        <div aria-hidden className="pointer-events-none absolute left-1/2 top-0 h-[2px] w-[min(680px,60%)] -translate-x-1/2 bg-[linear-gradient(90deg,transparent,#ff6b2c_30%,#ff6b2c_70%,transparent)] shadow-[0_0_28px_rgba(255,107,44,0.7)]" />
-
-        {/* EmberSpark — bottom: bridges up to dark founder */}
         <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-[linear-gradient(0deg,rgba(255,107,44,0.18),transparent)]" />
-        <div aria-hidden className="pointer-events-none absolute bottom-0 left-1/2 h-[2px] w-[min(680px,60%)] -translate-x-1/2 bg-[linear-gradient(90deg,transparent,#ff6b2c_30%,#ff6b2c_70%,transparent)] shadow-[0_0_28px_rgba(255,107,44,0.7)]" />
 
         <div className="relative z-[1] mx-auto w-full max-w-[1080px] px-8 sm:px-12">
           {/* Headline + CTA — centered top of section */}
