@@ -2503,13 +2503,13 @@ export default function Home() {
           <div className="absolute -left-[8%] bottom-[8%] h-[480px] w-[480px] rounded-full bg-[radial-gradient(ellipse_at_center,rgba(25,70,58,0.08),transparent_65%)] blur-2xl" />
         </div>
 
-        <div className="relative mx-auto w-full max-w-[1200px] px-6 sm:px-10 lg:px-16">
+        <div className="relative mx-auto w-full max-w-[1080px] px-6 sm:px-10 lg:px-16">
           {/* Centered page-wide headline. "Hej." (upright) and the italic
               gradient phrase sit on a single horizontal line at lg+ so the
               whole sentence reads as one editorial salutation across the
               top of the section. Body + photo grid lives below with
               generous mt-20/lg:mt-28 breathing room. */}
-          <h2 className="text-center font-display leading-[1] tracking-[-0.03em] text-[clamp(2.4rem,8vw,5rem)] lg:whitespace-nowrap">
+          <h2 className="text-center font-display leading-[1] tracking-[-0.03em] text-[clamp(2.4rem,7vw,4.5rem)] lg:whitespace-nowrap">
             Hej.{" "}
             <span className="bg-gradient-to-b from-[#ff8244] via-[#ff6b2c] to-[#c93c0a] bg-clip-text italic text-transparent">
               Det er mig der bygger.
@@ -2518,10 +2518,10 @@ export default function Home() {
 
           <div className="relative mt-12 sm:mt-16 lg:mt-20">
             {/* Letter on left, photo on right */}
-            <div className="relative z-[1] grid items-start gap-10 sm:gap-12 lg:grid-cols-[22rem_1fr] lg:gap-8">
+            <div className="relative z-[1] grid items-start gap-10 sm:gap-12 lg:grid-cols-[3fr_2fr] lg:gap-8">
 
-              {/* LEFT on mobile, RIGHT on lg+ — the letter */}
-              <div className="lg:order-2">
+              {/* LEFT — the letter */}
+              <div>
 
                 {/* Body — thesis first, then craft + ongoing-operator model.
                     Opens with the POV: most teams know what tools to buy;
@@ -2534,7 +2534,7 @@ export default function Home() {
                     indefinitely. Client owns the system (it's on their
                     own tools, per DESIGN.md "service not SaaS"), Louis
                     keeps operating it as long as it earns. */}
-                <div className="mt-8 max-w-lg space-y-3 text-[15px] leading-[1.6] text-[#29261f]/85 sm:mt-10 sm:text-[16px]">
+                <div className="mt-8 space-y-3 text-[15px] leading-[1.6] text-[#29261f]/85 sm:mt-10 sm:text-[16px]">
                   <p>
                     <span className="font-semibold text-[#29261f]">
                       Du har sikkert allerede værktøjerne. CRM, annoncer, kalender, opkald.
@@ -2577,11 +2577,12 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* LEFT on lg+, BELOW on mobile — polaroid. Photo column
-                  sized to match photo width (lg:grid-cols-[22rem_1fr]) so
-                  there's no dead space alongside the photo. */}
-              <div className="lg:order-1">
-                <div className="relative mx-auto w-full max-w-[22rem] lg:ml-0 lg:mr-auto">
+              {/* RIGHT — polaroid. 3fr/2fr grid (text-favored 60/40) with
+                  items-end so the photo bottom-aligns with the CTA at the
+                  bottom of the letter. Photo capped at max-w-[22rem] which
+                  is right for the narrower 2fr column. */}
+              <div>
+                <div className="relative mx-auto w-full max-w-[22rem]">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src="/louis.jpeg"
