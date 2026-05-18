@@ -2519,12 +2519,17 @@ export default function Home() {
                   </span>
                 </h2>
 
-                {/* Body — thesis first, then craft + terms. Opens with the
-                    POV that earns the rest of the letter: most teams know
-                    which tools to buy; what they're missing is the GLUE.
-                    That's the operator-job carterco actually sells. Then
-                    the engagement model (per DESIGN.md required pattern).
-                    Operator-voice throughout (first person, active). */}
+                {/* Body — thesis first, then craft + ongoing-operator model.
+                    Opens with the POV: most teams know what tools to buy;
+                    they're missing the GLUE. Then the engagement model —
+                    NOT a 3-6 month project with a handover, but an ongoing
+                    operator partnership billed in hours. The previous
+                    "Jeg er hyret ind i 3-6 måneder" framing implied a
+                    bounded project that ends; the new framing implies
+                    a system that keeps running with Louis as its operator
+                    indefinitely. Client owns the system (it's on their
+                    own tools, per DESIGN.md "service not SaaS"), Louis
+                    keeps operating it as long as it earns. */}
                 <div className="mt-8 max-w-md space-y-5 text-[15px] leading-[1.7] text-[#29261f]/85 sm:mt-10 sm:text-[16px]">
                   <p>
                     <span className="font-semibold text-[#29261f]">
@@ -2535,10 +2540,10 @@ export default function Home() {
                     Det er at lime dem sammen der gør det til et system, ikke en bunke abonnementer.
                   </p>
                   <p>
-                    Jeg bygger og kører det hver dag, fra første dag til det kører selv uden mig.
+                    Jeg bygger det på det I allerede har. I ejer systemet. Jeg kører det videre som jeres operatør.
                   </p>
                   <p>
-                    Jeg er hyret ind i 3-6 måneder. Du har mig fra dag ét. Du beholder systemet bagefter.
+                    På timer, hver måned, så længe det giver mening. Du betaler kun for det jeg laver.
                   </p>
                   <p>
                     Tag quizzen — oplev flowet fra kundens side, og se hvad dit eget system mangler.
