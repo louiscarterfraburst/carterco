@@ -2534,23 +2534,23 @@ export default function Home() {
                     indefinitely. Client owns the system (it's on their
                     own tools, per DESIGN.md "service not SaaS"), Louis
                     keeps operating it as long as it earns. */}
-                <div className="mt-8 max-w-lg space-y-4 text-[15px] leading-[1.6] text-[#29261f]/85 sm:mt-10 sm:text-[16px]">
+                <div className="mt-8 max-w-lg space-y-3 text-[15px] leading-[1.6] text-[#29261f]/85 sm:mt-10 sm:text-[16px]">
                   <p>
                     <span className="font-semibold text-[#29261f]">
-                      De fleste ved godt hvad der skal til af værktøjer. CRM, annoncer, kalender, opkald.
+                      Du har sikkert allerede værktøjerne. CRM, annoncer, kalender, opkald.
                     </span>
                   </p>
                   <p>
-                    Det er at lime dem sammen der gør det til et system, ikke en bunke abonnementer.
+                    Det er at lime dem sammen til ét flow der gør det til et salgssystem. Ikke en bunke abonnementer.
                   </p>
                   <p>
-                    Jeg bygger det på det I allerede har. I ejer systemet. Jeg kører det videre som jeres operatør.
+                    Jeg bygger oven på det du har. Systemet er dit. Jeg kører det videre som din operatør.
                   </p>
                   <p>
-                    På timer, hver måned, så længe det giver mening. Du betaler kun for det jeg laver.
+                    På timer, hver måned. Du betaler kun for det jeg laver.
                   </p>
                   <p>
-                    Tag quizzen — oplev flowet fra kundens side, og se hvad dit eget system mangler.
+                    Tag quizzen — se hvor dit eget system lækker.
                   </p>
                   <div className="pt-2">
                     <button
