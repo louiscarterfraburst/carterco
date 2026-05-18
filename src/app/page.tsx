@@ -2534,7 +2534,7 @@ export default function Home() {
                     indefinitely. Client owns the system (it's on their
                     own tools, per DESIGN.md "service not SaaS"), Louis
                     keeps operating it as long as it earns. */}
-                <div className="mt-8 max-w-md space-y-5 text-[15px] leading-[1.7] text-[#29261f]/85 sm:mt-10 sm:text-[16px]">
+                <div className="mt-8 max-w-lg space-y-4 text-[15px] leading-[1.6] text-[#29261f]/85 sm:mt-10 sm:text-[16px]">
                   <p>
                     <span className="font-semibold text-[#29261f]">
                       De fleste ved godt hvad der skal til af værktøjer. CRM, annoncer, kalender, opkald.
