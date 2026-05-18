@@ -868,13 +868,14 @@ export default function Home() {
       <section className="relative overflow-hidden bg-[#f6efe4] py-28 text-[#29261f] sm:py-36">
         <div aria-hidden className="paper-grain" />
 
-        {/* EmberSpark — top: bridges down from dark marquee */}
+        {/* Soft atmospheric glows on top + bottom edges. Flame-line dividers
+            removed 2026-05-18 — the section is sandwiched between two dark
+            sections (marquee above, journey below), so the bg-color shift
+            at each edge is already the divider. Same rule as the deleted
+            integration-scatter section. DESIGN.md: EmberSpark is for
+            ember-to-ember transitions, not bg-shift transitions. */}
         <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-10 bg-[linear-gradient(180deg,rgba(255,107,44,0.18),transparent)]" />
-        <div aria-hidden className="pointer-events-none absolute left-1/2 top-0 h-[2px] w-[min(680px,60%)] -translate-x-1/2 bg-[linear-gradient(90deg,transparent,#ff6b2c_30%,#ff6b2c_70%,transparent)] shadow-[0_0_28px_rgba(255,107,44,0.7)]" />
-
-        {/* EmberSpark — bottom: bridges up to dark process */}
         <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-[linear-gradient(0deg,rgba(255,107,44,0.18),transparent)]" />
-        <div aria-hidden className="pointer-events-none absolute bottom-0 left-1/2 h-[2px] w-[min(680px,60%)] -translate-x-1/2 bg-[linear-gradient(90deg,transparent,#ff6b2c_30%,#ff6b2c_70%,transparent)] shadow-[0_0_28px_rgba(255,107,44,0.7)]" />
 
         <div className="relative z-[1] mx-auto w-full max-w-[1400px] px-8 sm:px-12">
           <h2 className="text-center font-display text-[10vw] leading-[0.9] tracking-[-0.04em] text-[#29261f] sm:text-6xl lg:text-7xl">
