@@ -186,7 +186,7 @@ const journey: JourneyStage[] = [
     anchorClient: { name: "Tresyv", line: "31× outreach-volumen — uden at føles som spam." },
     supportingClients: [],
     visual: "outbound",
-    rowTwoEyebrow: "Morgenens kø",
+    rowTwoEyebrow: "Sendt og modtaget",
   },
   {
     n: "02",
