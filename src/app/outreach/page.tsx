@@ -238,6 +238,8 @@ type ActionQueueRow = {
   intent: string | null;
   linkedin_url: string | null;
   priority_score: number;
+  phone_direct: string | null;
+  phone_office: string | null;
 };
 
 type IcpVersion = {
@@ -1711,6 +1713,15 @@ function IDagTab({ queue, onJumpTo }: {
     return `${days}d`;
   }
 
+  function formatPhone(raw: string): string {
+    // +4520935087 → +45 20 93 50 87 for readability. Falls back to raw for
+    // non-DK or non-standard lengths.
+    const digits = raw.replace(/[^\d+]/g, "");
+    const dk = digits.match(/^(\+45)(\d{2})(\d{2})(\d{2})(\d{2})$/);
+    if (dk) return `${dk[1]} ${dk[2]} ${dk[3]} ${dk[4]} ${dk[5]}`;
+    return digits;
+  }
+
   return (
     <ul className="mt-4 space-y-2">
       {queue.map((row) => (
@@ -1746,16 +1757,31 @@ function IDagTab({ queue, onJumpTo }: {
               <span>{subkindLabel(row)}</span>
               {row.intent ? <span>· intent: {row.intent}</span> : null}
               <span>· score {row.priority_score}</span>
+              {row.phone_direct ? (
+                <span className="text-[var(--clay)]">· 📞 {formatPhone(row.phone_direct)}</span>
+              ) : row.phone_office ? (
+                <span className="text-[var(--ink)]/35">· 📞 kontor {formatPhone(row.phone_office)}</span>
+              ) : null}
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={() => onJumpTo(tabForKind[row.kind])}
-            className="shrink-0 rounded border border-[var(--ink)]/20 px-3 py-1.5 text-[11px] uppercase tracking-[0.22em] text-[var(--ink)]/70 hover:bg-[var(--ink)]/5"
-          >
-            Gå til →
-          </button>
+          <div className="flex shrink-0 flex-col gap-1.5">
+            {row.phone_direct || row.phone_office ? (
+              <a
+                href={`tel:${row.phone_direct || row.phone_office}`}
+                className="rounded border border-[var(--clay)]/40 bg-[var(--clay)]/10 px-3 py-1.5 text-center text-[11px] uppercase tracking-[0.22em] text-[var(--clay)] hover:bg-[var(--clay)]/20"
+              >
+                📞 Ring
+              </a>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => onJumpTo(tabForKind[row.kind])}
+              className="rounded border border-[var(--ink)]/20 px-3 py-1.5 text-[11px] uppercase tracking-[0.22em] text-[var(--ink)]/70 hover:bg-[var(--ink)]/5"
+            >
+              Gå til →
+            </button>
+          </div>
         </li>
       ))}
     </ul>
