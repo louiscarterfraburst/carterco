@@ -2518,7 +2518,7 @@ export default function Home() {
 
           <div className="relative mt-20 sm:mt-24 lg:mt-32">
             {/* Letter on left, photo on right */}
-            <div className="relative z-[1] grid items-end gap-12 sm:gap-16 lg:grid-cols-[3fr_2fr] lg:gap-20">
+            <div className="relative z-[1] grid items-end gap-12 sm:gap-16 lg:grid-cols-2 lg:gap-12">
 
               {/* LEFT — the letter */}
               <div>
@@ -2598,16 +2598,22 @@ export default function Home() {
                     <span>København</span>
                   </div>
 
-                  {/* Handwritten arrow + caption — points at photo */}
+                  {/* Handwritten margin note + arrow — anchored to the
+                      Polaroid's top-left corner instead of the gap between
+                      grid columns. Sits just above and to the left of the
+                      photo, slightly rotated, with the arrow pointing
+                      down-right at the photo. Free of the grid's column
+                      gap, so the grid can tighten without squeezing the
+                      note. */}
                   <div
-                    className="pointer-events-none absolute right-full top-10 mr-2 hidden items-center gap-1 whitespace-nowrap text-[#29261f] sm:flex"
+                    className="pointer-events-none absolute -top-12 -left-4 hidden items-center gap-1 whitespace-nowrap text-[#29261f] sm:flex"
                     style={{
                       fontFamily: "var(--font-handwritten)",
                       fontSize: "1.1rem",
                       transform: "rotate(-6deg)",
                     }}
                   >
-                    <span className="text-right leading-tight">
+                    <span className="leading-tight">
                       det er mig
                       <br />
                       der svarer
@@ -2624,7 +2630,7 @@ export default function Home() {
                         WebkitMaskSize: "contain",
                         WebkitMaskRepeat: "no-repeat",
                         WebkitMaskPosition: "center",
-                        transform: "translate(-40px, 40px) scaleX(-1) rotate(90deg)",
+                        transform: "translate(0, 8px) rotate(45deg)",
                       }}
                     />
                   </div>
