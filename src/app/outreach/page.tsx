@@ -222,6 +222,17 @@ type Signal = {
 
 type Tab = "i_dag" | "opgaver" | "signaler" | "inbox" | "replies" | "sent" | "all" | "icp_rejected" | "icp";
 
+// Returned by outreach-ai draft_email — what the EmailActionBar uses to open mailto.
+type EmailDraft = {
+  id: string;
+  subject: string;
+  body: string;
+  strategy: string;
+  rationale: string;
+  language: string;
+  to: string;
+};
+
 // Call-outcome enum, mirrors /leads.Outcome. Wider than the persisted set —
 // the UI also writes 'answered' for "talte med, intet aftalt endnu", which
 // /leads doesn't currently use but keeps room for follow-up bumping.
@@ -240,8 +251,8 @@ type CallOutcome =
 type ActionQueueRow = {
   id: string;                  // composite: kind:ref_id
   workspace_id: string;
-  kind: "reply" | "approval" | "referral" | "signal" | "call";
-  subkind: string;             // draft_ready, needs_response, approve_send, ...
+  kind: "reply" | "approval" | "referral" | "signal" | "call" | "email";
+  subkind: string;             // draft_ready, needs_response, approve_send, needs_draft, ...
   ref_lead_id: string | null;  // sendpilot_lead_id or null
   ref_id: string;              // underlying table PK as text
   surfaced_at: string;
@@ -254,6 +265,10 @@ type ActionQueueRow = {
   priority_score: number;
   phone_direct: string | null;
   phone_office: string | null;
+  email_direct: string | null;
+  email_office: string | null;
+  email_draft_id: string | null;
+  email_subject: string | null;
 };
 
 type IcpVersion = {
@@ -788,6 +803,43 @@ export default function OutreachPage() {
     else await load();
   }
 
+  // Calls outreach-ai draft_email — returns the draft (subject, body,
+  // strategy, rationale, language, to) and persists the row to outreach_emails
+  // server-side. The UI opens a mailto: with the body pre-filled; user clicks
+  // "Markér sendt" in EmailActionBar after sending to stamp sent_at.
+  async function draftEmail(leadId: string): Promise<EmailDraft | null> {
+    setErr(null);
+    const { data, error } = await supabase.functions.invoke("outreach-ai?op=draft_email", {
+      body: { leadId },
+    });
+    if (error) {
+      setErr(`Email draft failed: ${error.message}`);
+      return null;
+    }
+    const d = data as EmailDraft & { error?: string };
+    if (d.error) { setErr(`Email draft: ${d.error}`); return null; }
+    return d;
+  }
+
+  async function markEmailSent(emailDraftId: string) {
+    setErr(null);
+    const now = new Date().toISOString();
+    const { data: row, error: fetchErr } = await supabase
+      .from("outreach_emails")
+      .select("pipeline_lead_id")
+      .eq("id", emailDraftId)
+      .single();
+    if (fetchErr || !row) { setErr("email draft not found"); return; }
+    const userEmail = user?.email ?? null;
+    await supabase.from("outreach_emails")
+      .update({ sent_at: now, created_by: userEmail })
+      .eq("id", emailDraftId);
+    await supabase.from("outreach_pipeline")
+      .update({ last_email_at: now })
+      .eq("sendpilot_lead_id", row.pipeline_lead_id);
+    await load();
+  }
+
   async function markReplyHandled(replyId: string) {
     const { error } = await supabase
       .from("outreach_replies")
@@ -1177,6 +1229,8 @@ export default function OutreachPage() {
             onJumpTo={setTab}
             onCallOutcome={(leadId, outcome, callbackAt) =>
               void recordCallOutcome(leadId, outcome, callbackAt)}
+            onDraftEmail={draftEmail}
+            onMarkEmailSent={(id) => void markEmailSent(id)}
           />
         ) : tab === "opgaver" ? (
           <OpgaverTab
@@ -1703,10 +1757,12 @@ function AcceptedTab({ rows, busyLead, onRender, onReject }: {
 // Each row is one thing to act on today. Clicking "Gå til" jumps to the tab
 // that actually performs the action; rows with a phone get inline outcome
 // buttons so you can run a call-sprint without leaving the queue.
-function IDagTab({ queue, onJumpTo, onCallOutcome }: {
+function IDagTab({ queue, onJumpTo, onCallOutcome, onDraftEmail, onMarkEmailSent }: {
   queue: ActionQueueRow[];
   onJumpTo: (t: Tab) => void;
   onCallOutcome: (leadId: string, outcome: CallOutcome, callbackAt?: string) => void;
+  onDraftEmail: (leadId: string) => Promise<EmailDraft | null>;
+  onMarkEmailSent: (emailDraftId: string) => void;
 }) {
   if (queue.length === 0) {
     return (
@@ -1721,7 +1777,8 @@ function IDagTab({ queue, onJumpTo, onCallOutcome }: {
     approval: "inbox",
     referral: "replies",
     signal: "signaler",
-    call: "i_dag",  // call rows stay on i_dag; outcome buttons handle the action inline
+    call: "i_dag",
+    email: "i_dag",
   };
 
   const kindLabel: Record<ActionQueueRow["kind"], string> = {
@@ -1730,6 +1787,7 @@ function IDagTab({ queue, onJumpTo, onCallOutcome }: {
     referral: "HENVIST",
     signal: "SIGNAL",
     call: "RING",
+    email: "EMAIL",
   };
 
   const kindColor: Record<ActionQueueRow["kind"], string> = {
@@ -1738,6 +1796,7 @@ function IDagTab({ queue, onJumpTo, onCallOutcome }: {
     referral: "bg-[var(--ink)]/10 text-[var(--ink)]/80",
     signal: "bg-[var(--ink)]/10 text-[var(--ink)]/80",
     call: "bg-[var(--clay)]/20 text-[var(--clay)]",
+    email: "bg-[var(--forest)]/15 text-[var(--forest)]",
   };
 
   function subkindLabel(row: ActionQueueRow): string {
@@ -1760,6 +1819,9 @@ function IDagTab({ queue, onJumpTo, onCallOutcome }: {
         interested: "interesseret",
       };
       return map[row.subkind] ?? row.subkind;
+    }
+    if (row.kind === "email") {
+      return row.subkind === "draft_ready" ? "udkast klar" : "skriv email";
     }
     return row.subkind;
   }
@@ -1827,7 +1889,10 @@ function IDagTab({ queue, onJumpTo, onCallOutcome }: {
           </div>
 
           <div className="flex shrink-0 flex-col gap-1.5 min-w-[180px]">
-            {(row.phone_direct || row.phone_office) && row.ref_lead_id ? (
+            {row.kind === "email" && row.ref_lead_id ? (
+              <EmailActionBar row={row} onDraft={onDraftEmail} onSent={onMarkEmailSent} />
+            ) : null}
+            {(row.phone_direct || row.phone_office) && row.ref_lead_id && row.kind !== "email" ? (
               <>
                 <a
                   href={`tel:${row.phone_direct || row.phone_office}`}
@@ -1841,7 +1906,7 @@ function IDagTab({ queue, onJumpTo, onCallOutcome }: {
                 />
               </>
             ) : null}
-            {row.kind !== "call" ? (
+            {row.kind !== "call" && row.kind !== "email" ? (
               <button
                 type="button"
                 onClick={() => onJumpTo(tabForKind[row.kind])}
@@ -1855,6 +1920,83 @@ function IDagTab({ queue, onJumpTo, onCallOutcome }: {
       ))}
     </ul>
   );
+}
+
+// EmailActionBar — two states. needs_draft shows a "✨ Skriv" button that
+// calls outreach-ai draft_email → fetches subject/body/strategy → opens
+// mailto: with body pre-filled. draft_ready shows subject + a "📧 Åbn"
+// button (re-opens the same mailto) + "✓ Sendt" to stamp sent_at.
+function EmailActionBar({ row, onDraft, onSent }: {
+  row: ActionQueueRow;
+  onDraft: (leadId: string) => Promise<EmailDraft | null>;
+  onSent: (emailDraftId: string) => void;
+}) {
+  const [draft, setDraft] = useState<EmailDraft | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function handleDraft() {
+    if (!row.ref_lead_id) return;
+    setBusy(true);
+    const d = await onDraft(row.ref_lead_id);
+    setBusy(false);
+    if (d) {
+      setDraft(d);
+      // Auto-open mailto so the user can review + send immediately
+      const href = mailtoHrefFromDraft(d);
+      if (typeof window !== "undefined") window.location.href = href;
+    }
+  }
+
+  function openMailto() {
+    if (!draft) return;
+    const href = mailtoHrefFromDraft(draft);
+    if (typeof window !== "undefined") window.location.href = href;
+  }
+
+  function markSent() {
+    if (!draft) return;
+    onSent(draft.id);
+  }
+
+  if (draft) {
+    return (
+      <>
+        <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--forest)]/70">
+          ✨ {draft.strategy} · {draft.language}
+        </div>
+        <button
+          type="button"
+          onClick={openMailto}
+          className="rounded border border-[var(--forest)]/40 bg-[var(--forest)]/10 px-3 py-1.5 text-center text-[11px] uppercase tracking-[0.22em] text-[var(--forest)] hover:bg-[var(--forest)]/20"
+        >
+          📧 Åbn i mail
+        </button>
+        <button
+          type="button"
+          onClick={markSent}
+          className="rounded border border-[var(--ink)]/20 px-3 py-1.5 text-[11px] uppercase tracking-[0.22em] text-[var(--ink)]/70 hover:bg-[var(--ink)]/5"
+        >
+          ✓ Markér sendt
+        </button>
+      </>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={handleDraft}
+      disabled={busy}
+      className="rounded border border-[var(--forest)]/40 bg-[var(--forest)]/10 px-3 py-1.5 text-center text-[11px] uppercase tracking-[0.22em] text-[var(--forest)] hover:bg-[var(--forest)]/20 disabled:opacity-60"
+    >
+      {busy ? "✨ Skriver…" : "✨ Skriv email"}
+    </button>
+  );
+}
+
+function mailtoHrefFromDraft(d: EmailDraft): string {
+  const q = `subject=${encodeURIComponent(d.subject)}&body=${encodeURIComponent(d.body)}`;
+  return `mailto:${d.to}?${q}`;
 }
 
 // Compact outcome bar shown next to the Ring button. First click logs a

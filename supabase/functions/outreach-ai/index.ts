@@ -104,8 +104,211 @@ Deno.serve(async (req) => {
     return json(result);
   }
 
+  if (op === "draft_email") {
+    const leadId = String(body.leadId ?? "").trim();
+    if (!leadId) return json({ error: "leadId required" }, 400);
+    const admin = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    );
+    const result = await draftEmail(admin, leadId);
+    if ("error" in result) return json(result, 502);
+    return json(result);
+  }
+
   return json({ error: `unknown op: ${op}` }, 400);
 });
+
+// ---------- draft_email ----------------------------------------------------
+//
+// Drafts an outbound email to a prospect, picking a strategy based on the
+// lead's current state (call_outcome, last_reply_intent, prior LinkedIn
+// thread). Persists the draft to outreach_emails with the chosen strategy
+// + rationale so we can later A/B which strategies convert.
+//
+// Strategies (closed list — keep this short so analytics are clean):
+//   reconnect_post_call  — call attempt happened, no progress yet
+//   reply_redirect       — they replied on LinkedIn but no booking
+//   warm_recap           — accepted LinkedIn invite, never replied
+//   referral_intro       — fresh contact via someone else's referral
+//   first_contact        — none of the above (cold email start)
+
+type EmailStrategy =
+  | "reconnect_post_call"
+  | "reply_redirect"
+  | "warm_recap"
+  | "referral_intro"
+  | "first_contact";
+
+async function draftEmail(
+  admin: ReturnType<typeof createClient>,
+  leadId: string,
+): Promise<
+  | { id: string; subject: string; body: string; strategy: EmailStrategy; rationale: string; language: string; to: string }
+  | { error: string }
+> {
+  const { data: pipe } = await admin
+    .from("outreach_pipeline")
+    .select("sendpilot_lead_id, contact_email, workspace_id, rendered_message, call_outcome, last_reply_intent, last_reply_at, accepted_at, referred_from_pipeline_lead_id, email_direct, email_office")
+    .eq("sendpilot_lead_id", leadId)
+    .maybeSingle();
+  if (!pipe) return { error: "pipeline lead not found" };
+
+  const toEmail = pipe.email_direct ?? pipe.email_office;
+  if (!toEmail) return { error: "no email enriched for this lead" };
+
+  const { data: playbook } = await admin
+    .from("outreach_voice_playbooks")
+    .select("*")
+    .eq("workspace_id", pipe.workspace_id ?? "")
+    .maybeSingle<Playbook>();
+  if (!playbook) return { error: `no voice playbook for workspace ${pipe.workspace_id}` };
+
+  const { data: lead } = await admin
+    .from("outreach_leads")
+    .select("first_name, last_name, company, title, country")
+    .eq("contact_email", pipe?.contact_email ?? "")
+    .maybeSingle();
+
+  const { data: thread } = await admin
+    .from("outreach_replies")
+    .select("direction, message, received_at, intent")
+    .eq("sendpilot_lead_id", leadId)
+    .order("received_at", { ascending: true })
+    .limit(20);
+
+  // Language: DK by country, else English.
+  const country = (lead?.country ?? "").toUpperCase();
+  const language = ["DK", "SE", "NO"].includes(country) ? "da" : "en";
+
+  // Pick the strategy. Sonnet validates this — but we suggest the default
+  // based on state so the model has a strong prior.
+  let suggestedStrategy: EmailStrategy = "first_contact";
+  if (pipe.referred_from_pipeline_lead_id) suggestedStrategy = "referral_intro";
+  else if (pipe.call_outcome) suggestedStrategy = "reconnect_post_call";
+  else if (pipe.last_reply_intent && pipe.last_reply_intent !== "decline" && pipe.last_reply_intent !== "ooo") suggestedStrategy = "reply_redirect";
+  else if (pipe.accepted_at) suggestedStrategy = "warm_recap";
+
+  const ctaInstruction = playbook.cta_preference === "no_cta"
+    ? "Do NOT push for a meeting. Leave room for a low-friction next exchange."
+    : playbook.cta_preference === "booking_link"
+    ? `Include the booking link: ${playbook.booking_link ?? "(missing)"}`
+    : "Use soft-discovery framing — informal exchange invitation. No aggressive close.";
+
+  const systemPrompt = [
+    `You're drafting an outbound EMAIL on behalf of ${playbook.owner_first_name}.`,
+    "",
+    "## What we offer",
+    playbook.value_prop,
+    "",
+    "## Voice — match the owner's LinkedIn voice from the thread (below) exactly. Slightly more formal for email but never corporate.",
+    "",
+    `## Owner-specific guidelines`,
+    playbook.guidelines,
+    "",
+    `## CTA preference`,
+    ctaInstruction,
+    "",
+    "## Output — JSON ONLY, no preamble, no markdown fences:",
+    `{`,
+    `  "subject": "<short, lowercase-friendly, max 60 chars>",`,
+    `  "body": "<plain text body — no signature, no greeting line if naturally implied>",`,
+    `  "strategy": "<one of: reconnect_post_call | reply_redirect | warm_recap | referral_intro | first_contact>",`,
+    `  "rationale": "<≤15 words on which signals drove the strategy choice>",`,
+    `  "language": "<da | en>"`,
+    `}`,
+    "",
+    "## Hard rules",
+    `- Length: 60–140 words body, single paragraph or 2 short paragraphs.`,
+    `- ${language === "da" ? "Danish" : "English"}.`,
+    `- Open with the prospect's name. No "Hope you're well".`,
+    `- Reference the LinkedIn connection ("vi connected på LinkedIn" / "we connected on LinkedIn") so they remember context.`,
+    `- If there's been a call attempt, acknowledge it gently.`,
+    `- End with a clear, low-pressure next step.`,
+    `- Sign off with the owner's first name only.`,
+  ].join("\n");
+
+  const ctxLines: string[] = [];
+  ctxLines.push(`Lead: ${lead?.first_name ?? "?"} ${lead?.last_name ?? ""} at ${lead?.company ?? "?"}, ${lead?.title ?? "?"} (${country || "?"})`);
+  ctxLines.push(`To-email: ${toEmail}`);
+  ctxLines.push(`Suggested strategy: ${suggestedStrategy}`);
+  ctxLines.push(`call_outcome: ${pipe.call_outcome ?? "none"}`);
+  ctxLines.push(`last_reply_intent: ${pipe.last_reply_intent ?? "none"}`);
+  ctxLines.push("");
+  if (pipe.rendered_message) {
+    ctxLines.push(`Original LinkedIn opener:`);
+    ctxLines.push(`> ${pipe.rendered_message.replaceAll("\n", "\n> ")}`);
+    ctxLines.push("");
+  }
+  if (thread && thread.length > 0) {
+    ctxLines.push("LinkedIn thread (chronological):");
+    for (const m of thread) {
+      const role = m.direction === "outbound" ? playbook.owner_first_name : (lead?.first_name ?? "Prospect");
+      ctxLines.push(`${role}: ${m.message}`);
+    }
+  }
+  ctxLines.push("");
+  ctxLines.push(`Draft the email now. JSON only.`);
+
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "x-api-key": ANTHROPIC_API_KEY,
+      "anthropic-version": "2023-06-01",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-6",
+      max_tokens: 600,
+      system: systemPrompt,
+      messages: [{ role: "user", content: ctxLines.join("\n") }],
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    console.error("draft_email ai error", res.status, body);
+    return { error: `ai HTTP ${res.status}` };
+  }
+  const data = await res.json();
+  const blocks = (data.content ?? []) as Array<{ type: string; text?: string }>;
+  const raw = blocks.find((b) => b.type === "text")?.text?.trim() ?? "";
+  // Strip code fences if Sonnet adds them despite the prompt
+  const cleaned = raw.replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
+  let parsed: { subject?: string; body?: string; strategy?: EmailStrategy; rationale?: string; language?: string };
+  try { parsed = JSON.parse(cleaned); }
+  catch { return { error: "ai returned non-JSON" }; }
+  if (!parsed.subject || !parsed.body) return { error: "ai missing subject/body" };
+
+  const { data: inserted, error: insErr } = await admin
+    .from("outreach_emails")
+    .insert({
+      workspace_id: pipe.workspace_id,
+      pipeline_lead_id: leadId,
+      to_email: toEmail,
+      subject: parsed.subject,
+      body: parsed.body,
+      strategy: parsed.strategy ?? suggestedStrategy,
+      rationale: parsed.rationale ?? null,
+      language: parsed.language ?? language,
+      drafted_by: "outreach-ai",
+    })
+    .select("id")
+    .single();
+  if (insErr || !inserted) {
+    console.error("outreach_emails insert error", insErr);
+    return { error: "failed to persist draft" };
+  }
+
+  return {
+    id: inserted.id,
+    subject: parsed.subject,
+    body: parsed.body,
+    strategy: parsed.strategy ?? suggestedStrategy,
+    rationale: parsed.rationale ?? "",
+    language: parsed.language ?? language,
+    to: toEmail,
+  };
+}
 
 type Playbook = {
   workspace_id: string;
