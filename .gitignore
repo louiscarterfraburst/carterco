@@ -47,3 +47,12 @@ scripts/**/_smoke_*.py
 *.tsbuildinfo
 next-env.d.ts
 .gstack/
+
+# per-machine agent / skill configs — never belong in the repo
+.agents/
+.claude/
+__pycache__/
+
+# private client documents (proposals, DPAs, agent briefs, raw data)
+# the repo is public; client-confidential material stays out
+clients/
