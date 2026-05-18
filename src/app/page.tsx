@@ -2518,10 +2518,10 @@ export default function Home() {
 
           <div className="relative mt-12 sm:mt-16 lg:mt-20">
             {/* Letter on left, photo on right */}
-            <div className="relative z-[1] grid items-start gap-10 sm:gap-12 lg:grid-cols-[3fr_2fr] lg:gap-8">
+            <div className="relative z-[1] grid items-start gap-10 sm:gap-12 lg:grid-cols-[22rem_1fr] lg:gap-8">
 
-              {/* LEFT — the letter */}
-              <div>
+              {/* LEFT on mobile, RIGHT on lg+ — the letter */}
+              <div className="lg:order-2">
 
                 {/* Body — thesis first, then craft + ongoing-operator model.
                     Opens with the POV: most teams know what tools to buy;
@@ -2577,12 +2577,11 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* RIGHT — polaroid. 3fr/2fr grid (text-favored 60/40) with
-                  items-end so the photo bottom-aligns with the CTA at the
-                  bottom of the letter. Photo capped at max-w-[22rem] which
-                  is right for the narrower 2fr column. */}
-              <div>
-                <div className="relative mx-auto w-full max-w-[22rem] lg:ml-auto lg:mr-0">
+              {/* LEFT on lg+, BELOW on mobile — polaroid. Photo column
+                  sized to match photo width (lg:grid-cols-[22rem_1fr]) so
+                  there's no dead space alongside the photo. */}
+              <div className="lg:order-1">
+                <div className="relative mx-auto w-full max-w-[22rem] lg:ml-0 lg:mr-auto">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src="/louis.jpeg"
