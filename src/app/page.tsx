@@ -828,7 +828,7 @@ export default function Home() {
               <span className="text-lg">→</span>
             </button>
             <span className="text-[10px] font-bold uppercase tracking-[0.25em] text-[var(--cream)]/45">
-              Du får dit tal i kroner
+              3 min
             </span>
           </div>
         </div>
