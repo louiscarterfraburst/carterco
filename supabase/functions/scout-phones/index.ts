@@ -30,6 +30,7 @@ const corsHeaders = {
 
 const APIFY_API_TOKEN = Deno.env.get("APIFY_API_TOKEN") ?? "";
 const APIFY_PHONE_ACTOR = "parvenu~mobile-phone-enrichment";
+const APIFY_EMAIL_ACTOR = "anchor~linkedin-to-email";
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL") ?? "",
@@ -57,12 +58,13 @@ type Trace = {
   scrape: {
     tried: string[];
     directs: string[]; offices: string[];
-    emails_personal: string[];   // looks like first.last@domain or matches the person's name
-    emails_generic: string[];    // info@, contact@, kontakt@, etc.
+    emails_personal: string[];
+    emails_generic: string[];
     error?: string;
   };
   cvr?: { tried?: boolean; cvr_number?: string | null; owner_email?: string | null; office_phone?: string | null; error?: string };
   apify: { skipped?: string; error?: string; mobile?: string | null; raw?: unknown };
+  apify_email?: { skipped?: string; error?: string; email?: string | null; raw?: unknown };
   decision: {
     phone_direct: string | null; phone_office: string | null; phone_source: string | null;
     email_direct: string | null; email_office: string | null; email_source: string | null;
@@ -168,6 +170,31 @@ Deno.serve(async (request) => {
     trace.apify.skipped = "no linkedin_url";
   } else {
     trace.apify.skipped = "scrape already found direct";
+  }
+
+  // ---------- Source 3: Apify anchor/linkedin-to-email ----------
+  // Fires when we still don't have email_direct after scrape + CVR. Charges
+  // ~$0.012 per lookup (success OR miss), so skip when we already have a
+  // direct email. Free-tier limit: 1 profile per run, which is fine because
+  // scout-phones is invoked per-lead.
+  const needEmail = !trace.decision.email_direct;
+  if (needEmail && APIFY_API_TOKEN && target.linkedinUrl) {
+    try {
+      const er = await apifyEmailFinder(target.linkedinUrl);
+      trace.apify_email = er;
+      if (er.email) {
+        trace.decision.email_direct = er.email;
+        trace.decision.email_source = "apify_anchor";
+      }
+    } catch (e) {
+      trace.apify_email = { error: `${(e as Error).message}` };
+    }
+  } else if (!APIFY_API_TOKEN) {
+    trace.apify_email = { skipped: "APIFY_API_TOKEN not configured" };
+  } else if (!target.linkedinUrl) {
+    trace.apify_email = { skipped: "no linkedin_url" };
+  } else {
+    trace.apify_email = { skipped: "email_direct already found upstream" };
   }
 
   // Office fallback: if no direct found but scrape gave us an office, keep it.
@@ -502,6 +529,39 @@ function normalizePhone(raw: string): string | null {
 }
 
 // ---------- Source 2: Apify parvenu mobile-phone-enrichment ----------------
+
+// anchor/linkedin-to-email — takes LinkedIn URL, returns prospect email if
+// the actor's DB has them. Free-tier limit: 1 profile per run, so we always
+// call with a single URL. Charges per-lookup whether success or miss, so the
+// caller should gate on need (skip when email_direct is already known).
+async function apifyEmailFinder(linkedinUrl: string): Promise<{
+  email: string | null; raw?: unknown; error?: string;
+}> {
+  const url = `https://api.apify.com/v2/acts/${APIFY_EMAIL_ACTOR}/run-sync-get-dataset-items?token=${APIFY_API_TOKEN}`;
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ startUrls: [{ url: linkedinUrl }] }),
+    });
+  } catch (e) {
+    return { email: null, error: `network: ${(e as Error).message}` };
+  }
+  if (!res.ok) {
+    const txt = await res.text().catch(() => "");
+    return { email: null, error: `apify HTTP ${res.status}: ${txt.slice(0, 200)}` };
+  }
+  let arr: Array<{ email?: string | null; errorMessage?: string; url?: string }>;
+  try { arr = await res.json(); }
+  catch { return { email: null, error: "bad json from apify" }; }
+  if (!Array.isArray(arr) || arr.length === 0) return { email: null, raw: arr };
+  const first = arr[0];
+  if (first.email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(first.email)) {
+    return { email: first.email.toLowerCase(), raw: first };
+  }
+  return { email: null, raw: first };
+}
 
 async function apifyMobileFinder(linkedinUrl: string): Promise<{
   mobile: string | null; raw?: unknown; error?: string;
