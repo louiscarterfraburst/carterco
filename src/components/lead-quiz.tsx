@@ -540,7 +540,7 @@ function UrlStep({
             Næste →
           </PrimaryButton>
           <span className="text-[10px] font-bold uppercase tracking-[0.25em] text-[var(--cream)]/45">
-            3 min · du får et tal for hvor meget du taber
+            Du får et tal for hvor meget du taber
           </span>
         </div>
       }

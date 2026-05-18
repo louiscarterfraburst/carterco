@@ -818,7 +818,7 @@ export default function Home() {
               "Louis appears exactly once per top-level page." The hero CTA
               now names the outcome of taking the quiz instead of the action
               ("Tag lead-quizzen" said HVAD man gør, not HVAD man får). */}
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-6">
+          <div className="flex">
             <button
               type="button"
               onClick={() => setQuizOpen(true)}
@@ -827,9 +827,6 @@ export default function Home() {
               <span>Se hvor leads forsvinder</span>
               <span className="text-lg">→</span>
             </button>
-            <span className="text-[10px] font-bold uppercase tracking-[0.25em] text-[var(--cream)]/45">
-              3 min
-            </span>
           </div>
         </div>
         </div>
