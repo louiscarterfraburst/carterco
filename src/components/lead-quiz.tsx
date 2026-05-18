@@ -3,10 +3,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   type Channel,
+  type FollowupQuality,
+  type OutboundQuality,
   type QuizInputs,
   type ResponseTime,
   ALL_CHANNELS,
   CHANNEL_LABELS,
+  FOLLOWUP_QUALITY_LABELS,
+  FOLLOWUP_QUALITY_OPTIONS,
+  OUTBOUND_QUALITY_LABELS,
+  OUTBOUND_QUALITY_OPTIONS,
   RESPONSE_TIME_LABELS,
   computeLoss,
   formatKr,
@@ -31,13 +37,18 @@ type Props = {
   onConvert: () => void;
 };
 
+// Step order maps to the three machines: leads/deal/close = baseline inputs,
+// then outbound questions (channels, outbound-quality), then hastighed (speed),
+// then opfølgning (followup-quality), then contact + result.
 const STEP_KEYS = [
   "url",
   "leads",
   "deal",
   "close",
-  "speed",
   "channels",
+  "outbound-quality",
+  "speed",
+  "followup-quality",
   "contact",
   "result",
 ] as const;
@@ -49,8 +60,10 @@ const STEP_LABELS: Record<StepKey, string> = {
   leads: "Leads",
   deal: "Aftaleværdi",
   close: "Lukkerate",
-  speed: "Reaktionstid",
   channels: "Kanaler",
+  "outbound-quality": "Outbound",
+  speed: "Hastighed",
+  "followup-quality": "Opfølgning",
   contact: "Kontakt",
   result: "Resultat",
 };
@@ -81,6 +94,10 @@ export function LeadQuiz({ open, onClose, onConvert }: Props) {
   const [closeRate, setCloseRate] = useState("15"); // 0..100
   const [responseTime, setResponseTime] = useState<ResponseTime>("30mto1h");
   const [channels, setChannels] = useState<Channel[]>(["linkedin"]);
+  const [outboundQuality, setOutboundQuality] =
+    useState<OutboundQuality>("light");
+  const [followupQuality, setFollowupQuality] =
+    useState<FollowupQuality>("manual");
   const [analysis, setAnalysis] = useState<AnalysisState>({ status: "idle" });
   const [contactName, setContactName] = useState("");
   const [contactEmail, setContactEmail] = useState("");
@@ -123,8 +140,18 @@ export function LeadQuiz({ open, onClose, onConvert }: Props) {
       closeRate: (Number(closeRate) || 0) / 100,
       responseTime,
       channels,
+      outboundQuality,
+      followupQuality,
     }),
-    [monthlyLeads, dealValue, closeRate, responseTime, channels],
+    [
+      monthlyLeads,
+      dealValue,
+      closeRate,
+      responseTime,
+      channels,
+      outboundQuality,
+      followupQuality,
+    ],
   );
 
   const result = useMemo(() => computeLoss(inputs), [inputs]);
@@ -194,10 +221,12 @@ export function LeadQuiz({ open, onClose, onConvert }: Props) {
           closeRate: inputs.closeRate,
           responseTime: inputs.responseTime,
           channels: inputs.channels,
+          outboundQuality: inputs.outboundQuality,
+          followupQuality: inputs.followupQuality,
           totalLoss: result.totalLoss,
-          speedLoss: result.speedLoss,
-          closeRateLoss: result.closeRateLoss,
-          channelLoss: result.channelLoss,
+          hastighedLoss: result.hastighedLoss,
+          outboundLoss: result.outboundLoss,
+          opfølgningLoss: result.opfølgningLoss,
         }),
       });
       const data = (await res.json().catch(() => ({}))) as {
@@ -326,6 +355,30 @@ export function LeadQuiz({ open, onClose, onConvert }: Props) {
               }))}
               onSubmit={next}
               submitLabel="Næste →"
+            />
+          )}
+          {currentStepKey === "outbound-quality" && (
+            <ChoiceStep
+              question="Hvor personlig er jeres outbound?"
+              value={outboundQuality}
+              onChange={(v) => setOutboundQuality(v as OutboundQuality)}
+              options={OUTBOUND_QUALITY_OPTIONS.map((v) => ({
+                value: v,
+                label: OUTBOUND_QUALITY_LABELS[v],
+              }))}
+              onSubmit={next}
+            />
+          )}
+          {currentStepKey === "followup-quality" && (
+            <ChoiceStep
+              question="Hvad sker der med leads der ikke køber nu?"
+              value={followupQuality}
+              onChange={(v) => setFollowupQuality(v as FollowupQuality)}
+              options={FOLLOWUP_QUALITY_OPTIONS.map((v) => ({
+                value: v,
+                label: FOLLOWUP_QUALITY_LABELS[v],
+              }))}
+              onSubmit={next}
             />
           )}
           {currentStepKey === "contact" && (
@@ -831,46 +884,86 @@ function ResultStep({
         </div>
       )}
 
-      {/* Loss breakdown */}
+      {/* Loss breakdown — three machine-labeled rows, each anchored to one
+          of the three GTM machines on the site. Replaces the previous
+          speed-centric "Hvor det går galt" framing. */}
       <div className="border-t border-[var(--cream)]/10 pt-6">
         <p className="font-mono text-[10px] font-bold uppercase tracking-[0.3em] text-[var(--cream)]/55">
-          Hvor det går galt
+          Tre maskiner, tre lækager
         </p>
-        <ul className="mt-4 flex flex-col gap-3 text-[14px] leading-relaxed text-[var(--cream)]/85">
-          <li className="flex items-start gap-3">
-            <span className="font-display text-base font-semibold tabular text-[#ff6b2c] sm:min-w-[8ch]">
-              {formatKr(result.speedLoss)}
-            </span>
-            <span className="flex-1 text-[var(--cream)]/70">
-              fra langsom respons — 21× lavere kvalitet over 5 min.
+        <ul className="mt-5 flex flex-col gap-5 text-[14px] leading-relaxed">
+          {/* OUTBOUND */}
+          <li className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:gap-4">
+            <div className="flex items-baseline gap-3 sm:min-w-[14rem]">
+              <span className="text-[9px] font-bold uppercase tracking-[0.3em] text-[var(--clay)]">
+                Outbound
+              </span>
+              <span className="font-display text-lg font-semibold tabular text-[#ff6b2c]">
+                {formatKr(result.outboundLoss)}
+              </span>
+            </div>
+            <span className="flex-1 text-[var(--cream)]/72">
+              {inputs.outboundQuality === "templated"
+                ? "Mass-templates rammer ikke beslutningstagere"
+                : inputs.outboundQuality === "none"
+                ? "Ingen outbound, ingen nye samtaler"
+                : result.missingChannels.length > 0
+                ? `Mangler ${missingLabels.join(", ")}`
+                : "Tæt på fuld dækning — kun lille spild her"}
+              .
             </span>
           </li>
-          <li className="flex items-start gap-3">
-            <span className="font-display text-base font-semibold tabular text-[#ff6b2c] sm:min-w-[8ch]">
-              {formatKr(result.closeRateLoss)}
-            </span>
-            <span className="flex-1 text-[var(--cream)]/70">
-              fra lav lukkerate — du er på{" "}
-              {Math.round(inputs.closeRate * 100)}%.
+
+          {/* HASTIGHED */}
+          <li className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:gap-4">
+            <div className="flex items-baseline gap-3 sm:min-w-[14rem]">
+              <span className="text-[9px] font-bold uppercase tracking-[0.3em] text-[#ff6b2c]">
+                Hastighed
+              </span>
+              <span className="font-display text-lg font-semibold tabular text-[#ff6b2c]">
+                {formatKr(result.hastighedLoss)}
+              </span>
+            </div>
+            <span className="flex-1 text-[var(--cream)]/72">
+              21× lavere kvalitet over 5 min,{" "}
+              <a
+                href="https://25649.fs1.hubspotusercontent-na2.net/hub/25649/file-13535879-pdf/docs/mit_study.pdf"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline decoration-[#ff6b2c]/50 decoration-2 underline-offset-2 hover:decoration-[#ff6b2c]"
+              >
+                iflg. MIT-studiet
+              </a>
+              .
             </span>
           </li>
-          {result.channelLoss > 0 && (
-            <li className="flex items-start gap-3">
-              <span className="font-display text-base font-semibold tabular text-[#ff6b2c] sm:min-w-[8ch]">
-                {formatKr(result.channelLoss)}
+
+          {/* OPFØLGNING */}
+          <li className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:gap-4">
+            <div className="flex items-baseline gap-3 sm:min-w-[14rem]">
+              <span className="text-[9px] font-bold uppercase tracking-[0.3em] text-[var(--forest)]">
+                Opfølgning
               </span>
-              <span className="flex-1 text-[var(--cream)]/70">
-                fra manglende kanaler — du mangler {missingLabels.join(", ")}.
+              <span className="font-display text-lg font-semibold tabular text-[#ff6b2c]">
+                {formatKr(result.opfølgningLoss)}
               </span>
-            </li>
-          )}
+            </div>
+            <span className="flex-1 text-[var(--cream)]/72">
+              {inputs.followupQuality === "manual" || inputs.followupQuality === "none"
+                ? "Leads der ikke køber nu, glemmes"
+                : inputs.followupQuality === "partial"
+                ? "Halvautomatisk pleje, deals tabes i støjen"
+                : `Lukkerate ${Math.round(inputs.closeRate * 100)}%, B2B-benchmark 25%`}
+              .
+            </span>
+          </li>
         </ul>
       </div>
 
-      {/* CTA */}
+      {/* CTA — system-level, not speed-leak-flavored */}
       <div className="flex flex-col items-start gap-3 border-t border-[var(--cream)]/10 pt-6 sm:flex-row sm:items-center">
         <PrimaryButton onClick={onConvert}>
-          Få et 30-min lead-tjek og luk hullet →
+          Få en 30-min GTM-snak →
         </PrimaryButton>
         <span className="text-[11px] uppercase tracking-[0.2em] text-[var(--cream)]/40">
           30 min · uforpligtende

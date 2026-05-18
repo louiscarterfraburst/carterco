@@ -19,10 +19,16 @@ type Body = {
   closeRate?: number;
   responseTime?: string;
   channels?: string[];
+  outboundQuality?: string;
+  followupQuality?: string;
   totalLoss?: number;
-  speedLoss?: number;
-  closeRateLoss?: number;
-  channelLoss?: number;
+  // 2026-05-18: renamed from speedLoss/closeRateLoss/channelLoss to the
+  // three-machine framing. Old field names removed; DB columns keep their
+  // existing names for now (speed_loss / close_rate_loss / channel_loss
+  // = hastighed / opfølgning / outbound respectively).
+  hastighedLoss?: number;
+  outboundLoss?: number;
+  opfølgningLoss?: number;
 };
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -81,9 +87,12 @@ export async function POST(req: Request) {
       response_time: body.responseTime ?? null,
       channels: body.channels ?? null,
       total_loss: body.totalLoss ?? null,
-      speed_loss: body.speedLoss ?? null,
-      close_rate_loss: body.closeRateLoss ?? null,
-      channel_loss: body.channelLoss ?? null,
+      // DB columns kept (no migration); the new three-machine fields map
+      // to existing columns: speed_loss = hastighed, close_rate_loss =
+      // opfølgning, channel_loss = outbound.
+      speed_loss: body.hastighedLoss ?? null,
+      close_rate_loss: body.opfølgningLoss ?? null,
+      channel_loss: body.outboundLoss ?? null,
       user_agent: userAgent,
       referrer: referer,
     })
