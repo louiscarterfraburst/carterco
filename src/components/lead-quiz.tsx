@@ -4,16 +4,22 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   type Channel,
   type FollowupQuality,
+  type LeadOriginMix,
   type OutboundQuality,
   type QuizInputs,
   type ResponseTime,
+  type SalesCycle,
   ALL_CHANNELS,
   CHANNEL_LABELS,
   FOLLOWUP_QUALITY_LABELS,
   FOLLOWUP_QUALITY_OPTIONS,
+  LEAD_ORIGIN_LABELS,
+  LEAD_ORIGIN_OPTIONS,
   OUTBOUND_QUALITY_LABELS,
   OUTBOUND_QUALITY_OPTIONS,
   RESPONSE_TIME_LABELS,
+  SALES_CYCLE_LABELS,
+  SALES_CYCLE_OPTIONS,
   computeLoss,
   formatKr,
   formatRange,
@@ -46,6 +52,8 @@ const STEP_KEYS = [
   "leads",
   "deal",
   "close",
+  "cycle",
+  "origin",
   "channels",
   "outbound-quality",
   "speed",
@@ -61,6 +69,8 @@ const STEP_LABELS: Record<StepKey, string> = {
   leads: "Leads",
   deal: "Aftaleværdi",
   close: "Lukkerate",
+  cycle: "Salgs-cyklus",
+  origin: "Inbound/outbound",
   channels: "Kanaler",
   "outbound-quality": "Outbound",
   speed: "Hastighed",
@@ -99,6 +109,8 @@ export function LeadQuiz({ open, onClose, onConvert }: Props) {
     useState<OutboundQuality>("light");
   const [followupQuality, setFollowupQuality] =
     useState<FollowupQuality>("manual");
+  const [salesCycle, setSalesCycle] = useState<SalesCycle>("2to8w");
+  const [leadOriginMix, setLeadOriginMix] = useState<LeadOriginMix>("mix");
   const [analysis, setAnalysis] = useState<AnalysisState>({ status: "idle" });
   const [contactName, setContactName] = useState("");
   const [contactEmail, setContactEmail] = useState("");
@@ -143,6 +155,8 @@ export function LeadQuiz({ open, onClose, onConvert }: Props) {
       channels,
       outboundQuality,
       followupQuality,
+      salesCycle,
+      leadOriginMix,
     }),
     [
       monthlyLeads,
@@ -152,6 +166,8 @@ export function LeadQuiz({ open, onClose, onConvert }: Props) {
       channels,
       outboundQuality,
       followupQuality,
+      salesCycle,
+      leadOriginMix,
     ],
   );
 
@@ -331,6 +347,30 @@ export function LeadQuiz({ open, onClose, onConvert }: Props) {
               min={0}
               max={100}
               suffix="%"
+            />
+          )}
+          {currentStepKey === "cycle" && (
+            <ChoiceStep
+              question="Hvor lang tid tager en typisk handel?"
+              value={salesCycle}
+              onChange={(v) => setSalesCycle(v as SalesCycle)}
+              options={SALES_CYCLE_OPTIONS.map((v) => ({
+                value: v,
+                label: SALES_CYCLE_LABELS[v],
+              }))}
+              onSubmit={next}
+            />
+          )}
+          {currentStepKey === "origin" && (
+            <ChoiceStep
+              question="Hvor kommer jeres leads typisk fra?"
+              value={leadOriginMix}
+              onChange={(v) => setLeadOriginMix(v as LeadOriginMix)}
+              options={LEAD_ORIGIN_OPTIONS.map((v) => ({
+                value: v,
+                label: LEAD_ORIGIN_LABELS[v],
+              }))}
+              onSubmit={next}
             />
           )}
           {currentStepKey === "speed" && (

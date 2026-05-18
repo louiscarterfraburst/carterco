@@ -20,6 +20,17 @@ export type FollowupQuality =
   | "manual"    // seller follows up when they have time
   | "none";     // no nurture for leads that don't buy now
 
+export type SalesCycle =
+  | "lt2w"     // <2 weeks
+  | "2to8w"   // 2-8 weeks
+  | "2to6mo"  // 2-6 months
+  | "gt6mo";  // >6 months
+
+export type LeadOriginMix =
+  | "mostly-inbound"  // mostly they reach out to us
+  | "mix"             // roughly half-half
+  | "mostly-outbound"; // mostly we reach out to them
+
 export type Channel =
   | "linkedin"
   | "cold-email"
@@ -37,6 +48,8 @@ export type QuizInputs = {
   channels: Channel[];
   outboundQuality: OutboundQuality;
   followupQuality: FollowupQuality;
+  salesCycle: SalesCycle;
+  leadOriginMix: LeadOriginMix;
 };
 
 export type QuizResult = {
@@ -114,6 +127,25 @@ const CHANNEL_LOSS_PER_MISSING = 0.08;
 // loses most of them, not just 15%.
 const FOLLOWUP_QUALITY_WEIGHT = 0.30;
 
+// Hastighed-loss multiplier by where leads originate.
+// Inbound leads are perishable — they reached out NOW expecting NOW.
+// Outbound leads, you control the timing — speed-to-respond matters less.
+const HASTIGHED_BY_ORIGIN: Record<LeadOriginMix, number> = {
+  "mostly-inbound": 1.2,
+  mix: 1.0,
+  "mostly-outbound": 0.7,
+};
+
+// Opfølgning-loss multiplier by sales-cycle length.
+// Short cycles (<2w) → decision happens fast, less nurture matters.
+// Long cycles (>6mo) → buyer drifts away, automated cadence is everything.
+const OPFOLGNING_BY_CYCLE: Record<SalesCycle, number> = {
+  lt2w: 0.7,
+  "2to8w": 1.0,
+  "2to6mo": 1.3,
+  gt6mo: 1.5,
+};
+
 export function computeLoss(i: QuizInputs): QuizResult {
   const speed = SPEED_FACTOR[i.responseTime];
   const outboundCaptured = OUTBOUND_QUALITY_FACTOR[i.outboundQuality];
@@ -127,8 +159,11 @@ export function computeLoss(i: QuizInputs): QuizResult {
   const actualMonthlyValue = leads * dealValue * closeRate * speed;
 
   // 1. HASTIGHED — value lost because slow response demotes lead quality.
-  // Anchored on MIT 5-min response-time study.
-  const hastighedLoss = leads * dealValue * closeRate * (1 - speed);
+  // Anchored on MIT 5-min response-time study. Multiplied by lead-origin
+  // mix: inbound leads are perishable, outbound leads aren't.
+  const originMultiplier = HASTIGHED_BY_ORIGIN[i.leadOriginMix];
+  const hastighedLoss =
+    leads * dealValue * closeRate * (1 - speed) * originMultiplier;
 
   // 2. OUTBOUND — two stacking factors:
   //    (a) Missing channels — leads they're not generating because a
@@ -152,9 +187,11 @@ export function computeLoss(i: QuizInputs): QuizResult {
   //        touches; automated cadence captures them.
   const closeRateGap = Math.max(0, IDEAL_CLOSE_RATE - closeRate);
   const followupLeak = (1 - followupCaptured) * FOLLOWUP_QUALITY_WEIGHT;
+  const cycleMultiplier = OPFOLGNING_BY_CYCLE[i.salesCycle];
   const opfølgningLoss =
-    leads * dealValue * closeRateGap * speed +
-    leads * dealValue * closeRate * speed * followupLeak;
+    (leads * dealValue * closeRateGap * speed +
+      leads * dealValue * closeRate * speed * followupLeak) *
+    cycleMultiplier;
 
   const totalLoss = hastighedLoss + outboundLoss + opfølgningLoss;
 
@@ -191,6 +228,19 @@ export const FOLLOWUP_QUALITY_LABELS: Record<FollowupQuality, string> = {
   none: "Vi har ingen pleje af kolde leads",
 };
 
+export const SALES_CYCLE_LABELS: Record<SalesCycle, string> = {
+  lt2w: "Under 2 uger",
+  "2to8w": "2-8 uger",
+  "2to6mo": "2-6 måneder",
+  gt6mo: "Over 6 måneder",
+};
+
+export const LEAD_ORIGIN_LABELS: Record<LeadOriginMix, string> = {
+  "mostly-inbound": "Mest dem der kontakter os",
+  mix: "Cirka halv-halv",
+  "mostly-outbound": "Mest os der kontakter dem",
+};
+
 export const CHANNEL_LABELS: Record<Channel, string> = {
   linkedin: "LinkedIn outreach",
   "cold-email": "Cold email",
@@ -223,6 +273,19 @@ export const FOLLOWUP_QUALITY_OPTIONS: readonly FollowupQuality[] = [
   "partial",
   "manual",
   "none",
+];
+
+export const SALES_CYCLE_OPTIONS: readonly SalesCycle[] = [
+  "lt2w",
+  "2to8w",
+  "2to6mo",
+  "gt6mo",
+];
+
+export const LEAD_ORIGIN_OPTIONS: readonly LeadOriginMix[] = [
+  "mostly-inbound",
+  "mix",
+  "mostly-outbound",
 ];
 
 export function formatKr(amount: number): string {
