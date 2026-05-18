@@ -164,6 +164,7 @@ type JourneyStage = {
   subpoints: string[];        // 4-6 lines showing depth — what the work actually is, not "features you get"
   proof?: { metric: string; unit: string; note: string; noteHref?: string };
   anchorClient: { name: string; line: string };          // Named anchor case + one-line attribution
+  rowTwoEyebrow: string;                                 // Stage-specific intro for the row-2 monitor strip — replaces the previous "+ andre dele af opsætningen" that repeated 3× (brand-register ban on repeated tracked labels).
   supportingClients: SupportingClient[];                  // 2-3 supporting clients as round-avatar placeholders
   visual: "outbound" | "pipeline" | "sms" | "flows";
   theme?: "sand" | "ember";                              // Surface theme — defaults to ember. Hastighed (02) flips to sand so the middle stage reads as a paper poster inset, restoring DESIGN.md's sand→ember alternation rhythm. Row-2 cards stay ember on sand stages (dark panels resting on paper).
@@ -182,9 +183,10 @@ const journey: JourneyStage[] = [
       "Annoncer til folk der ligner jeres bedste kunder",
       "Genaktivering af kolde leads I allerede har samlet",
     ],
-    anchorClient: { name: "Tresyv", line: "Kører den i dag." },
+    anchorClient: { name: "Tresyv", line: "31× outreach-volumen — uden at føles som spam." },
     supportingClients: [],
     visual: "outbound",
+    rowTwoEyebrow: "Morgenens kø",
   },
   {
     n: "02",
@@ -208,6 +210,7 @@ const journey: JourneyStage[] = [
     supportingClients: [],
     visual: "sms",
     theme: "sand",
+    rowTwoEyebrow: "Når et lead lander",
   },
   {
     n: "03",
@@ -229,6 +232,7 @@ const journey: JourneyStage[] = [
     anchorClient: { name: "Burst", line: "4× på samme budget." },
     supportingClients: [],
     visual: "pipeline",
+    rowTwoEyebrow: "Det der tikker ind",
   },
 ];
 
@@ -2160,7 +2164,7 @@ export default function Home() {
                     <div className="mt-24 flex items-center gap-3 sm:mt-28">
                       <span aria-hidden className="h-px w-8 bg-[var(--clay)]/60" />
                       <p className="text-[10px] font-bold uppercase tracking-[0.32em] text-[var(--clay)]">
-                        + andre dele af opsætningen
+                        {stage.rowTwoEyebrow}
                       </p>
                     </div>
                     <div className="mt-7 grid grid-cols-1 gap-5 sm:grid-cols-2 sm:gap-6 lg:grid-cols-4">
