@@ -2741,18 +2741,20 @@ export default function Home() {
                   </span>
                 </h2>
 
-                {/* Body — positive Hormozy beats: craft, mechanism, commitment, phone */}
+                {/* Body — positive Hormozy beats: craft, mechanism, commitment, phone.
+                    Operator-voice (first person, active), names the engagement
+                    model explicitly per DESIGN.md required pattern. */}
                 <div className="mt-8 max-w-md space-y-5 text-[15px] leading-[1.7] text-[#29261f]/85 sm:mt-10 sm:text-[16px]">
                   <p>
                     <span className="font-semibold text-[#29261f]">
-                      Hvert system bygges hands-on.
+                      Jeg bygger hvert system hands-on.
                     </span>
                   </p>
                   <p>
-                    Fra første dag til den dag den kører selv.
+                    Fra første dag til den dag det kører selv.
                   </p>
                   <p>
-                    Du har mig fra dag ét. Du beholder mig efter overdragelsen.
+                    Jeg er din fractional GTM-engineer i 3-6 måneder. Du har mig fra dag ét. Du beholder systemet efter overdragelsen.
                   </p>
                   <p>
                     Tag quizzen — oplev flowet fra kundens side, og se hvad dit eget system mangler.
