@@ -1002,7 +1002,7 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="relative overflow-hidden bg-[#0a0907] py-36 sm:py-48 lg:py-56">
+      <section className="relative overflow-hidden bg-[#0a0907] py-32 sm:py-44">
         {/* Atmospheric backdrop — top-of-section warm glow */}
         <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
           <div className="absolute left-1/2 top-[8%] h-[700px] w-[900px] -translate-x-1/2 rounded-full bg-[radial-gradient(ellipse_at_center,rgba(255,107,44,0.10),transparent_65%)] blur-2xl" />
@@ -2495,7 +2495,7 @@ export default function Home() {
           Net effect: journey ends, founder begins, ~270 lines lighter. */}
 
       {/* ─────── Section: Founder card — Værksteds-kortet ─────── */}
-      <section className="relative overflow-hidden bg-[#f6efe4] py-24 text-[#29261f] sm:py-32 lg:py-40">
+      <section className="relative overflow-hidden bg-[#f6efe4] py-28 text-[#29261f] sm:py-36 lg:py-40">
         <div aria-hidden className="paper-grain" />
 
         {/* Atmospheric backdrop — soft warm glow on paper */}
@@ -2507,16 +2507,22 @@ export default function Home() {
         <div className="relative mx-auto w-full max-w-[1080px] px-4 sm:px-8">
           <div className="relative">
             {/* Letter on left, photo on right */}
-            <div className="relative z-[1] grid gap-12 p-8 sm:gap-14 sm:p-14 lg:grid-cols-12 lg:gap-20 lg:p-20">
+            <div className="relative z-[1] grid gap-12 p-8 sm:gap-14 sm:p-14 lg:grid-cols-2 lg:gap-16 lg:p-20">
 
               {/* LEFT — the letter */}
-              <div className="lg:col-span-7">
+              <div>
 
-                <h2 className="font-display text-[14vw] leading-[0.92] tracking-[-0.045em] sm:text-[7vw] lg:text-[5.5rem]">
+                {/* Headline line break tuned: "Det er mig der" + "bygger." so
+                    the verb stands alone in italic at the end. Previous
+                    layout wrapped naturally at "mig" which broke the rhythm
+                    in the middle of the noun phrase. */}
+                <h2 className="font-display text-[14vw] leading-[0.92] tracking-[-0.045em] sm:text-[7vw] lg:text-[5.25rem]">
                   Hej.
                   <br />
                   <span className="bg-gradient-to-b from-[#ff8244] via-[#ff6b2c] to-[#c93c0a] bg-clip-text italic text-transparent">
-                    Det er mig der bygger.
+                    Det er mig der
+                    <br />
+                    bygger.
                   </span>
                 </h2>
 
@@ -2574,9 +2580,14 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* RIGHT — polaroid */}
-              <div className="lg:col-span-5">
-                <div className="relative mx-auto w-full max-w-[22rem] lg:ml-auto lg:mr-0">
+              {/* RIGHT — polaroid. Equal-width grid (lg:grid-cols-2) with
+                  the photo set wider (max-w-[26rem] vs previous 22rem) so
+                  the right side carries comparable visual weight to the
+                  letter, instead of the previous 7/5 text-favored split
+                  that left a lot of empty space between the body column
+                  and a too-small photo. */}
+              <div>
+                <div className="relative mx-auto w-full max-w-[26rem] lg:ml-auto lg:mr-0">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src="/louis.jpeg"
