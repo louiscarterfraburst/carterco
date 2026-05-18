@@ -2598,29 +2598,21 @@ export default function Home() {
                     <span>København</span>
                   </div>
 
-                  {/* Handwritten margin note + arrow — anchored to the
-                      Polaroid's top-left corner instead of the gap between
-                      grid columns. Sits just above and to the left of the
-                      photo, slightly rotated, with the arrow pointing
-                      down-right at the photo. Free of the grid's column
-                      gap, so the grid can tighten without squeezing the
-                      note. */}
+                  {/* Handwritten margin note + arrow — anchored below the
+                      Polaroid, on the right, with the arrow pointing up-
+                      left at the photo. Reads like a hand-scribbled P.S.
+                      under the printed archival caption. */}
                   <div
-                    className="pointer-events-none absolute -top-12 -left-4 hidden items-center gap-1 whitespace-nowrap text-[#29261f] sm:flex"
+                    className="pointer-events-none absolute -bottom-14 right-0 hidden items-end gap-1 whitespace-nowrap text-[#29261f] sm:flex"
                     style={{
                       fontFamily: "var(--font-handwritten)",
                       fontSize: "1.1rem",
-                      transform: "rotate(-6deg)",
+                      transform: "rotate(-4deg)",
                     }}
                   >
-                    <span className="leading-tight">
-                      det er mig
-                      <br />
-                      der svarer
-                    </span>
                     <span
                       aria-hidden
-                      className="ml-1 inline-block h-[1.4em] w-[1.4em] shrink-0 bg-[#ff6b2c]"
+                      className="mr-1 inline-block h-[1.4em] w-[1.4em] shrink-0 bg-[#ff6b2c]"
                       style={{
                         maskImage: "url(/annotation-arrow.png)",
                         maskSize: "contain",
@@ -2630,9 +2622,14 @@ export default function Home() {
                         WebkitMaskSize: "contain",
                         WebkitMaskRepeat: "no-repeat",
                         WebkitMaskPosition: "center",
-                        transform: "translate(0, 8px) rotate(45deg)",
+                        transform: "translate(0, -6px) scaleX(-1) rotate(-45deg)",
                       }}
                     />
+                    <span className="leading-tight">
+                      det er mig
+                      <br />
+                      der svarer
+                    </span>
                   </div>
                 </div>
               </div>
