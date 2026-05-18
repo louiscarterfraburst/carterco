@@ -2518,7 +2518,7 @@ export default function Home() {
 
           <div className="relative mt-12 sm:mt-16 lg:mt-20">
             {/* Letter on left, photo on right */}
-            <div className="relative z-[1] grid items-end gap-12 sm:gap-16 lg:grid-cols-2 lg:gap-12">
+            <div className="relative z-[1] grid items-end gap-10 sm:gap-12 lg:grid-cols-2 lg:gap-8">
 
               {/* LEFT — the letter */}
               <div>
