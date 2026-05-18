@@ -2519,20 +2519,26 @@ export default function Home() {
                   </span>
                 </h2>
 
-                {/* Body — positive Hormozy beats: craft, mechanism, commitment, phone.
-                    Operator-voice (first person, active), names the engagement
-                    model explicitly per DESIGN.md required pattern. */}
+                {/* Body — thesis first, then craft + terms. Opens with the
+                    POV that earns the rest of the letter: most teams know
+                    which tools to buy; what they're missing is the GLUE.
+                    That's the operator-job carterco actually sells. Then
+                    the engagement model (per DESIGN.md required pattern).
+                    Operator-voice throughout (first person, active). */}
                 <div className="mt-8 max-w-md space-y-5 text-[15px] leading-[1.7] text-[#29261f]/85 sm:mt-10 sm:text-[16px]">
                   <p>
                     <span className="font-semibold text-[#29261f]">
-                      Jeg bygger hvert system hands-on.
+                      De fleste ved godt hvad der skal til af værktøjer. CRM, annoncer, kalender, opkald.
                     </span>
                   </p>
                   <p>
-                    Fra første dag til den dag det kører selv.
+                    Det er at lime dem sammen der gør det til et system, ikke en bunke abonnementer.
                   </p>
                   <p>
-                    Jeg er hyret ind i 3-6 måneder for at bygge og køre salgssystemet. Du har mig fra dag ét. Du beholder systemet bagefter.
+                    Jeg bygger og kører det hver dag, fra første dag til det kører selv uden mig.
+                  </p>
+                  <p>
+                    Jeg er hyret ind i 3-6 måneder. Du har mig fra dag ét. Du beholder systemet bagefter.
                   </p>
                   <p>
                     Tag quizzen — oplev flowet fra kundens side, og se hvad dit eget system mangler.
