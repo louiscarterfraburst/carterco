@@ -803,7 +803,7 @@ export default function Home() {
             </span>
           </span>
           <br />
-          til ambitiøse B2B teams
+          til ambitiøse B2B-virksomheder
         </h1>
 
         <div className="mt-10 flex flex-col gap-14 pb-10 sm:mt-12 lg:mt-14">
@@ -814,31 +814,22 @@ export default function Home() {
             Leads køler. Møder glipper. Pipelines visner. Jeg bygger systemet, der finder dem, ringer dem op før de køler, plejer dem til de er klar, så du får flere aftaler i hus.
           </p>
 
-          <div className="flex flex-col-reverse items-start justify-between gap-8 sm:flex-row sm:items-end">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/signature.png"
-              alt="Louis Carter"
-              draggable={false}
-              onContextMenu={(e) => e.preventDefault()}
-              className="pointer-events-none h-16 w-auto select-none sm:h-20"
-              style={{
-                filter: "invert(1)",
-                mixBlendMode: "screen",
-                WebkitUserDrag: "none",
-              } as React.CSSProperties}
-            />
-
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-6">
-              <button
-                type="button"
-                onClick={() => setQuizOpen(true)}
-                className="group inline-flex items-center gap-4 rounded-full bg-[#ff6b2c] px-8 py-5 text-sm font-bold uppercase tracking-[0.25em] text-[#0f0d0a] shadow-[0_18px_60px_rgba(255,107,44,0.35)] transition hover:-translate-y-1 hover:bg-[#ff8244] hover:shadow-[0_24px_80px_rgba(255,107,44,0.5)]"
-              >
-                <span>Tag lead-quizzen</span>
-                <span className="text-lg">→</span>
-              </button>
-            </div>
+          {/* CTA group — signature lives in the founder card per DESIGN.md
+              "Louis appears exactly once per top-level page." The hero CTA
+              now names the outcome of taking the quiz instead of the action
+              ("Tag lead-quizzen" said HVAD man gør, not HVAD man får). */}
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-6">
+            <button
+              type="button"
+              onClick={() => setQuizOpen(true)}
+              className="group inline-flex items-center gap-4 rounded-full bg-[#ff6b2c] px-8 py-5 text-sm font-bold uppercase tracking-[0.25em] text-[#0f0d0a] shadow-[0_18px_60px_rgba(255,107,44,0.35)] transition hover:-translate-y-1 hover:bg-[#ff8244] hover:shadow-[0_24px_80px_rgba(255,107,44,0.5)]"
+            >
+              <span>Se hvor leads forsvinder</span>
+              <span className="text-lg">→</span>
+            </button>
+            <span className="text-[10px] font-bold uppercase tracking-[0.25em] text-[var(--cream)]/45">
+              3 min · ingen møde-booking
+            </span>
           </div>
         </div>
         </div>
