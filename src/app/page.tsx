@@ -2383,9 +2383,8 @@ export default function Home() {
                               <span className="text-[9px] text-[var(--cream)]/45">i dag</span>
                             </div>
                             <p className="mt-3 text-[11px] leading-snug text-[var(--cream)]/85">
-                              <span className="font-semibold">Vela Wood</span> · <span className="text-[#c93c0a] font-medium">21 dage forsinket</span>
+                              <span className="font-semibold">Vela Wood</span> · <span className="text-[#c93c0a] font-medium">21 dage forsinket</span> (normalt hver 14.)
                             </p>
-                            <p className="mt-1 text-[10px] text-[var(--cream)]/55">Normalt hver 14. dag.</p>
                             <div className="mt-3 flex items-center gap-2 border-t border-[var(--cream)]/8 pt-2.5">
                               <span className="flex-1 truncate text-[10px] text-[var(--cream)]/70">Ring CFO i dag</span>
                               <span className="text-[9px] font-bold uppercase tracking-wider text-[#c93c0a]">→</span>
@@ -2512,16 +2511,15 @@ export default function Home() {
               {/* LEFT — the letter */}
               <div>
 
-                {/* Headline at 4.25rem fits "Det er mig der" on a single line
-                    in the new 3fr-column. Verb "bygger." stands alone on
-                    its own italic line as the closing beat. */}
+                {/* Headline: "Hej." on its own upright line, then the italic
+                    phrase wraps naturally (no forced break) so we get one
+                    italic line on wide screens or a graceful two-line wrap
+                    only when the column genuinely demands it. */}
                 <h2 className="font-display text-[13vw] leading-[0.95] tracking-[-0.04em] sm:text-[6vw] lg:text-[4.25rem]">
                   Hej.
                   <br />
                   <span className="bg-gradient-to-b from-[#ff8244] via-[#ff6b2c] to-[#c93c0a] bg-clip-text italic text-transparent">
-                    Det er mig der
-                    <br />
-                    bygger.
+                    Det er mig der bygger.
                   </span>
                 </h2>
 
