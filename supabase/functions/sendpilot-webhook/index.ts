@@ -5,7 +5,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.103.3";
 import { normalizeWebsiteUrl } from "../_shared/text.ts";
-import { ODAGROUP_WORKSPACE_ID } from "../_shared/workspaces.ts";
+import { CARTERCO_WORKSPACE_ID, ODAGROUP_WORKSPACE_ID } from "../_shared/workspaces.ts";
 import { draftFirstMessage } from "../_shared/draft-first-message.ts";
 
 const corsHeaders = {
@@ -506,9 +506,11 @@ async function promoteFromInbox(
       company: i.company,
       title: i.title,
       country: i.country,
+      vertical: (i as Record<string, string | null>).vertical ?? null,
       contact_email: contactEmail,
       slug,
       workspace_id: wsId,
+      source: "lead_inbox",
     }, { onConflict: "linkedin_url" })
     .select()
     .single();

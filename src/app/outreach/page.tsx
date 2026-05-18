@@ -38,16 +38,20 @@ type Status =
 // have their first DM written by Claude. The strategy/rationale columns are
 // populated by draft_first_message; absence means it's a video-render lead.
 type MessageStrategy =
+  // OdaGroup
   | "commercial_excellence"
   | "crm_platform"
   | "ai_innovation"
-  | "medical_affairs";
+  | "medical_affairs"
+  // CarterCo (ad-spending DK SMBs)
+  | "ad_funnel_leak";
 
 const STRATEGY_LABELS: Record<MessageStrategy, string> = {
   commercial_excellence: "CommEx",
   crm_platform: "CRM/Veeva",
   ai_innovation: "AI/Innov",
   medical_affairs: "Med Affairs",
+  ad_funnel_leak: "Ad-leak",
 };
 
 type Intent = "interested" | "question" | "decline" | "ooo" | "other" | "referral";
@@ -215,7 +219,26 @@ type Signal = {
   alt_search_status: "pending" | "completed" | "empty" | "failed" | null;
 };
 
-type Tab = "opgaver" | "signaler" | "inbox" | "replies" | "sent" | "all" | "icp_rejected" | "icp";
+type Tab = "i_dag" | "opgaver" | "signaler" | "inbox" | "replies" | "sent" | "all" | "icp_rejected" | "icp";
+
+// vw_action_queue row shape — one entry per action item across replies,
+// approvals, referrals, and signals. The "I dag" tab is the unified surface.
+type ActionQueueRow = {
+  id: string;                  // composite: kind:ref_id
+  workspace_id: string;
+  kind: "reply" | "approval" | "referral" | "signal";
+  subkind: string;             // draft_ready, needs_response, approve_send, ...
+  ref_lead_id: string | null;  // sendpilot_lead_id or null
+  ref_id: string;              // underlying table PK as text
+  surfaced_at: string;
+  snippet: string;
+  contact_name: string | null;
+  company: string | null;
+  title: string | null;
+  intent: string | null;
+  linkedin_url: string | null;
+  priority_score: number;
+};
 
 type IcpVersion = {
   id: string;
@@ -337,6 +360,7 @@ export default function OutreachPage() {
   // Keyed by normalized domain (no protocol, no www) → leads at that company
   const [signalLeadMatches, setSignalLeadMatches] = useState<Record<string, SignalLeadMatch[]>>({});
   const [altContacts, setAltContacts] = useState<AltContact[]>([]);
+  const [actionQueue, setActionQueue] = useState<ActionQueueRow[]>([]);
   const [activeIcp, setActiveIcp] = useState<IcpVersion | null>(null);
   const [icpProposals, setIcpProposals] = useState<IcpProposal[]>([]);
   const [identity, setIdentity] = useState<Identity>({
@@ -352,7 +376,7 @@ export default function OutreachPage() {
   const [info, setInfo] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
-  const [tab, setTab] = useState<Tab>("inbox");
+  const [tab, setTab] = useState<Tab>("i_dag");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [filterCompany, setFilterCompany] = useState("");
   const [filterRole, setFilterRole] = useState("");
@@ -471,6 +495,19 @@ export default function OutreachPage() {
       .order("identified_at", { ascending: false })
       .limit(200);
     setSignals((signalRows ?? []) as Signal[]);
+
+    // Unified action queue — vw_action_queue unions replies needing action,
+    // pending approvals, referral alt_contacts, and unhandled signals into one
+    // ranked list. Drives the "I dag" tab. The view respects RLS on underlying
+    // tables (security_invoker=on), so the workspace filter is belt-and-braces.
+    const { data: queueRows } = await supabase
+      .from("vw_action_queue")
+      .select("*")
+      .eq("workspace_id", activeWorkspaceId)
+      .order("priority_score", { ascending: false })
+      .order("surfaced_at", { ascending: false })
+      .limit(200);
+    setActionQueue((queueRows ?? []) as ActionQueueRow[]);
 
     // Lead-match for each signal domain. Two queries: (1) leads at that domain,
     // (2) pipeline rows for those lead emails so we can show "already in
@@ -1080,6 +1117,7 @@ export default function OutreachPage() {
       {bulkProgress ? <Banner kind="info">Behandler {bulkProgress.done}/{bulkProgress.total}…</Banner> : null}
 
       <Tabs tab={tab} setTab={setTab} showIcpTabs={hasActiveIcp} counts={{
+        i_dag: actionQueue.length,
         opgaver: opgaver.length,
         signaler: unhandledSignals.length,
         inbox: stats.pending + accepted.length + altReview.length,
@@ -1091,7 +1129,9 @@ export default function OutreachPage() {
       }} />
 
       <section className="mx-auto w-full max-w-[1400px] px-4 pb-12 sm:px-8 lg:px-12">
-        {tab === "opgaver" ? (
+        {tab === "i_dag" ? (
+          <IDagTab queue={actionQueue} onJumpTo={setTab} />
+        ) : tab === "opgaver" ? (
           <OpgaverTab
             tasks={opgaver}
             onMarkHandled={(id) => void markReplyHandled(id)}
@@ -1196,6 +1236,10 @@ function Header({ pushStatus, onEnablePush, onReload, onSignOut, workspaces, act
           ) : null}
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          <Link href="/outreach/clients"
+            className="focus-cream tabular rounded-sm border border-[var(--ink)]/15 px-3 py-1.5 text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/65 hover:border-[var(--ink)]/35 hover:text-[var(--ink)]"
+            title="Klient-oversigt (read-only)"
+          >Clients</Link>
           <button type="button" onClick={() => void onEnablePush()}
             className="focus-cream tabular rounded-sm border border-[var(--ink)]/15 px-3 py-1.5 text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/65 hover:border-[var(--ink)]/35 hover:text-[var(--ink)]"
             title="Push-notifikationer"
@@ -1277,11 +1321,12 @@ function Tabs({ tab, setTab, showIcpTabs, counts }: {
   tab: Tab; setTab: (t: Tab) => void;
   showIcpTabs: boolean;
   counts: {
-    opgaver: number; signaler: number; inbox: number; replies: number; sent: number; all: number;
+    i_dag: number; opgaver: number; signaler: number; inbox: number; replies: number; sent: number; all: number;
     icp_rejected: number; icp_open_proposals: number;
   };
 }) {
   const all: { id: Tab; label: string; count: number; accent?: boolean; icpOnly?: boolean }[] = [
+    { id: "i_dag", label: "I dag", count: counts.i_dag, accent: counts.i_dag > 0 },
     { id: "opgaver", label: "Opgaver", count: counts.opgaver, accent: counts.opgaver > 0 },
     { id: "signaler", label: "Signaler", count: counts.signaler, accent: counts.signaler > 0 },
     { id: "inbox", label: "Indbakke", count: counts.inbox, accent: counts.inbox > 0 },
@@ -1602,6 +1647,117 @@ function AcceptedTab({ rows, busyLead, onRender, onReject }: {
           </li>
         );
       })}
+    </ul>
+  );
+}
+
+// "I dag" — the unified action queue. Renders rows from vw_action_queue,
+// already sorted server-side by priority_score desc then surfaced_at desc.
+// Each row is one thing to act on today. Clicking "Gå til" jumps to the tab
+// that actually performs the action (we don't duplicate action UI here yet).
+function IDagTab({ queue, onJumpTo }: {
+  queue: ActionQueueRow[];
+  onJumpTo: (t: Tab) => void;
+}) {
+  if (queue.length === 0) {
+    return (
+      <div className="mt-8 rounded-lg border border-[var(--ink)]/10 bg-[var(--paper)]/60 p-8 text-center text-[var(--ink)]/60">
+        Intet at handle på lige nu. Indbakken er tom og ingen åbne signaler.
+      </div>
+    );
+  }
+
+  const tabForKind: Record<ActionQueueRow["kind"], Tab> = {
+    reply: "replies",
+    approval: "inbox",
+    referral: "replies",
+    signal: "signaler",
+  };
+
+  const kindLabel: Record<ActionQueueRow["kind"], string> = {
+    reply: "SVAR",
+    approval: "GODKEND",
+    referral: "HENVIST",
+    signal: "SIGNAL",
+  };
+
+  const kindColor: Record<ActionQueueRow["kind"], string> = {
+    reply: "bg-[var(--clay)]/15 text-[var(--clay)]",
+    approval: "bg-[var(--forest)]/15 text-[var(--forest)]",
+    referral: "bg-[var(--ink)]/10 text-[var(--ink)]/80",
+    signal: "bg-[var(--ink)]/10 text-[var(--ink)]/80",
+  };
+
+  function subkindLabel(row: ActionQueueRow): string {
+    if (row.kind === "reply") {
+      return row.subkind === "draft_ready" ? "udkast klar" : "kræver svar";
+    }
+    if (row.kind === "approval") {
+      return row.subkind === "approve_send" ? "klar til send" : "video renderer";
+    }
+    if (row.kind === "referral") {
+      return row.subkind === "find_linkedin" ? "find LinkedIn" : "send invite";
+    }
+    return row.subkind;
+  }
+
+  function timeAgo(iso: string): string {
+    const ms = Date.now() - new Date(iso).getTime();
+    const mins = Math.floor(ms / 60000);
+    if (mins < 60) return `${mins}m`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}t`;
+    const days = Math.floor(hrs / 24);
+    return `${days}d`;
+  }
+
+  return (
+    <ul className="mt-4 space-y-2">
+      {queue.map((row) => (
+        <li
+          key={row.id}
+          className="flex items-start gap-4 rounded-lg border border-[var(--ink)]/10 bg-[var(--paper)]/40 px-4 py-3 transition hover:bg-[var(--paper)]/70"
+        >
+          <div className="flex w-16 shrink-0 flex-col items-start gap-1">
+            <span className={`rounded px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] ${kindColor[row.kind]}`}>
+              {kindLabel[row.kind]}
+            </span>
+            <span className="text-[10px] uppercase tracking-[0.18em] text-[var(--ink)]/40">
+              {timeAgo(row.surfaced_at)}
+            </span>
+          </div>
+
+          <div className="min-w-0 flex-1">
+            <div className="flex items-baseline gap-2">
+              <span className="font-semibold text-[var(--ink)]">
+                {row.contact_name ?? "Ukendt"}
+              </span>
+              {row.company ? (
+                <span className="text-[12px] text-[var(--ink)]/60">@ {row.company}</span>
+              ) : null}
+              {row.title ? (
+                <span className="text-[11px] text-[var(--ink)]/40">· {row.title}</span>
+              ) : null}
+            </div>
+            <p className="mt-1 line-clamp-2 text-[13px] text-[var(--ink)]/75 whitespace-pre-wrap">
+              {row.snippet}
+            </p>
+            <div className="mt-1 flex items-center gap-3 text-[10px] uppercase tracking-[0.18em] text-[var(--ink)]/45">
+              <span>{subkindLabel(row)}</span>
+              {row.intent ? <span>· intent: {row.intent}</span> : null}
+              <span>· score {row.priority_score}</span>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => onJumpTo(tabForKind[row.kind])}
+            className="shrink-0 rounded border border-[var(--ink)]/20 px-3 py-1.5 text-[11px] uppercase tracking-[0.22em] text-[var(--ink)]/70 hover:bg-[var(--ink)]/5"
+          >
+            Gå til →
+          </button>
+        </li>
+      ))}
     </ul>
   );
 }
