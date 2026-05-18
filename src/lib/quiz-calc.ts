@@ -63,13 +63,17 @@ const VALUABLE_CHANNELS: readonly Channel[] = [
 ];
 
 // Response-time → captured share of lead value.
-// Anchored on the MIT speed-to-lead study (5-min responders see 21× higher
-// qualification rate). The values are share-captured, not ratios.
+// The MIT study reports 21× qualification-rate advantage at <5 min vs >30 min,
+// but qualification odds don't translate 1:1 to revenue capture — slow leads
+// still close some of the time. Softened from a strict 21× drop (which made
+// Hastighed dominate the breakdown 5:1 over the other two machines) to a
+// more proportionate spread where speed still matters most but doesn't
+// crowd out outbound + opfølgning losses.
 const SPEED_FACTOR: Record<ResponseTime, number> = {
   lt5m: 1.0,
-  "5to30m": 0.4,
-  "30mto1h": 0.15,
-  gt1h: 0.05,
+  "5to30m": 0.7,
+  "30mto1h": 0.45,
+  gt1h: 0.25,
 };
 
 // Outbound-quality → captured share of outbound channel value.
@@ -96,14 +100,19 @@ const FOLLOWUP_QUALITY_FACTOR: Record<FollowupQuality, number> = {
 const IDEAL_CLOSE_RATE = 0.25;
 
 // How much of the outbound loss is attributable to quality vs missing channels.
-// Caps the quality-only loss at 20% of pipeline value, leaving 5% per missing
-// channel to add on top (4 valuable channels → 20% max channel-coverage loss).
-const OUTBOUND_QUALITY_WEIGHT = 0.20;
-const CHANNEL_LOSS_PER_MISSING = 0.05;
+// Quality cap raised to 35% (mass-templated outreach loses a lot more than
+// 20%); channel-leak raised to 8% per missing channel. Combined, an operator
+// with templated outreach + 3 missing channels can hit ~57% outbound leak,
+// which matches the order-of-magnitude reality of "you have one channel and
+// it's mass-spam."
+const OUTBOUND_QUALITY_WEIGHT = 0.35;
+const CHANNEL_LOSS_PER_MISSING = 0.08;
 
 // How much of the followup loss is attributable to nurture quality.
-// Caps the nurture-only loss at 15% of currently-converting pipeline.
-const FOLLOWUP_QUALITY_WEIGHT = 0.15;
+// Raised from 15% to 30% — manual followup loses more than the previous
+// number implied. 80% of B2B deals require 5+ touches; manual nurture
+// loses most of them, not just 15%.
+const FOLLOWUP_QUALITY_WEIGHT = 0.30;
 
 export function computeLoss(i: QuizInputs): QuizResult {
   const speed = SPEED_FACTOR[i.responseTime];
