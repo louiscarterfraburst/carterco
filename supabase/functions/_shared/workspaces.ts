@@ -3,6 +3,7 @@
 // workspace fired the alert.
 
 export const ODAGROUP_WORKSPACE_ID = "cdfd80d8-33bb-4b64-b778-0a2c5ab78cc6";
+export const CARTERCO_WORKSPACE_ID = "1e067f9a-d453-41a7-8bc4-9fdb5644a5fa";
 
 const WORKSPACE_LABELS: Record<string, string> = {
   "1e067f9a-d453-41a7-8bc4-9fdb5644a5fa": "CarterCo",
