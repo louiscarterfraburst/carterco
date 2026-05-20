@@ -1,18 +1,18 @@
--- engagements: source-of-truth for warm/active deals (not cold outbound).
+-- deals: source-of-truth for warm/active deals (not cold outbound).
 --
 -- Cold-outbound prospects live in outreach_pipeline and sync to Attio via
 -- attio_sync.sql. Real client engagements (Cleanstep, BikeNor, OdaGroup,
 -- Tresyv, intros from calls/network) don't fit that funnel — they're warm
 -- from day one. This table is their durable home.
 --
--- Sync direction (today): engagements -> Attio Deals (one-way push).
+-- Sync direction (today): deals -> Attio Deals (one-way push).
 -- Keyed on slug; Attio Deal supabase_pipeline_id = 'manual:<slug>'.
--- For the planned bidirectional sync (Attio -> engagements), see
--- supabase/functions/attio-webhook-engagement.
+-- For the bidirectional sync (Attio -> deals), see
+-- supabase/functions/attio-webhook-deal.
 --
 -- Idempotent: re-runnable.
 
-create table if not exists public.engagements (
+create table if not exists public.deals (
     id uuid primary key default gen_random_uuid(),
     workspace_id uuid not null default '1e067f9a-d453-41a7-8bc4-9fdb5644a5fa',
     slug text not null unique,
@@ -46,24 +46,24 @@ create table if not exists public.engagements (
     last_synced_from_attio_at timestamptz
 );
 
-create index if not exists engagements_workspace_idx on public.engagements(workspace_id);
-create index if not exists engagements_stage_idx on public.engagements(stage);
+create index if not exists deals_workspace_idx on public.deals(workspace_id);
+create index if not exists deals_stage_idx on public.deals(stage);
 
 -- Auto-update updated_at on row change
-create or replace function public.engagements_set_updated_at()
+create or replace function public.deals_set_updated_at()
 returns trigger language plpgsql as $$
 begin
     new.updated_at := now();
     return new;
 end $$;
 
-drop trigger if exists engagements_set_updated_at_trg on public.engagements;
-create trigger engagements_set_updated_at_trg
-before update on public.engagements
-for each row execute function public.engagements_set_updated_at();
+drop trigger if exists deals_set_updated_at_trg on public.deals;
+create trigger deals_set_updated_at_trg
+before update on public.deals
+for each row execute function public.deals_set_updated_at();
 
--- Outgoing sync: engagements -> Attio
-create or replace function public.engagement_attio_sync()
+-- Outgoing sync: deals -> Attio
+create or replace function public.deal_attio_sync()
 returns trigger
 language plpgsql
 security definer
@@ -96,7 +96,7 @@ begin
     end if;
 
     perform net.http_post(
-        url := 'https://znpaevzwlcfuzqxsbyie.supabase.co/functions/v1/attio-sync-engagement',
+        url := 'https://znpaevzwlcfuzqxsbyie.supabase.co/functions/v1/attio-sync-deal',
         body := jsonb_build_object(
             'type', tg_op,
             'record', row_to_json(new)
@@ -107,7 +107,7 @@ begin
     return new;
 end $$;
 
-drop trigger if exists engagement_attio_sync_trg on public.engagements;
-create trigger engagement_attio_sync_trg
-after insert or update on public.engagements
-for each row execute function public.engagement_attio_sync();
+drop trigger if exists deal_attio_sync_trg on public.deals;
+create trigger deal_attio_sync_trg
+after insert or update on public.deals
+for each row execute function public.deal_attio_sync();
