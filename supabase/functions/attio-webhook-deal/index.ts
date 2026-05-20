@@ -75,21 +75,46 @@ Deno.serve(async (request) => {
   const results: { event: string; ok: boolean; reason?: string }[] = [];
 
   for (const ev of events) {
-    if (ev.event_type !== "record.updated" && ev.event_type !== "record.created") {
-      results.push({ event: ev.event_type, ok: true, reason: "ignored event type" });
-      continue;
-    }
     const recordId = ev.id?.record_id;
     if (!recordId) {
       results.push({ event: ev.event_type, ok: false, reason: "missing record_id" });
       continue;
     }
-    const r = await mirrorDealToRow(recordId);
-    results.push({ event: ev.event_type, ok: r.ok, reason: r.reason });
+    if (ev.event_type === "record.updated" || ev.event_type === "record.created") {
+      const r = await mirrorDealToRow(recordId);
+      results.push({ event: ev.event_type, ok: r.ok, reason: r.reason });
+    } else if (ev.event_type === "record.deleted" || ev.event_type === "record.merged") {
+      // Attio's merge event fires on the source (deleted) side with the
+      // destination linked in the payload; we treat both identically — drop
+      // the row whose attio_record_id matches.
+      const r = await deleteRowByAttioId(recordId);
+      results.push({ event: ev.event_type, ok: r.ok, reason: r.reason });
+    } else {
+      results.push({ event: ev.event_type, ok: true, reason: "ignored event type" });
+    }
   }
 
   return json({ ok: true, events: results });
 });
+
+async function deleteRowByAttioId(attioRecordId: string): Promise<{ ok: boolean; reason?: string }> {
+  // Look up the deal row by Attio record_id. If found and it's a manual deal,
+  // delete the row. Cold-outbound deals (no row in public.deals) are no-ops.
+  const { data, error } = await supabase
+    .from("deals")
+    .select("slug")
+    .eq("attio_record_id", attioRecordId)
+    .maybeSingle();
+  if (error) return { ok: false, reason: `db lookup: ${error.message}` };
+  if (!data) return { ok: true, reason: "no matching deal row — likely cold outbound" };
+
+  const { error: delErr } = await supabase
+    .from("deals")
+    .delete()
+    .eq("attio_record_id", attioRecordId);
+  if (delErr) return { ok: false, reason: `db delete: ${delErr.message}` };
+  return { ok: true, reason: `deleted slug=${data.slug}` };
+}
 
 async function mirrorDealToRow(dealRecordId: string): Promise<{ ok: boolean; reason?: string }> {
   const dealRes = await fetch(`${ATTIO_BASE}/objects/deals/records/${dealRecordId}`, {

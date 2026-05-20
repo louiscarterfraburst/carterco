@@ -141,6 +141,13 @@ async function syncOne(slug: string): Promise<Record<string, unknown> & { ok: bo
   const dealRes = await attioAssert("deals", "supabase_pipeline_id", dealValues);
   if (!dealRes.ok) return { ok: false, stage: "deal", error: dealRes.error, details: dealRes.details };
 
+  // Persist the Attio record_id so the webhook can map deletes/merges back
+  // to a slug. Not in the trigger's relevance check, so this write doesn't
+  // re-fire sync.
+  await supabase.from("deals")
+    .update({ attio_record_id: dealRes.recordId })
+    .eq("slug", slug);
+
   return {
     ok: true,
     slug,
