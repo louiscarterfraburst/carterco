@@ -121,11 +121,7 @@ async function syncOne(pipelineLeadId: string): Promise<Record<string, unknown> 
   if (row.workspace_id !== CARTERCO_WORKSPACE_ID) {
     return { ok: true, skipped: "non-carterco workspace", pipelineLeadId, workspaceId: row.workspace_id };
   }
-  const email = row.contact_email?.toLowerCase().trim() ?? "";
-  if (!email) {
-    // Without an email we have no Attio identifier — skip but don't error
-    return { ok: true, skipped: "no contact_email", pipelineLeadId };
-  }
+  const rawEmail = row.contact_email?.toLowerCase().trim() ?? "";
 
   const { data: lead } = await supabase
     .from("outreach_leads")
@@ -135,8 +131,25 @@ async function syncOne(pipelineLeadId: string): Promise<Record<string, unknown> 
     .maybeSingle();
   const leadRow = (lead ?? null) as LeadRow | null;
 
+  // Distinguish a real prospect email from our SendPilot routing alias. The
+  // carterco+li-<slug>@carterco.dk alias is our reply-routing infra, not the
+  // prospect's identity — using it as an Attio People email creates orphan
+  // Person records when the lead is later replaced by a real-email enrichment.
+  // Same for the @example.invalid placeholder used for un-enriched leads.
+  const isRealEmail = !!rawEmail
+    && !rawEmail.endsWith("@example.invalid")
+    && !(rawEmail.startsWith("carterco+") && rawEmail.endsWith("@carterco.dk"));
+  const realEmail = isRealEmail ? rawEmail : "";
+
   const domain = normalizeDomain(leadRow?.website ?? null);
   const companyName = leadRow?.company?.trim() ?? domain ?? null;
+
+  // Need at least a company OR a real email — otherwise this lead has no
+  // stable Attio identity worth tracking. Avoids the "synthetic person on a
+  // carterco.dk reply alias" orphan pattern.
+  if (!domain && !realEmail) {
+    return { ok: true, skipped: "no real email and no company domain", pipelineLeadId };
+  }
 
   // 1. Upsert Company by domain (only if we have one)
   let companyRecordId: string | null = null;
@@ -149,31 +162,33 @@ async function syncOne(pipelineLeadId: string): Promise<Record<string, unknown> 
     companyRecordId = companyRes.recordId;
   }
 
-  // 2. Upsert Person by email
-  const personValues: Record<string, unknown> = {
-    email_addresses: [{ email_address: email }],
-  };
-  if (leadRow?.first_name || leadRow?.last_name) {
-    personValues.name = [{
-      first_name: leadRow.first_name ?? "",
-      last_name: leadRow.last_name ?? "",
-      full_name: [leadRow.first_name, leadRow.last_name].filter(Boolean).join(" "),
-    }];
+  // 2. Upsert Person by email — only when we have a real prospect email.
+  let personRecordId: string | null = null;
+  if (realEmail) {
+    const personValues: Record<string, unknown> = {
+      email_addresses: [{ email_address: realEmail }],
+    };
+    if (leadRow?.first_name || leadRow?.last_name) {
+      personValues.name = [{
+        first_name: leadRow.first_name ?? "",
+        last_name: leadRow.last_name ?? "",
+        full_name: [leadRow.first_name, leadRow.last_name].filter(Boolean).join(" "),
+      }];
+    }
+    if (leadRow?.title) personValues.job_title = leadRow.title;
+    if (row.linkedin_url) personValues.linkedin = row.linkedin_url;
+    if (companyRecordId) {
+      personValues.company = [{ target_object: "companies", target_record_id: companyRecordId }];
+    }
+    const personRes = await attioAssert("people", "email_addresses", personValues);
+    if (!personRes.ok) return { ok: false, stage: "person_upsert", error: personRes.error, details: personRes.details };
+    personRecordId = personRes.recordId;
   }
-  if (leadRow?.title) personValues.job_title = leadRow.title;
-  if (row.linkedin_url) personValues.linkedin = row.linkedin_url;
-  if (companyRecordId) {
-    personValues.company = [{ target_object: "companies", target_record_id: companyRecordId }];
-  }
-
-  const personRes = await attioAssert("people", "email_addresses", personValues);
-  if (!personRes.ok) return { ok: false, stage: "person_upsert", error: personRes.error, details: personRes.details };
-  const personRecordId = personRes.recordId;
 
   // 3. Upsert Deal by supabase_pipeline_id (sendpilot_lead_id)
   const stageId = mapStage(row);
   const dealName = [
-    [leadRow?.first_name, leadRow?.last_name].filter(Boolean).join(" ").trim() || email,
+    [leadRow?.first_name, leadRow?.last_name].filter(Boolean).join(" ").trim() || (realEmail || rawEmail),
     companyName,
   ].filter(Boolean).join(" — ");
 
@@ -182,8 +197,10 @@ async function syncOne(pipelineLeadId: string): Promise<Record<string, unknown> 
     supabase_pipeline_id: pipelineLeadId,
     stage: [{ status: stageId }],
     owner: [{ referenced_actor_type: "workspace-member", referenced_actor_id: ATTIO_DEFAULT_OWNER_MEMBER_ID }],
-    associated_people: [{ target_object: "people", target_record_id: personRecordId }],
   };
+  if (personRecordId) {
+    dealValues.associated_people = [{ target_object: "people", target_record_id: personRecordId }];
+  }
   if (companyRecordId) {
     dealValues.associated_company = [{ target_object: "companies", target_record_id: companyRecordId }];
   }
