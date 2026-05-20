@@ -74,6 +74,14 @@ type PipelineRow = {
     sequence_completed_at: string | null;
     sequence_step_entered_at: string | null;
     sequence_step_attempts: number | null;
+    // Sequence-decision fields populated by ai-triage-reply when a reply
+    // lands. Engine consults these before normal step evaluation.
+    // See 20260520_outreach_pipeline_sequence_decision.sql for column docs.
+    seq_decision: string | null;
+    seq_decision_at: string | null;
+    seq_decision_resume_at: string | null;
+    seq_decision_reason: string | null;
+    seq_decision_confidence: number | null;
 };
 
 Deno.serve(async (req) => {
@@ -189,6 +197,123 @@ async function evaluateLead(
 ): Promise<number> {
     const signals = signalsForLead(row);
     const now = new Date();
+
+    // 0. Sequence decision (from ai-triage-reply). When an inbound reply
+    // is triaged, Haiku produces a per-lead decision: stop / pause_until /
+    // reroute_email / reroute_call / continue. Apply before the standard
+    // sequence-step logic. Each branch either short-circuits with a
+    // return (handled cleanly) or mutates the in-memory row + signals to
+    // let the rest of evaluateLead handle it.
+    if (row.seq_decision) {
+        const decision = row.seq_decision;
+
+        if (decision === "stop") {
+            // Belt-and-suspenders alongside the `replied` exclude. Mark
+            // completed and clear the decision (one-shot — it's done).
+            await markCompleted(row.sendpilot_lead_id, now);
+            await supabase.from("outreach_pipeline")
+                .update({ seq_decision: null })
+                .eq("sendpilot_lead_id", row.sendpilot_lead_id);
+            return 0;
+        }
+
+        if (decision === "pause_until") {
+            const resumeAt = parseTs(row.seq_decision_resume_at);
+            if (resumeAt && resumeAt > now) {
+                // Still paused. Park sequence_parked_until at the resume_at
+                // so the next scan picks the lead up at the right moment.
+                if (row.sequence_parked_until !== resumeAt.toISOString()) {
+                    await supabase.from("outreach_pipeline")
+                        .update({ sequence_parked_until: resumeAt.toISOString() })
+                        .eq("sendpilot_lead_id", row.sendpilot_lead_id);
+                }
+                return 0;
+            }
+            // resume_at has elapsed (or was bogus). Clear the decision
+            // and the replied signal locally so the lead resumes normally.
+            // The replied signal is still in the row but we treat it as
+            // consumed by the pause — the prospect's reply was "wait until
+            // X," not "stop forever."
+            await supabase.from("outreach_pipeline").update({
+                seq_decision: null,
+                seq_decision_resume_at: null,
+            }).eq("sendpilot_lead_id", row.sendpilot_lead_id);
+            row.seq_decision = null;
+            delete signals.replied;
+            // fall through to normal sequence evaluation
+        }
+
+        if (decision === "reroute_call") {
+            // Boost the lead into the call queue (vw_action_queue.call
+            // surfaces accepted leads with non-null callback_at <= now()
+            // at high priority) and stop the LI/email sequence — the
+            // operator picks it up via the call surface, no further
+            // automated sends. The call_outcome state machine takes over.
+            await supabase.from("outreach_pipeline").update({
+                callback_at: now.toISOString(),
+                seq_decision: null,
+            }).eq("sendpilot_lead_id", row.sendpilot_lead_id);
+            await markCompleted(row.sendpilot_lead_id, now);
+            return 0;
+        }
+
+        if (decision === "reroute_email") {
+            // Skip ahead to the next email_draft step in the lead's
+            // current sequence. Clearing the decision + dropping the
+            // replied signal lets the rest of evaluateLead fire that step
+            // on this same tick.
+            const seq = findSequenceIn(sequences, row.sequence_id ?? "");
+            if (!seq) {
+                // Sequence missing — fall back to stop semantics.
+                await supabase.from("outreach_pipeline")
+                    .update({ seq_decision: null })
+                    .eq("sendpilot_lead_id", row.sendpilot_lead_id);
+                await markCompleted(row.sendpilot_lead_id, now);
+                return 0;
+            }
+            const fromIdx = (row.sequence_step ?? 0);
+            const nextEmailIdx = seq.steps.findIndex((s, i) =>
+                i >= fromIdx && s.branches.some((b) => b.action.type === "email_draft")
+            );
+            if (nextEmailIdx === -1) {
+                // No remaining email step. Clear decision + stop.
+                await supabase.from("outreach_pipeline")
+                    .update({ seq_decision: null })
+                    .eq("sendpilot_lead_id", row.sendpilot_lead_id);
+                await markCompleted(row.sendpilot_lead_id, now);
+                return 0;
+            }
+            // Jump the step. Park = now() so the wait gate doesn't hold us.
+            await supabase.from("outreach_pipeline").update({
+                sequence_step: nextEmailIdx,
+                sequence_step_entered_at: now.toISOString(),
+                sequence_parked_until: now.toISOString(),
+                sequence_step_attempts: 0,
+                seq_decision: null,
+            }).eq("sendpilot_lead_id", row.sendpilot_lead_id);
+            // Mirror the changes in the in-memory row so the rest of
+            // evaluateLead operates on the new state in this same tick.
+            row.sequence_step = nextEmailIdx;
+            row.sequence_step_entered_at = now.toISOString();
+            row.sequence_parked_until = now.toISOString();
+            row.sequence_step_attempts = 0;
+            row.seq_decision = null;
+            delete signals.replied;
+            // fall through
+        }
+
+        if (decision === "continue") {
+            // One-shot ignore of the replied exclude. Clear the decision
+            // and remove `replied` from this evaluation's signals; the
+            // normal flow proceeds.
+            await supabase.from("outreach_pipeline")
+                .update({ seq_decision: null })
+                .eq("sendpilot_lead_id", row.sendpilot_lead_id);
+            row.seq_decision = null;
+            delete signals.replied;
+            // fall through
+        }
+    }
 
     // Re-enrolment: lead has finished a sequence and a *different* one's
     // trigger now matches. Common case: enrolled in unwatched_followup,
@@ -456,6 +581,10 @@ async function executeAction(
         return { dispatched: "push_only", note: "no auto-message; cockpit only" };
     }
 
+    if (action.type === "email_draft") {
+        return executeEmailDraft(action, row);
+    }
+
     const { data: lead } = await supabase
         .from("outreach_leads")
         .select("first_name, last_name, company, website")
@@ -575,6 +704,77 @@ async function executeAction(
     }).eq("sendpilot_lead_id", row.sendpilot_lead_id);
 
     return { dispatched: "auto_send", status: send.status, ok: success };
+}
+
+// email_draft fires the existing outreach-ai?op=draft_email which:
+//   - reads email_direct / email_office off the pipeline row
+//   - drafts subject + body via Sonnet (picks strategy, optionally hinted)
+//   - persists to outreach_emails (drafted_at set, sent_at null)
+// The lead then surfaces in vw_action_queue's `email` kind with subkind
+// `draft_ready`. Operator opens the EmailActionBar in I dag, hits "Åbn i mail"
+// (mailto with body), and "Markér sendt" stamps sent_at.
+//
+// No auto-send in v1 — the operator's hand on the trigger is the safety rail
+// while AI drafts are still under qualitative review. If draft quality
+// stabilizes, an `email_auto_send` action can come later.
+async function executeEmailDraft(
+    action: Extract<Action, { type: "email_draft" }>,
+    row: PipelineRow,
+): Promise<Record<string, unknown>> {
+    // Pull email enrichment + check for an existing draft. Skip cleanly
+    // (advance step) if either gate fails — degrade gracefully rather than
+    // blocking the whole sequence on a missing email.
+    const { data: pipe } = await supabase
+        .from("outreach_pipeline")
+        .select("email_direct, email_office")
+        .eq("sendpilot_lead_id", row.sendpilot_lead_id)
+        .maybeSingle();
+    const toEmail = (pipe?.email_direct as string | null) ?? (pipe?.email_office as string | null);
+    if (!toEmail) {
+        return { dispatched: "email_draft_skipped", reason: "no email enriched" };
+    }
+
+    // Don't pile drafts. If there's already an unsent draft for this lead,
+    // skip — the operator hasn't acted on the prior one yet, sending a
+    // second is noise. Once they mark the prior sent (or this step's wait
+    // elapses past the next step), future steps can draft again.
+    const { count: existingUnsent } = await supabase
+        .from("outreach_emails")
+        .select("id", { count: "exact", head: true })
+        .eq("pipeline_lead_id", row.sendpilot_lead_id)
+        .is("sent_at", null);
+    if ((existingUnsent ?? 0) > 0) {
+        return { dispatched: "email_draft_skipped", reason: "unsent draft already exists" };
+    }
+
+    const url = `${Deno.env.get("SUPABASE_URL")}/functions/v1/outreach-ai?op=draft_email`;
+    let res: Response;
+    try {
+        res = await fetch(url, {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                leadId: row.sendpilot_lead_id,
+                strategy: action.strategy ?? null,
+            }),
+        });
+    } catch (e) {
+        return { dispatched: "email_draft_failed", reason: "network", error: String(e) };
+    }
+    if (!res.ok) {
+        const txt = await res.text().catch(() => "");
+        return { dispatched: "email_draft_failed", status: res.status, body: txt.slice(0, 200) };
+    }
+    const payload = await res.json().catch(() => null);
+    return {
+        dispatched: "email_draft",
+        ok: true,
+        strategy: (payload as Record<string, unknown> | null)?.strategy ?? null,
+        email_id: (payload as Record<string, unknown> | null)?.id ?? null,
+    };
 }
 
 // --- Misc helpers ------------------------------------------------------------

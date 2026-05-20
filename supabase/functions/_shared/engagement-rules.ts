@@ -16,10 +16,24 @@ export type Signal =
     | "replied"       // any LinkedIn reply received from this lead
     | "render_failed";// SendSpark "Video Failed to Generate"
 
+// Action types are the contract the engine speaks. LinkedIn is the original
+// channel (auto_send/queue_approval/push_only — all dispatch to SendPilot).
+// email_draft was added 2026-05-20: at fire time the engine calls
+// outreach-ai?op=draft_email, which persists to outreach_emails — the lead
+// then surfaces in I dag's existing EmailActionBar as `draft_ready`.
+// Operator approves manually; no auto-send for email in v1.
 export type Action =
     | { type: "auto_send";      template: string }
     | { type: "queue_approval"; template: string }
-    | { type: "push_only" };
+    | { type: "push_only" }
+    | { type: "email_draft";    strategy?: EmailStrategy };
+
+export type EmailStrategy =
+    | "reconnect_post_call"
+    | "reply_redirect"
+    | "warm_recap"
+    | "referral_intro"
+    | "first_contact";
 
 export type EngagementRule = {
     id: string;                  // stable id, used in audit log

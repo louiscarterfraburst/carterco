@@ -32,6 +32,12 @@ const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
 type PriorityBucket = "high" | "medium" | "low" | "done";
 
+// Sequence-level decision. Distinct from priority — priority drives the
+// operator's I dag queue; sequence_decision drives the engagement engine's
+// next-step logic. A reply can be high-priority AND a "stop", or low-priority
+// AND a "continue". See _shared/engagement-rules.ts for the engine contract.
+type SequenceDecision = "stop" | "pause_until" | "reroute_email" | "reroute_call" | "continue";
+
 type TriageResult = {
   todo: string;
   due_at: string | null;
@@ -42,6 +48,10 @@ type TriageResult = {
     objections: string[];
     explicit_ask: string | null;
   };
+  sequence_decision: SequenceDecision;
+  sequence_decision_resume_at: string | null;  // ISO timestamp when decision == "pause_until"
+  sequence_decision_reason: string;             // one-line Danish explanation
+  sequence_decision_confidence: number;         // 0.0-1.0
 };
 
 const PRIORITY_TO_NUMBER: Record<PriorityBucket, number> = {
@@ -82,7 +92,14 @@ Deno.serve(async (req) => {
         triage_priority: PRIORITY_TO_NUMBER[triage.priority],
         triage_action: triage.todo,
         triage_draft: triage.draft,
-        triage_signals: { ...triage.signals, priority_bucket: triage.priority },
+        triage_signals: {
+          ...triage.signals,
+          priority_bucket: triage.priority,
+          sequence_decision: triage.sequence_decision,
+          sequence_decision_reason: triage.sequence_decision_reason,
+          sequence_decision_confidence: triage.sequence_decision_confidence,
+          sequence_decision_resume_at: triage.sequence_decision_resume_at,
+        },
         triage_reasoning: null,
         triage_processed_at: new Date().toISOString(),
         scheduled_followup_at: triage.due_at,
@@ -90,6 +107,29 @@ Deno.serve(async (req) => {
       .eq("id", replyId);
 
     if (updateErr) return json({ error: `db update failed: ${updateErr.message}` }, 500);
+
+    // Denormalize the sequence decision onto outreach_pipeline so the
+    // engagement engine reads a single column per lead instead of joining
+    // the latest reply on every tick. We use the reply's
+    // sendpilot_lead_id to find the pipeline row.
+    const sendpilotLeadId = await lookupSendpilotLeadId(admin, replyId);
+    if (sendpilotLeadId) {
+      const { error: pipeUpdateErr } = await admin
+        .from("outreach_pipeline")
+        .update({
+          seq_decision: triage.sequence_decision,
+          seq_decision_at: new Date().toISOString(),
+          seq_decision_resume_at: triage.sequence_decision_resume_at,
+          seq_decision_reason: triage.sequence_decision_reason,
+          seq_decision_confidence: triage.sequence_decision_confidence,
+        })
+        .eq("sendpilot_lead_id", sendpilotLeadId);
+      if (pipeUpdateErr) {
+        console.warn("seq_decision pipeline update failed", pipeUpdateErr);
+        // Best-effort: don't fail the whole triage. The reply row still
+        // holds the decision in triage_signals as a fallback audit trail.
+      }
+    }
 
     return json({ ok: true, replyId, triage });
   } catch (e) {
@@ -186,8 +226,35 @@ async function triageReply(
   if (!["high", "medium", "low", "done"].includes(parsed.priority)) {
     return { error: `invalid priority bucket: ${parsed.priority}` };
   }
+  const validDecisions = ["stop", "pause_until", "reroute_email", "reroute_call", "continue"];
+  if (!validDecisions.includes(parsed.sequence_decision)) {
+    // Safe default: if Haiku skips the field or returns garbage, treat as
+    // hard stop. Matches existing replied-exclude behavior and never causes
+    // an unintended send.
+    parsed.sequence_decision = "stop";
+    parsed.sequence_decision_reason = "fallback: AI returned invalid or missing sequence_decision";
+    parsed.sequence_decision_confidence = 0;
+    parsed.sequence_decision_resume_at = null;
+  }
+  if (parsed.sequence_decision === "pause_until" && !parsed.sequence_decision_resume_at) {
+    // pause_until without a resume_at is meaningless. Coerce to stop.
+    parsed.sequence_decision = "stop";
+    parsed.sequence_decision_reason = `fallback: pause_until without resume_at (${parsed.sequence_decision_reason ?? ""})`.trim();
+  }
 
   return parsed;
+}
+
+async function lookupSendpilotLeadId(
+  admin: SupabaseClient,
+  replyId: string,
+): Promise<string | null> {
+  const { data } = await admin
+    .from("outreach_replies")
+    .select("sendpilot_lead_id")
+    .eq("id", replyId)
+    .maybeSingle();
+  return (data?.sendpilot_lead_id as string | null) ?? null;
 }
 
 function buildSystemPrompt(ownerName: string, valueProp: string, today: string): string {
@@ -223,6 +290,19 @@ function buildSystemPrompt(ownerName: string, valueProp: string, today: string):
     "   - **objections**: array af strenge hvis prospekten nævnte specifikke forbehold (\"pris\", \"tilfreds med nuværende\", \"forkert kontakt\"), ellers tom array",
     "   - **explicit_ask**: kort streng hvis prospekten bad om noget specifikt (\"opkald\", \"prisinfo\", \"case studies\"), ellers null",
     "",
+    "6. **sequence_decision** (string enum, REQUIRED): hvad skal automation-motoren gøre med follow-up-sekvensen for denne lead? Distinkt fra priority — priority handler operatørens dag, sequence_decision handler om motoren skal sende flere DMs/emails. Vælg PRÆCIS én:",
+    "   - **stop** — hard exit. Brug ved: klart nej, \"ikke interesseret\", \"fjern mig\", \"forkert kontakt\", \"vi er kunde hos jer\", \"jeg er gået på pension\". Sekvensen stopper, ingen flere automatiske touches.",
+    "   - **pause_until** — midlertidig hold. Brug KUN ved eksplicit tidssignal med slut-dato: \"efter sommerferien\", \"i Q3\", \"ring i september\", \"travlt indtil næste måned\", OOO med return-dato. KRÆVER sequence_decision_resume_at sat til ISO timestamp.",
+    "   - **reroute_email** — de bad om email i stedet for LI. Eksempler: \"send det på mail\", \"skriv en mail i stedet\", \"jeg ser ikke LinkedIn — brug min mail\". Motoren springer frem til næste email-step i sekvensen.",
+    "   - **reroute_call** — de bad om opkald, eller gav et telefonnummer. Eksempler: \"ring mig\", \"giv mig et kald\", \"lad os tage en snak\", \"+45 XX XX XX XX\". Motoren markerer leadet som klar til opkald (boost i call-queue).",
+    "   - **continue** — svaret ændrer ikke planen. Brug KUN ved: generisk takke-svar uden ask, emoji/likes, kort \"tak, læser det\". Sekvensen fortsætter som planlagt. SJÆLDENT — de fleste svar skal være stop, pause, eller reroute.",
+    "",
+    "7. **sequence_decision_resume_at** (ISO timestamp eller null): KUN sat hvis sequence_decision er \"pause_until\". Brug samme tids-konvertering som due_at.",
+    "",
+    "8. **sequence_decision_reason** (string): én sætning på dansk der forklarer valget. Eksempel: \"prospekten sagde ikke aktuelt, hard decline\" eller \"venter på efter sommerferien — antaget 15. august\".",
+    "",
+    "9. **sequence_decision_confidence** (number 0.0-1.0): hvor sikker er du? Brug 0.9+ for indlysende cases (klart \"nej\", konkret \"ring mig\"). Brug 0.5-0.7 for tvetydige cases hvor du gætter mest sandsynlige. Under 0.5 hvis du virkelig er i tvivl — så kan motoren falde tilbage til safe-stop.",
+    "",
     `## Time-konvertering (dato i dag: ${today})`,
     "Konvertér tids-fraser til ISO timestamps:",
     "- \"i morgen formiddag\" → i morgen 10:00",
@@ -243,7 +323,11 @@ function buildSystemPrompt(ownerName: string, valueProp: string, today: string):
     "  \"due_at\": \"2026-05-13T10:00:00Z\",",
     "  \"priority\": \"high\",",
     "  \"draft\": null,",
-    "  \"signals\": { \"timing\": \"opkald i morgen\", \"objections\": [], \"explicit_ask\": \"opkald\" }",
+    "  \"signals\": { \"timing\": \"opkald i morgen\", \"objections\": [], \"explicit_ask\": \"opkald\" },",
+    "  \"sequence_decision\": \"reroute_call\",",
+    "  \"sequence_decision_resume_at\": null,",
+    "  \"sequence_decision_reason\": \"prospekten bad om opkald i morgen — boost til call-queue\",",
+    "  \"sequence_decision_confidence\": 0.95",
     "}",
     "",
     "Prospect siger: \"Tak, ikke aktuelt for os\"",
@@ -252,7 +336,37 @@ function buildSystemPrompt(ownerName: string, valueProp: string, today: string):
     "  \"due_at\": null,",
     "  \"priority\": \"done\",",
     "  \"draft\": null,",
-    "  \"signals\": { \"timing\": null, \"objections\": [\"ikke aktuelt\"], \"explicit_ask\": null }",
+    "  \"signals\": { \"timing\": null, \"objections\": [\"ikke aktuelt\"], \"explicit_ask\": null },",
+    "  \"sequence_decision\": \"stop\",",
+    "  \"sequence_decision_resume_at\": null,",
+    "  \"sequence_decision_reason\": \"hard decline — ikke aktuelt\",",
+    "  \"sequence_decision_confidence\": 0.95",
+    "}",
+    "",
+    "Prospect siger: \"Send det venligst på mail — kigger ikke på LinkedIn ofte\"",
+    "→ {",
+    "  \"todo\": \"Prospekten vil have mail i stedet for LI — næste step bliver email\",",
+    "  \"due_at\": null,",
+    "  \"priority\": \"medium\",",
+    "  \"draft\": null,",
+    "  \"signals\": { \"timing\": null, \"objections\": [], \"explicit_ask\": \"mail\" },",
+    "  \"sequence_decision\": \"reroute_email\",",
+    "  \"sequence_decision_resume_at\": null,",
+    "  \"sequence_decision_reason\": \"bad eksplicit om mail-kanal\",",
+    "  \"sequence_decision_confidence\": 0.92",
+    "}",
+    "",
+    "Prospect siger: \"På ferie til 15. august, vender tilbage efter det\"",
+    "→ {",
+    "  \"todo\": \"OOO indtil 15. august — pause sekvensen\",",
+    "  \"due_at\": \"2026-08-15T09:00:00Z\",",
+    "  \"priority\": \"low\",",
+    "  \"draft\": null,",
+    "  \"signals\": { \"timing\": \"efter 15. august\", \"objections\": [], \"explicit_ask\": null },",
+    "  \"sequence_decision\": \"pause_until\",",
+    "  \"sequence_decision_resume_at\": \"2026-08-15T09:00:00Z\",",
+    "  \"sequence_decision_reason\": \"OOO til 15. august\",",
+    "  \"sequence_decision_confidence\": 0.9",
     "}",
   ].join("\n");
 }

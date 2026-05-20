@@ -107,11 +107,19 @@ Deno.serve(async (req) => {
   if (op === "draft_email") {
     const leadId = String(body.leadId ?? "").trim();
     if (!leadId) return json({ error: "leadId required" }, 400);
+    // Optional strategy override. When the engagement engine fires
+    // email_draft for a specific sequence step, it passes the step's
+    // intended strategy so different steps don't collapse into
+    // first_contact / first_contact / first_contact.
+    const rawStrategy = body.strategy;
+    const strategyOverride = typeof rawStrategy === "string" && rawStrategy.length > 0
+      ? rawStrategy as EmailStrategy
+      : null;
     const admin = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
     );
-    const result = await draftEmail(admin, leadId);
+    const result = await draftEmail(admin, leadId, strategyOverride);
     if ("error" in result) return json(result, 502);
     return json(result);
   }
@@ -143,6 +151,7 @@ type EmailStrategy =
 async function draftEmail(
   admin: ReturnType<typeof createClient>,
   leadId: string,
+  strategyOverride: EmailStrategy | null = null,
 ): Promise<
   | { id: string; subject: string; body: string; strategy: EmailStrategy; rationale: string; language: string; to: string }
   | { error: string }
@@ -182,9 +191,13 @@ async function draftEmail(
   const language = ["DK", "SE", "NO"].includes(country) ? "da" : "en";
 
   // Pick the strategy. Sonnet validates this — but we suggest the default
-  // based on state so the model has a strong prior.
+  // based on state so the model has a strong prior. If the engagement engine
+  // passed an explicit strategy (per-sequence-step), use that as the prior
+  // instead of the state-derived guess.
   let suggestedStrategy: EmailStrategy = "first_contact";
-  if (pipe.referred_from_pipeline_lead_id) suggestedStrategy = "referral_intro";
+  if (strategyOverride) {
+    suggestedStrategy = strategyOverride;
+  } else if (pipe.referred_from_pipeline_lead_id) suggestedStrategy = "referral_intro";
   else if (pipe.call_outcome) suggestedStrategy = "reconnect_post_call";
   else if (pipe.last_reply_intent && pipe.last_reply_intent !== "decline" && pipe.last_reply_intent !== "ooo") suggestedStrategy = "reply_redirect";
   else if (pipe.accepted_at) suggestedStrategy = "warm_recap";
