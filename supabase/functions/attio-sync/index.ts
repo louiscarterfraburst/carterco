@@ -58,6 +58,8 @@ type PipelineRow = {
   sendpilot_lead_id: string;
   linkedin_url: string | null;
   contact_email: string | null;
+  phone_direct: string | null;
+  phone_office: string | null;
   status: string;
   outcome: Outcome | null;
   invited_at: string | null;
@@ -110,7 +112,7 @@ Deno.serve(async (request) => {
 async function syncOne(pipelineLeadId: string): Promise<Record<string, unknown> & { ok: boolean }> {
   const { data: pipe, error: pipeErr } = await supabase
     .from("outreach_pipeline")
-    .select("sendpilot_lead_id, linkedin_url, contact_email, status, outcome, invited_at, sent_at, last_reply_at, workspace_id")
+    .select("sendpilot_lead_id, linkedin_url, contact_email, phone_direct, phone_office, status, outcome, invited_at, sent_at, last_reply_at, workspace_id")
     .eq("sendpilot_lead_id", pipelineLeadId)
     .maybeSingle();
   if (pipeErr || !pipe) return { ok: false, error: "pipeline row not found", details: pipeErr?.message };
@@ -140,15 +142,18 @@ async function syncOne(pipelineLeadId: string): Promise<Record<string, unknown> 
     && !rawEmail.endsWith("@example.invalid")
     && !(rawEmail.startsWith("carterco+") && rawEmail.endsWith("@carterco.dk"));
   const realEmail = isRealEmail ? rawEmail : "";
+  const phoneValues = attioPhoneValues(row.phone_direct, row.phone_office);
+  const personIdentityEmail = realEmail || (phoneValues.length > 0 ? rawEmail : "");
 
   const domain = normalizeDomain(leadRow?.website ?? null);
   const companyName = leadRow?.company?.trim() ?? domain ?? null;
 
-  // Need at least a company OR a real email — otherwise this lead has no
-  // stable Attio identity worth tracking. Avoids the "synthetic person on a
-  // carterco.dk reply alias" orphan pattern.
-  if (!domain && !realEmail) {
-    return { ok: true, skipped: "no real email and no company domain", pipelineLeadId };
+  // Need at least a company OR a person identity. We still avoid synthetic
+  // CarterCo reply aliases by default, but allow them when we have a phone:
+  // older SendPilot-imported people in Attio were keyed that way, and this
+  // lets us enrich those existing records with useful contact data.
+  if (!domain && !personIdentityEmail) {
+    return { ok: true, skipped: "no usable person identity and no company domain", pipelineLeadId };
   }
 
   // 1. Upsert Company by domain (only if we have one)
@@ -162,12 +167,15 @@ async function syncOne(pipelineLeadId: string): Promise<Record<string, unknown> 
     companyRecordId = companyRes.recordId;
   }
 
-  // 2. Upsert Person by email — only when we have a real prospect email.
+  // 2. Upsert Person by email. Prefer the real prospect email; for phone-only
+  // legacy leads, use the existing routing alias so we update the Attio record
+  // that was already created from the old sync.
   let personRecordId: string | null = null;
-  if (realEmail) {
+  if (personIdentityEmail) {
     const personValues: Record<string, unknown> = {
-      email_addresses: [{ email_address: realEmail }],
+      email_addresses: [{ email_address: personIdentityEmail }],
     };
+    if (phoneValues.length > 0) personValues.phone_numbers = phoneValues;
     if (leadRow?.first_name || leadRow?.last_name) {
       personValues.name = [{
         first_name: leadRow.first_name ?? "",
@@ -247,6 +255,35 @@ function normalizeDomain(raw: string | null): string | null {
     const cleaned = raw.replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0].toLowerCase().trim();
     return cleaned || null;
   }
+}
+
+function attioPhoneValues(...phones: (string | null | undefined)[]): string[] {
+  const normalized = phones
+    .map((phone) => normalizePhone(phone ?? null))
+    .filter((phone): phone is string => !!phone);
+  return [...new Set(normalized)];
+}
+
+function normalizePhone(raw: string | null): string | null {
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+
+  let digits = trimmed.replace(/[^\d+]/g, "");
+  if (digits.startsWith("00")) digits = `+${digits.slice(2)}`;
+  if (!digits.startsWith("+")) {
+    const justDigits = digits.replace(/\D/g, "");
+    if (justDigits.length === 8) digits = `+45${justDigits}`;
+    else return null;
+  }
+
+  const e164 = `+${digits.replace(/\D/g, "")}`;
+  const digitCount = e164.length - 1;
+  if (digitCount < 10 || digitCount > 15) return null;
+  // NANP area codes cannot start with 0 or 1. Attio/libphonenumber rejects
+  // these even if they look E.164-ish, so filter before sending.
+  if (/^\+1[01]/.test(e164)) return null;
+  return e164;
 }
 
 // Attio's "assert" pattern: PUT with matching_attribute query param. Creates

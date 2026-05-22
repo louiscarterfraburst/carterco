@@ -174,11 +174,22 @@ export default function LeadsPage() {
     });
   }
 
-  const isActiveLead = (l: Lead) =>
-    !l.outcome ||
-    l.outcome === "callback" ||
-    l.outcome === "follow_up" ||
-    (l.outcome === "interested" && !!l.next_action_at);
+  const isActiveLead = (l: Lead) => {
+    const eligible =
+      !l.outcome ||
+      l.outcome === "callback" ||
+      l.outcome === "follow_up" ||
+      (l.outcome === "interested" && !!l.next_action_at);
+    if (!eligible) return false;
+    // Hide leads snoozed beyond ~24h — a follow-up scheduled for August
+    // shouldn't sit in Aktive today. Comes back into view automatically
+    // when next_action_at falls inside the window.
+    if (l.next_action_at) {
+      const dueMs = new Date(l.next_action_at).getTime() - Date.now();
+      if (dueMs > 24 * 60 * 60 * 1000) return false;
+    }
+    return true;
+  };
 
   const visibleLeads = useMemo(() => {
     if (view === "active") return leads.filter(isActiveLead);
@@ -2269,9 +2280,18 @@ function buildVCard(lead: Lead) {
       .join("\n"),
   );
 
+  // iOS Contacts (and most CardDAV clients) populate first/last name from the
+  // structured N: field — FN: alone makes the firstname disappear and the row
+  // ends up filed by company. Only emit N when lead.name is set; fall back to
+  // FN-only otherwise.
+  const structuredName = lead.name ? splitName(lead.name) : null;
+
   return [
     "BEGIN:VCARD",
     "VERSION:3.0",
+    structuredName
+      ? `N:${escapeVCard(structuredName.last)};${escapeVCard(structuredName.first)};;;`
+      : null,
     `FN:${escapeVCard(displayName)}`,
     company ? `ORG:${escapeVCard(company)}` : null,
     phone ? `TEL;TYPE=CELL:${escapeVCard(phone)}` : null,
@@ -2282,6 +2302,15 @@ function buildVCard(lead: Lead) {
   ]
     .filter(Boolean)
     .join("\r\n");
+}
+
+function splitName(raw: string): { first: string; last: string } | null {
+  // "Morten Toft / Charlotte Steen Henriksen" -> use first half before the slash
+  const primary = raw.split(/\s*\/\s*/)[0]?.trim() ?? "";
+  const tokens = normalizeTextForVCard(primary).split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return null;
+  if (tokens.length === 1) return { first: tokens[0]!, last: "" };
+  return { first: tokens[0]!, last: tokens.slice(1).join(" ") };
 }
 
 function normalizeTextForVCard(value: string) {
