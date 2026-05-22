@@ -83,10 +83,15 @@ def fetch_affected_leads(workspace_id, status):
     # Use PostgREST embedded join: outreach_pipeline -> outreach_leads via sendpilot_lead_id.
     # PostgREST needs an FK to embed; we don't know if it's declared, so query both
     # separately and join in Python.
+    # Hard guard: NEVER re-render leads that have been sent. The DM is already
+    # in LinkedIn pointing at the original video URL; a new render orphans
+    # that link and the prospect 404s when they click. sent_at=is.null filters
+    # those out even if the caller picks --status=sent by mistake.
     url = (
         f"{SB_URL}/rest/v1/outreach_pipeline"
         f"?workspace_id=eq.{workspace_id}"
         f"&status=eq.{status}"
+        f"&sent_at=is.null"
         f"&select=sendpilot_lead_id,linkedin_url,contact_email,video_link,rendered_at"
     )
     code, body = http(url, headers=headers)

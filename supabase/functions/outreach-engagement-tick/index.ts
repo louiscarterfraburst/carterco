@@ -31,6 +31,7 @@ import {
     type SequenceBranch,
 } from "../_shared/sequences.ts";
 import { checkLeadReplied } from "../_shared/sendpilot-client.ts";
+import { canonicalSenderFor } from "../_shared/workspaces.ts";
 
 const corsHeaders = {
     "Access-Control-Allow-Origin": "*",
@@ -82,6 +83,10 @@ type PipelineRow = {
     seq_decision_resume_at: string | null;
     seq_decision_reason: string | null;
     seq_decision_confidence: number | null;
+    // A/B arm assignment for Tresyv 3-arm test. Null for workspaces without
+    // arms; one of 'v1_long' | 'v2_short' | 'v3_video' otherwise. Used by
+    // findEnrolmentMatch to filter sequences with match_first_dm_variant set.
+    first_dm_variant: string | null;
 };
 
 Deno.serve(async (req) => {
@@ -319,7 +324,7 @@ async function evaluateLead(
     // trigger now matches. Common case: enrolled in unwatched_followup,
     // played the video later, was excluded out → eligible for watched_followup.
     if (row.sequence_id && row.sequence_completed_at) {
-        const next = findEnrolmentMatch(sequences, signals);
+        const next = findEnrolmentMatch(sequences, signals, row.first_dm_variant);
         if (!next || next.id === row.sequence_id) return 0;
         const firstStep = next.steps[0];
         if (!firstStep) return 0;
@@ -341,7 +346,7 @@ async function evaluateLead(
 
     // 1. Enrolment: lead not yet in any sequence.
     if (!row.sequence_id) {
-        const seq = findEnrolmentMatch(sequences, signals);
+        const seq = findEnrolmentMatch(sequences, signals, row.first_dm_variant);
         if (!seq) return 0;
         const firstStep = seq.steps[0];
         if (!firstStep) return 0;
@@ -504,9 +509,19 @@ async function evaluateLead(
     return 1;
 }
 
-function findEnrolmentMatch(sequences: Sequence[], signals: LeadSignals): Sequence | undefined {
+function findEnrolmentMatch(
+    sequences: Sequence[],
+    signals: LeadSignals,
+    firstDmVariant: string | null,
+): Sequence | undefined {
     for (const seq of sequences) {
-        if (signals[seq.trigger.signal]) return seq;
+        if (!signals[seq.trigger.signal]) continue;
+        // Arm-aware routing: if the sequence is locked to a variant, the
+        // lead's variant must match. Null on either side = match-any.
+        if (seq.matchFirstDmVariant && seq.matchFirstDmVariant !== firstDmVariant) {
+            continue;
+        }
+        return seq;
     }
     return undefined;
 }
@@ -607,14 +622,30 @@ async function executeAction(
     }
 
     // auto_send → straight to SendPilot inbox.
-    // SendPilot's API requires senderId + recipientLinkedinUrl + message
-    // (NOT leadId + message). senderId is captured from the connection.accepted
-    // webhook payload at acceptance time and stored on the pipeline row.
-    if (!row.sendpilot_sender_id || !row.linkedin_url) {
+    // SendPilot's API requires senderId + recipientLinkedinUrl + message.
+    // Canonical sender lookup: workspace_senders table is source of truth.
+    // Never trust row.sendpilot_sender_id blindly — if it's wrong, send from
+    // the canonical account anyway. Workspace cross-pollution = embarrassing.
+    if (!row.linkedin_url) {
         await supabase.from("outreach_pipeline").update({
-            error: "auto_send skipped: missing sendpilot_sender_id or linkedin_url",
+            error: "auto_send skipped: missing linkedin_url",
         }).eq("sendpilot_lead_id", row.sendpilot_lead_id);
-        return { dispatched: "auto_send_skipped", reason: "missing sender_id or linkedin_url" };
+        return { dispatched: "auto_send_skipped", reason: "missing linkedin_url" };
+    }
+    const canonicalSenderId = await canonicalSenderFor(supabase, row.workspace_id);
+    if (!canonicalSenderId) {
+        await supabase.from("outreach_pipeline").update({
+            error: `auto_send skipped: no canonical sender registered for workspace ${row.workspace_id}`,
+        }).eq("sendpilot_lead_id", row.sendpilot_lead_id);
+        return { dispatched: "auto_send_skipped", reason: "no_canonical_sender" };
+    }
+    if (row.sendpilot_sender_id && row.sendpilot_sender_id !== canonicalSenderId) {
+        console.warn("engagement-tick: pipeline sender mismatch — using canonical", {
+            lead: row.sendpilot_lead_id,
+            pipeline_sender: row.sendpilot_sender_id,
+            canonical_sender: canonicalSenderId,
+            workspace_id: row.workspace_id,
+        });
     }
     // Defense-in-depth reply checks, in order of authority:
     //
@@ -644,7 +675,7 @@ async function executeAction(
         || undefined;
     const liveCheck = await checkLeadReplied({
         apiKey: SP_API_KEY,
-        senderAccountId: row.sendpilot_sender_id,
+        senderAccountId: canonicalSenderId,
         recipientLinkedinUrl: row.linkedin_url,
         recipientName: fullName,
     });
@@ -686,7 +717,7 @@ async function executeAction(
         method: "POST",
         headers: { "X-API-Key": SP_API_KEY, "Content-Type": "application/json" },
         body: JSON.stringify({
-            senderId: row.sendpilot_sender_id,
+            senderId: canonicalSenderId,
             recipientLinkedinUrl: row.linkedin_url,
             message,
         }),

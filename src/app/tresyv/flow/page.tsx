@@ -3,36 +3,15 @@ import type { Metadata } from "next";
 export const metadata: Metadata = {
     title: "Tresyv outreach — flow oversigt",
     description:
-        "Hvordan beskeden bygges per modtager — tre tekstlinjer, to kanaler, ét fælles opfølgningsflow.",
+        "Tre spor (V1/V2/V3) i 33/33/33 fordeling, opfølgning per spor drevet af engagement-signaler.",
 };
 
 const LANES = [
     {
-        code: "A1",
-        title: "Lang — med kunde-reference",
-        when: "Når Haiku matcher en eller flere Tresyv-kunder, prospekten vil genkende og finde relevant",
-        channel: "Tekst-kun (eller video uden video-spørgsmål)",
-        body: `Hej [fornavn]
-
-Tak for forbindelsen.
-
-Jeg har kigget kort på [hjemmeside], og jeg tror, der er nogle ret oplagte muligheder for at gøre brugerrejsen tydeligere og få mere ud af de besøgende, I allerede har.
-
-Min kollega Tue og jeg har arbejdet med UX, design og brugerpsykologi i mange år og hjælper virksomheder med websites, der er lettere at forstå, lettere at bruge og bedre til at konvertere.
-
-Vi har bl.a. hjulpet [HAIKU-PICKS — fx Greenmind, EET Group og Dansk Blindesamfund — vælges ud fra prospektens branche].
-
-Hvis det er relevant, giver vi gerne en kort og uforpligtende gennemgang af jeres website. Bagefter får I 5-10 konkrete forbedringspunkter, som I kan bruge med det samme.
-
-Kunne det være relevant for jer?
-
-De venligste hilsner
-Rasmus`,
-    },
-    {
-        code: "A2",
-        title: "Lang — uden reference",
-        when: "Når Haiku ikke finder et stærkt match (B2B SaaS, niche, ukendt segment osv.) — bedre med ingen reference end en svag",
+        code: "V1",
+        title: "Lang ren tekst",
+        share: "≈33%",
+        when: "Den voksne, forklarende variant. Haiku afgør per prospekt om vi indsætter en konkret kunde-reference eller holder os generelt.",
         channel: "Tekst-kun",
         body: `Hej [fornavn]
 
@@ -42,6 +21,8 @@ Jeg har kigget kort på [hjemmeside], og jeg tror, der er nogle ret oplagte muli
 
 Min kollega Tue og jeg har arbejdet med UX, design og brugerpsykologi i over 25 år og hjælper dagligt stærke brands med websites, der er lettere at forstå, lettere at bruge og bedre til at konvertere.
 
+[Når Haiku finder match: "Vi har bl.a. hjulpet …"]
+
 Hvis det er relevant, giver vi gerne en kort og uforpligtende gennemgang af jeres website. Bagefter får I 5-10 konkrete forbedringspunkter, som I kan bruge med det samme.
 
 Kunne det være relevant for jer?
@@ -50,10 +31,11 @@ De venligste hilsner
 Rasmus`,
     },
     {
-        code: "B",
-        title: "Kort — bait under video",
-        when: "Når SendSpark renderer en personaliseret video til prospekten — videoen bærer personificeringen, teksten bliver kort",
-        channel: "Video + kort tekst",
+        code: "V2",
+        title: "Kort krog — ren tekst",
+        share: "≈33%",
+        when: "Madding-varianten. Ren tekst, ingen video. Vi afprøver om kort hook slår lang forklaring.",
+        channel: "Tekst-kun",
         body: `Hej [fornavn]
 
 Tak for forbindelsen.
@@ -63,41 +45,99 @@ Jeg har kigget kort på [hjemmeside], og jeg tror, der er et par ret oplagte gre
 Skal jeg sende dig 2-3 konkrete ting, jeg især ville få kigget på?
 
 De venligste hilsner
-Rasmus
+Rasmus`,
+    },
+    {
+        code: "V3",
+        title: "Video",
+        share: "≈33%",
+        when: "Det eneste spor med video. Sendspark renderer personlig video; teksten under er kort fordi videoen bærer beskeden.",
+        channel: "Video + kort caption",
+        body: `[venter på V3-caption fra Rasmus — videoen bærer beskeden, kort intro under]
 
-▶ [video.tresyv.dk/share/{render-id}]`,
+▶ video.tresyv.dk/share/{render-id}`,
     },
 ] as const;
 
 const FOLLOWUPS = [
     {
-        signal: "Video set til ende eller CTA klikket",
-        angle: "Pull-the-meeting",
-        copy: "Hej [fornavn] — så du fik kigget videoen 🙂 Skal vi tage en kort snak om de 5-10 punkter? Du kan booke direkte her: [calendly] — eller bare svar med et tidspunkt der passer.",
-    },
-    {
-        signal: "Video set, men ikke til ende",
-        angle: "Soft nudge",
-        copy: "Hej [fornavn] — bare et hurtigt nudge. Min note ville nemt drukne i indbakken. Hvis det er på et forkert tidspunkt, så ingen ærgrelse — bare lad mig vide.",
-    },
-    {
-        signal: "Ingen aktivitet på videoen",
-        angle: "Anderledes vinkel",
-        copy: "Hej [fornavn] — jeg har lige skimmet [hjemmeside] igen og noterede [konkret observation]. Det kunne være værd at vende. Kunne du tænke dig at høre mere?",
-    },
-    {
-        signal: "Tekst-kun-flow (ingen video sendt)",
-        angle: "Tekst-nudge — uden video-spørgsmål",
-        copy: "Hej [fornavn] — bare et hurtigt nudge på den her. Hvis det ikke er relevant lige nu er det helt fint, så lader jeg dig være.",
-    },
-];
+        track: "V1 — lang tekst",
+        signal: "Ingen svar efter 3-5 dage",
+        angle: "Opfølgning med blød exit",
+        copy: `Hej [fornavn]
 
-const BREAKUP = `Hej [fornavn]
+Jeg følger bare lige op.
 
-Sidste hilsen fra min side. Hvis tidspunktet ikke er det rette, er der ikke noget ærgerligt i det. Du er velkommen til at række ud, hvis det skifter senere.
+Jeg tror, der er et par oplagte steder, hvor jeres website kan blive tydeligere og konvertere bedre.
+
+Skal jeg sende et par konkrete bud?
+
+Hvis ikke, er det helt fair – så lukker jeg den bare herfra.
 
 De venligste hilsner
-Rasmus`;
+Rasmus`,
+    },
+    {
+        track: "V2 — kort tekst",
+        signal: "Ingen svar efter 3-5 dage",
+        angle: "Nudge — 2-3 ting",
+        copy: `Hej [fornavn]
+
+Jeg følger bare lige op.
+
+Skal jeg sende dig de 2-3 ting, jeg især ville kigge på for at gøre jeres website skarpere og få flere besøgende til at tage næste skridt?
+
+Hvis ikke, er det helt fair.
+
+De venligste hilsner
+Rasmus`,
+    },
+    {
+        track: "V3 — video",
+        signal: "Video set til ende eller CTA klikket",
+        angle: "Pull-the-meeting",
+        copy: `Hej [fornavn]
+
+Jeg håber, videoen gav mening.
+
+Skal vi tage en kort snak om, hvor vi ser de største muligheder for at gøre jeres website tydeligere og få flere besøgende til at tage næste skridt?
+
+Jeg sender gerne et par forslag til tider.
+
+De venligste hilsner
+Rasmus`,
+    },
+    {
+        track: "V3 — video",
+        signal: "Video åbnet, men ikke set til ende",
+        angle: "Soft nudge — konkrete greb",
+        copy: `Hej [fornavn]
+
+Jeg følger bare lige op på videoen fra forleden.
+
+Den korte version er, at vi tror, der er nogle konkrete greb, der kan gøre jeres website tydeligere og få flere besøgende til at tage næste skridt.
+
+Skal jeg sende et par forslag til tider, hvor vi kan tage en kort snak?
+
+De venligste hilsner
+Rasmus`,
+    },
+    {
+        track: "V3 — video",
+        signal: "Ingen aktivitet på videoen",
+        angle: "Generisk nudge",
+        copy: `Hej [fornavn]
+
+Jeg følger bare lige op.
+
+Jeg tror, der er nogle oplagte muligheder for at gøre jeres website tydeligere og få flere besøgende til at tage næste skridt.
+
+Skal jeg sende et par forslag til tider, hvor vi kan tage en kort snak?
+
+De venligste hilsner
+Rasmus`,
+    },
+];
 
 export default function TresyvFlowPage() {
     return (
@@ -108,7 +148,7 @@ export default function TresyvFlowPage() {
                     <DecisionTree />
                 </Section>
 
-                <Section title="Tre tekstlinjer">
+                <Section title="Tre spor — V1 / V2 / V3">
                     <div className="grid gap-6 sm:grid-cols-3">
                         {LANES.map((lane) => (
                             <LaneCard key={lane.code} lane={lane} />
@@ -116,22 +156,15 @@ export default function TresyvFlowPage() {
                     </div>
                 </Section>
 
-                <Section title="Opfølgning — drevet af engagement-signaler">
+                <Section title="Opfølgning — per spor, drevet af engagement-signaler">
                     <FollowupTable />
-                </Section>
-
-                <Section title="Breakup — fælles sidste hilsen">
-                    <pre className="whitespace-pre-wrap rounded-md border border-[var(--ink)]/12 bg-white/40 p-5 font-sans text-[14px] leading-relaxed text-[var(--ink)]/85">
-                        {BREAKUP}
-                    </pre>
                 </Section>
 
                 <Section title="Skabeloner i alt">
                     <div className="grid gap-3 sm:grid-cols-2">
-                        <Tally count={3} label="Første-besked tekster (A1, A2, B)" />
-                        <Tally count={4} label="Opfølgnings-variant (engagement-betingede)" />
-                        <Tally count={1} label="Breakup (fælles)" />
-                        <Tally count={1} label="Klient-reference matcher (Haiku, kun A-flow)" />
+                        <Tally count={3} label="Første-besked tekster (V1, V2, V3)" />
+                        <Tally count={5} label="Opfølgnings-varianter (V1 + V2 + V3 × 3)" />
+                        <Tally count={1} label="Klient-reference matcher (Haiku, kun V1)" />
                     </div>
                 </Section>
 
@@ -150,12 +183,13 @@ function Header() {
                 Tresyv · outreach-arkitektur
             </p>
             <h1 className="font-display text-[44px] leading-[1.05] tracking-[-0.01em] sm:text-[56px]">
-                Hvordan beskeden bygges<br />per modtager.
+                Tre spor i parallel,<br />ét beslutningstræ.
             </h1>
             <p className="mt-6 max-w-2xl text-[15px] leading-relaxed text-[var(--ink)]/70">
-                Tre tekstlinjer (A1, A2, B), to kanaler (tekst, video), ét fælles opfølgningsflow drevet
-                af engagement-signaler. En lille AI-matcher (Claude Haiku) afgør per prospekt om vi kan
-                nævne en konkret tidligere kunde — eller om vi holder os generelt.
+                Hver accepteret connection tildeles tilfældigt et af tre spor: V1 (lang ren tekst),
+                V2 (kort ren tekst), eller V3 (video). Inden for V1 afgør Claude Haiku om vi nævner
+                en konkret tidligere Tresyv-kunde — eller holder os generelt. Opfølgning vælges per
+                spor og engagement-signal.
             </p>
         </header>
     );
@@ -179,42 +213,30 @@ function DecisionTree() {
                 <TreeStep
                     number="1"
                     label="Prospekt accepterer connection-anmodning"
-                    detail="Sendpilot fyrer webhook → outreach_pipeline-row oprettes"
+                    detail="Sendpilot fyrer webhook → outreach_pipeline-row oprettes."
                 />
                 <Branch />
                 <TreeStep
                     number="2"
-                    label="Vælg kanal"
-                    detail="Video-flow eller tekst-kun? — afgøres af kampagne-konfiguration (eller render-fejl-fallback)"
+                    label="Tildel spor — 33/33/33"
+                    detail="Tilfældig fordeling V1 / V2 / V3 ved acceptance. Sporet persisteres på pipeline-row så al senere logik (besked, opfølgning) følger sporet."
                 />
-                <div className="ml-3 grid gap-4 border-l border-[var(--ink)]/15 pl-7 sm:grid-cols-2">
-                    <TreeBranchCard
-                        label="Video-flow"
-                        body="Sendspark renderer personlig video. Tekst bliver kort → Lane B."
-                        accent
-                    />
-                    <TreeBranchCard
-                        label="Tekst-kun-flow"
-                        body="Ingen video. Haiku matcher kunde-references. Match → Lane A1. Intet match → Lane A2."
-                    />
+                <div className="ml-3 grid gap-4 border-l border-[var(--ink)]/15 pl-7 sm:grid-cols-3">
+                    <TreeBranchCard label="V1 — lang tekst" body="Haiku afgør ref. Ingen video." />
+                    <TreeBranchCard label="V2 — kort tekst" body="Ingen ref-logik. Ingen video." accent />
+                    <TreeBranchCard label="V3 — video" body="Sendspark renderer. Caption under." accent />
                 </div>
                 <Branch />
                 <TreeStep
                     number="3"
                     label="Send besked"
-                    detail="LinkedIn DM via Sendpilot. Engagement-signaler (viewed / watched_end / cta_clicked / reply) modtages."
+                    detail="LinkedIn DM via Sendpilot. Engagement-signaler (viewed / watched_end / cta_clicked / reply) modtages og lagres."
                 />
                 <Branch />
                 <TreeStep
                     number="4"
                     label="Opfølgning efter 3-5 dages stilhed"
-                    detail="outreach-engagement-tick vælger followup-variant ud fra modtagne signaler."
-                />
-                <Branch />
-                <TreeStep
-                    number="5"
-                    label="Breakup efter endnu en stilhedsperiode"
-                    detail="Én fælles, blød afslutning. Højeste svar-rate i kolde sekvenser."
+                    detail="outreach-engagement-tick vælger opfølgning ud fra (spor, signaler). V1 og V2 har én opfølgning hver. V3 har tre — afhængig af video-engagement. Stille leads udløber uden breakup."
                 />
             </ol>
         </div>
@@ -273,7 +295,7 @@ function LaneCard({ lane }: { lane: (typeof LANES)[number] }) {
                     {lane.code}
                 </span>
                 <span className="tabular text-[9px] uppercase tracking-[0.28em] text-[var(--ink)]/45">
-                    {lane.channel}
+                    {lane.share} · {lane.channel}
                 </span>
             </div>
             <h3 className="font-display mt-2 text-[20px] leading-[1.2] text-[var(--ink)]">
@@ -293,10 +315,13 @@ function FollowupTable() {
             <table className="w-full border-collapse text-left text-[13px]">
                 <thead>
                     <tr className="border-b border-[var(--ink)]/15">
-                        <th className="tabular px-5 py-3 text-[10px] uppercase tracking-[0.28em] text-[var(--ink)]/55">
+                        <th className="tabular w-[18%] px-5 py-3 text-[10px] uppercase tracking-[0.28em] text-[var(--ink)]/55">
+                            Spor
+                        </th>
+                        <th className="tabular w-[22%] px-5 py-3 text-[10px] uppercase tracking-[0.28em] text-[var(--ink)]/55">
                             Engagement-signal
                         </th>
-                        <th className="tabular px-5 py-3 text-[10px] uppercase tracking-[0.28em] text-[var(--ink)]/55">
+                        <th className="tabular w-[18%] px-5 py-3 text-[10px] uppercase tracking-[0.28em] text-[var(--ink)]/55">
                             Vinkel
                         </th>
                         <th className="tabular px-5 py-3 text-[10px] uppercase tracking-[0.28em] text-[var(--ink)]/55">
@@ -307,13 +332,16 @@ function FollowupTable() {
                 <tbody>
                     {FOLLOWUPS.map((f, i) => (
                         <tr
-                            key={f.signal}
+                            key={`${f.track}-${f.signal}`}
                             className={i < FOLLOWUPS.length - 1 ? "border-b border-[var(--ink)]/8" : ""}
                         >
-                            <td className="w-1/4 px-5 py-4 align-top text-[var(--ink)]/85">{f.signal}</td>
-                            <td className="w-1/5 px-5 py-4 align-top text-[var(--clay)]">{f.angle}</td>
-                            <td className="px-5 py-4 align-top leading-relaxed text-[var(--ink)]/75">
-                                {f.copy}
+                            <td className="px-5 py-4 align-top text-[var(--ink)]/85">{f.track}</td>
+                            <td className="px-5 py-4 align-top text-[var(--ink)]/75">{f.signal}</td>
+                            <td className="px-5 py-4 align-top text-[var(--clay)]">{f.angle}</td>
+                            <td className="px-5 py-4 align-top text-[var(--ink)]/75">
+                                <pre className="whitespace-pre-wrap font-sans text-[12px] leading-relaxed">
+                                    {f.copy}
+                                </pre>
                             </td>
                         </tr>
                     ))}

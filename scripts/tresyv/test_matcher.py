@@ -57,7 +57,7 @@ SAMPLES = [
 ]
 
 
-def pick(client, library, prospect, min_confidence=0.7):
+def pick(client, library, prospect, min_confidence=0.8):
     library_compact = [
         {
             "name": c["name"],
@@ -78,20 +78,38 @@ def pick(client, library, prospect, min_confidence=0.7):
         "TRESYV'S CLIENT LIBRARY (already filtered to recognizable names):\n"
         f"{json.dumps(library_compact, ensure_ascii=False, indent=2)}\n\n"
         "TASK:\n"
-        "Pick 1-3 clients from the library that this prospect would recognize AND find directly "
-        "relevant to their own business (same industry, comparable scale, similar challenge solved). "
-        "Order by impressiveness for THIS prospect.\n\n"
-        "Be strict:\n"
-        "- If no client is a strong match (same sector OR comparable scale + recognizable name), "
-        "return matches: null. A weak match makes the outreach feel automated and is worse than no reference.\n"
-        "- \"Same sector\" is the strongest signal. \"Recognizable Danish brand\" is the second. "
-        "Generic \"we both have a website\" is NOT a match.\n"
-        "- Don't pick more than 3. If two clients fit, picking two is better than padding with a third weak one.\n\n"
+        "Pick 1-3 clients that this prospect would recognise AND that closely mirror the prospect's own business. Order by closeness to the prospect.\n\n"
+        "STRICTNESS RULES — read carefully, the bar is high:\n\n"
+        "1. **Product category is a HARD GATE. It is the first test, and if it fails, return null.**\n"
+        "   The two companies must sell or serve the SAME or VERY ADJACENT product/service. \"B2B distribution\" is not a category — IT hardware, food/grocery, cleaning supplies, building materials are categories.\n"
+        "   - Food/grocery wholesale ≠ IT hardware wholesale (different products → null, even though both B2B distribution at scale).\n"
+        "   - Bike retail ≠ refurbished electronics retail (different products → null).\n"
+        "   - Amusement park ≠ airport (different experiences → null, even though both are Danish landmarks).\n"
+        "   - Home/lifestyle retail ≠ consumer electronics retail (different products → null).\n"
+        "   - Carpentry/trades ≠ tech SaaS (different services → null).\n"
+        "   \"Both are e-commerce\" is a CHANNEL, not a category. \"Both serve B2B\" is a CHANNEL, not a category. Match on **what they sell**, not how they sell it.\n\n"
+        "2. **Same business model (only checked if category gate already passed).**\n"
+        "   - Pure B2C retail and pure B2B distribution are different models.\n"
+        "   - Multi-market European distribution ≠ single-market Danish operation.\n"
+        "   - Omnichannel (web + 250 stores) ≠ pure online with 1 warehouse.\n\n"
+        "3. **Comparable scale (only checked if category + model gates passed).**\n"
+        "   - 16 stores and 250 stores are an order of magnitude apart.\n"
+        "   - 30,000 B2B customers and 100 B2B customers are different worlds.\n"
+        "   - Pan-European and DK-only differ even when category and model match.\n\n"
+        "4. **Default to null.** If you find yourself reaching, return null. A weak reference is worse than no reference. Most prospects will end up with no match, and that is correct and expected.\n"
+        "   - \"Both Danish\" is NOT a match.\n"
+        "   - \"Both have a webshop\" is NOT a match.\n"
+        "   - \"Both have physical stores\" is NOT a match.\n"
+        "   - \"Both B2B\" is NOT a match.\n"
+        "   - \"Both at scale\" is NOT a match.\n"
+        "   These are all channel/form similarities, not category similarities.\n\n"
+        "5. **Exception:** Non-profit / mission-driven / award-winning clients (Dansk Blindesamfund, Læger uden Grænser, Plan Børnefonden) can match other non-profits or accessibility-conscious orgs.\n\n"
+        "Don't pick more than 3. Two strong picks beats three diluted ones. One strong pick beats two diluted ones.\n\n"
         "Respond as STRICT JSON only (no markdown, no other text):\n"
         "{\n"
-        '  "matches": [{"name": "<exact name from library>", "reason": "<one short sentence>"}] OR null,\n'
-        '  "rationale": "<one sentence explaining overall pick or why nothing matched>",\n'
-        '  "confidence": <0.0 to 1.0>\n'
+        '  "matches": [{"name": "<exact name from library>", "reason": "<one short sentence — must reference category/model/scale overlap>"}] OR null,\n'
+        '  "rationale": "<one sentence — if null, explain what category gap killed it>",\n'
+        '  "confidence": <0.0 to 1.0 — set 0.85+ only when category, model, AND scale all line up>\n'
         "}"
     )
     resp = client.messages.create(model=MODEL, max_tokens=500,

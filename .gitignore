@@ -59,3 +59,6 @@ clients/
 
 # Bikenor dev-branch credentials
 clients/bikenor/.env.*.local
+
+# Codex CLI session state (per-invocation, not source)
+.context/

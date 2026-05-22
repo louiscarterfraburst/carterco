@@ -39,7 +39,7 @@ export async function pickClientReference(
     prospect: Prospect,
     opts: { minConfidence?: number; cache?: boolean } = {},
 ): Promise<ReferenceMatch | NoMatch> {
-    const minConfidence = opts.minConfidence ?? 0.7;
+    const minConfidence = opts.minConfidence ?? 0.8;
     if (!ANTHROPIC_API_KEY) {
         return { matches: null, rationale: "ANTHROPIC_API_KEY not configured", confidence: 0 };
     }
@@ -69,18 +69,46 @@ TRESYV'S CLIENT LIBRARY (already filtered to recognizable names):
 ${JSON.stringify(library, null, 2)}
 
 TASK:
-Pick 1-3 clients from the library that this prospect would recognize AND find directly relevant to their own business (same industry, comparable scale, similar challenge solved). Order by impressiveness for THIS prospect.
+Pick 1-3 clients that this prospect would recognise AND that closely mirror the prospect's own business. Order by closeness to the prospect.
 
-Be strict:
-- If no client is a strong match (same sector OR comparable scale + recognizable name), return matches: null. A weak match makes the outreach feel automated and is worse than no reference.
-- "Same sector" is the strongest signal. "Recognizable Danish brand" is the second. Generic "we both have a website" is NOT a match.
-- Don't pick more than 3. If two clients fit, picking two is better than padding with a third weak one.
+STRICTNESS RULES — read carefully, the bar is high:
+
+1. **Product category is a HARD GATE. It is the first test, and if it fails, return null.**
+   The two companies must sell or serve the SAME or VERY ADJACENT product/service. "B2B distribution" is not a category — IT hardware, food/grocery, cleaning supplies, building materials are categories.
+   - Food/grocery wholesale ≠ IT hardware wholesale (different products → null, even though both B2B distribution at scale).
+   - Bike retail ≠ refurbished electronics retail (different products → null).
+   - Amusement park ≠ airport (different experiences → null, even though both are Danish landmarks).
+   - Home/lifestyle retail ≠ consumer electronics retail (different products → null).
+   - Carpentry/trades ≠ tech SaaS (different services → null).
+   "Both are e-commerce" is a CHANNEL, not a category. "Both serve B2B" is a CHANNEL, not a category. Match on **what they sell**, not how they sell it.
+
+2. **Same business model (only checked if category gate already passed).**
+   - Pure B2C retail and pure B2B distribution are different models.
+   - Multi-market European distribution ≠ single-market Danish operation.
+   - Omnichannel (web + 250 stores) ≠ pure online with 1 warehouse.
+
+3. **Comparable scale (only checked if category + model gates passed).**
+   - 16 stores and 250 stores are an order of magnitude apart.
+   - 30,000 B2B customers and 100 B2B customers are different worlds.
+   - Pan-European and DK-only differ even when category and model match.
+
+4. **Default to null.** If you find yourself reaching, return null. A weak reference is worse than no reference — Rasmus removed his original references for exactly this reason. Most prospects will end up with no match, and that is correct and expected.
+   - "Both Danish" is NOT a match.
+   - "Both have a webshop" is NOT a match.
+   - "Both have physical stores" is NOT a match.
+   - "Both B2B" is NOT a match.
+   - "Both at scale" is NOT a match.
+   These are all channel/form similarities, not category similarities.
+
+5. **Exception:** Non-profit / mission-driven / award-winning clients (Dansk Blindesamfund, Læger uden Grænser, Plan Børnefonden) can match other non-profits or accessibility-conscious orgs, since the relevant signal there is mission-alignment, not category.
+
+Don't pick more than 3. Two strong picks beats three diluted ones. One strong pick beats two diluted ones.
 
 Respond as STRICT JSON only (no markdown, no other text):
 {
-  "matches": [{"name": "<exact name from library>", "reason": "<one short sentence why this prospect would find them impressive>"}] OR null,
-  "rationale": "<one sentence explaining overall pick or why nothing matched>",
-  "confidence": <0.0 to 1.0 — how strong the match is>
+  "matches": [{"name": "<exact name from library>", "reason": "<one short sentence — must reference the specific category/model/scale overlap, not generic similarity>"}] OR null,
+  "rationale": "<one sentence — if null, explain what category gap killed it>",
+  "confidence": <0.0 to 1.0 — set 0.85+ only when the category, model, AND scale all line up>
 }`;
 
     const resp = await client.messages.create({

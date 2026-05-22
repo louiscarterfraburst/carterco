@@ -189,7 +189,7 @@ INSERT INTO outreach_sequences (id, workspace_id, description, trigger_signal, e
         {
           "action": {
             "type": "auto_send",
-            "template": "Hej {firstName}\n\nHurtigt spørgsmål: er du den rigtige hos {company} at tale med om dette, eller skal jeg fange en anden? Sig også til hvis det ikke er relevant."
+            "template": "Hej {firstName}\n\nHurtigt spørgsmål: er du den rigtige hos jer at tale med om dette, eller skal jeg fange en anden? Sig også til hvis det ikke er relevant."
           }
         }
       ]

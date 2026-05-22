@@ -1,22 +1,28 @@
 #!/usr/bin/env python3
-"""Stage cleaned OdaGroup leads in the `lead_inbox` Supabase table.
+"""Stage cleaned leads in the `lead_inbox` Supabase table.
 
-Reads `clients/odagroup/data/leads_clean.csv` (the post-normalize, post-LLM
-output) and upserts each row into `public.lead_inbox` with workspace_id =
-OdaGroup. Idempotent on (workspace_id, linkedin_url) so re-runs are safe.
+Reads a normalized leads CSV and upserts each row into `public.lead_inbox`
+with the chosen workspace_id. Idempotent on (workspace_id, linkedin_url) so
+re-runs are safe.
 
 Also produces a slim SendPilot-importable CSV (linkedinUrl, firstName,
-lastName, title, company) that Niels imports into his SendPilot campaign.
-SendPilot only needs the bare LinkedIn URL + name to send the connection
-request — title/company are nice-to-have for personalization tokens but
-not required.
+lastName, title, company, website) that the client imports into a SendPilot
+campaign. Website carries via lead_inbox.website → outreach_leads.website
+on promotion, which the SendSpark render gate checks before invoking.
 
 Usage:
   set -a; source .env.local; set +a
   python3 scripts/lead-enrichment/import_to_lead_inbox.py \\
-    --csv clients/odagroup/data/leads_clean.csv \\
-    --sendpilot-out clients/odagroup/data/sendpilot_import.csv \\
+    --workspace {odagroup,carterco} \\
+    --csv clients/<client>/data/leads_clean.csv \\
+    --sendpilot-out clients/<client>/data/sendpilot_import.csv \\
+    [--brands clients/<client>/data/brands_with_domains_merged.csv] \\
     [--dry-run] [--limit N] [--skip-non-latin] [--skip-no-title]
+
+Website resolution order per lead:
+  1. row['website'] if present in input CSV
+  2. brands CSV lookup by row['brand'] then row['company'] (case-insensitive)
+  3. empty (render will fail at the missing_website gate)
 """
 from __future__ import annotations
 
@@ -30,7 +36,10 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-ODAGROUP_WORKSPACE_ID = "cdfd80d8-33bb-4b64-b778-0a2c5ab78cc6"
+WORKSPACES = {
+    "odagroup": "cdfd80d8-33bb-4b64-b778-0a2c5ab78cc6",
+    "carterco": "1e067f9a-d453-41a7-8bc4-9fdb5644a5fa",
+}
 
 SB_URL = (
     os.environ.get("SUPABASE_URL")
@@ -84,11 +93,18 @@ def upsert_batch(rows: list[dict]) -> tuple[int, int]:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--workspace", required=True, choices=sorted(WORKSPACES.keys()),
+                    help="workspace key (sets workspace_id)")
     ap.add_argument("--csv", required=True, help="cleaned CSV (post-normalize)")
     ap.add_argument("--sendpilot-out", required=True,
                     help="SendPilot-importable slim CSV output path")
-    ap.add_argument("--source-csv", default="Odagroup-leads.csv",
-                    help="filename to record in lead_inbox.source_csv (audit)")
+    ap.add_argument("--brands", default="",
+                    help="optional brands CSV with brand/domain columns "
+                    "(e.g. brands_with_domains_merged.csv) used to fill the "
+                    "website column when the input CSV doesn't have one")
+    ap.add_argument("--source-csv", default="",
+                    help="filename to record in lead_inbox.source_csv (audit). "
+                    "Defaults to '<workspace>-leads.csv'")
     ap.add_argument("--dry-run", action="store_true",
                     help="print plan, don't upsert or write")
     ap.add_argument("--limit", type=int, default=0,
@@ -102,6 +118,12 @@ def main() -> int:
                     help="rows per upsert batch (PostgREST handles ~1000 cleanly)")
     args = ap.parse_args()
 
+    workspace_id = WORKSPACES[args.workspace]
+    source_csv = args.source_csv or f"{args.workspace}-leads.csv"
+    print(f"workspace: {args.workspace} ({workspace_id})")
+    print(f"source_csv: {source_csv}")
+    print()
+
     src = Path(args.csv)
     if not src.exists():
         sys.exit(f"input not found: {src}")
@@ -109,9 +131,41 @@ def main() -> int:
     rows = list(csv.DictReader(open(src, encoding="utf-8")))
     print(f"loaded {len(rows)} rows from {src.name}")
 
+    # Optional brands lookup: key on lowercased brand / company → domain.
+    # Both keys populated so leads_clean rows (which carry `brand`) and ad-hoc
+    # rows (only `company`) both resolve. Domain stored bare; we https://-prefix
+    # at write time so the column matches what outreach_leads.website expects.
+    brand_to_domain: dict[str, str] = {}
+    if args.brands:
+        bsrc = Path(args.brands)
+        if not bsrc.exists():
+            sys.exit(f"--brands not found: {bsrc}")
+        for b in csv.DictReader(open(bsrc, encoding="utf-8")):
+            dom = (b.get("domain") or "").strip()
+            if not dom:
+                continue
+            for k in (b.get("brand"), b.get("brand_clean"), b.get("company")):
+                if k:
+                    brand_to_domain.setdefault(k.strip().lower(), dom)
+        print(f"brands lookup: {len(brand_to_domain)} keys "
+              f"(from {bsrc.name})")
+
+    def resolve_website(r: dict) -> str:
+        existing = (r.get("website") or "").strip()
+        if existing:
+            return existing if existing.startswith("http") else f"https://{existing}"
+        for k in (r.get("brand"), r.get("company")):
+            if not k:
+                continue
+            dom = brand_to_domain.get(k.strip().lower())
+            if dom:
+                return dom if dom.startswith("http") else f"https://{dom}"
+        return ""
+
     inbox_rows: list[dict] = []
     sendpilot_rows: list[dict] = []
     skipped = {"no_slug": 0, "non_latin": 0, "no_title": 0, "no_first_name": 0}
+    no_website = 0
 
     for r in rows:
         url = r.get("linkedin_url", "").strip()
@@ -131,8 +185,12 @@ def main() -> int:
             skipped["no_title"] += 1
             continue
 
+        website = resolve_website(r)
+        if not website:
+            no_website += 1
+
         inbox_rows.append({
-            "workspace_id": ODAGROUP_WORKSPACE_ID,
+            "workspace_id": workspace_id,
             "linkedin_url": url,
             "linkedin_slug": slug,
             "first_name": first,
@@ -142,15 +200,19 @@ def main() -> int:
             "country": (r.get("country", "").strip() or None),
             "detected_strategy": r.get("detected_strategy", "").strip() or None,
             "city": r.get("city", "").strip() or None,
-            "source_csv": args.source_csv,
+            "website": website or None,
+            "source_csv": source_csv,
         })
-        # SendPilot import: bare minimum it needs.
+        # SendPilot import: bare minimum it needs. `website` lands in
+        # customFields on SendPilot's side via its UI mapping; our own render
+        # gate reads website from outreach_leads (carried via lead_inbox).
         sendpilot_rows.append({
             "linkedinUrl": url,
             "firstName": first,
             "lastName": r.get("last_name", "").strip(),
             "company": r.get("company", "").strip(),
             "title": title,
+            "website": website,
         })
 
         if args.limit and len(inbox_rows) >= args.limit:
@@ -160,6 +222,9 @@ def main() -> int:
     print(f"=== PLAN ===")
     print(f"  rows to insert into lead_inbox: {len(inbox_rows)}")
     print(f"  rows to write to SendPilot CSV: {len(sendpilot_rows)}")
+    if no_website:
+        print(f"  rows MISSING website: {no_website} "
+              f"(SendSpark render will fail at the missing_website gate)")
     if any(skipped.values()):
         print(f"  skipped:")
         for k, v in skipped.items():
@@ -176,7 +241,7 @@ def main() -> int:
     sp_path.parent.mkdir(parents=True, exist_ok=True)
     with open(sp_path, "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=["linkedinUrl", "firstName", "lastName",
-                                          "company", "title"])
+                                          "company", "title", "website"])
         w.writeheader()
         w.writerows(sendpilot_rows)
     print(f"wrote {len(sendpilot_rows)} rows → {sp_path}")

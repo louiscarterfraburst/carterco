@@ -250,3 +250,32 @@ export const TRESYV_CLIENTS: TresyvClient[] = [
         impressiveness: 2,
     },
 ];
+
+// Blocklist helper: returns the matched Tresyv client name if the prospect's
+// company is already a Tresyv customer, else null. Word-boundary match so
+// "FutureAble" doesn't match the client "Able". Case-insensitive.
+//
+// Callers (sendpilot-webhook + sendpilot-poll on connection.accepted)
+// auto-reject the lead with status='rejected' and an audit reason. Pitching
+// an existing customer is exactly the kind of trust-break we built the
+// workspace separation system to prevent — same rule, different axis.
+export function matchTresyvClient(company: string | null | undefined): string | null {
+  const c = (company ?? "").trim();
+  if (!c) return null;
+  const cLower = c.toLowerCase();
+  for (const client of TRESYV_CLIENTS) {
+    const nameLower = client.name.toLowerCase();
+    // \b doesn't work for non-ASCII letters in JS regex; use a manual
+    // word-boundary check: nameLower appears in cLower bordered by non-letter
+    // (or start/end).
+    const idx = cLower.indexOf(nameLower);
+    if (idx === -1) continue;
+    const before = idx === 0 ? "" : cLower[idx - 1];
+    const after = idx + nameLower.length >= cLower.length ? "" : cLower[idx + nameLower.length];
+    const isLetterOrDigit = (ch: string) => /[\p{L}\p{N}]/u.test(ch);
+    if (!isLetterOrDigit(before) && !isLetterOrDigit(after)) {
+      return client.name;
+    }
+  }
+  return null;
+}

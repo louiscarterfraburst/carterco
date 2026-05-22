@@ -18,6 +18,7 @@
 // Callable manually or wired to pg_cron.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.103.3";
+import { fireReferralTitleSearch } from "../_shared/referral-search.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -344,7 +345,7 @@ async function syncOne(
         // Tresyv backfill gets the same intent/draft enrichment that
         // webhook-fed CarterCo replies already have.
         if (inserted?.id && row.contact_email) {
-          void enrichInbound(inserted.id, messageText, row.contact_email);
+          void enrichInbound(inserted.id, messageText, row.contact_email, row.sendpilot_lead_id);
         }
       }
     }
@@ -363,7 +364,7 @@ async function syncOne(
 // inserted inbound row. Same enrichment path sendpilot-webhook's
 // classifyReplyAsync provides for live webhook events. Fire-and-forget —
 // failures log and don't block the sync.
-async function enrichInbound(replyId: string, text: string, contactEmail: string): Promise<void> {
+async function enrichInbound(replyId: string, text: string, contactEmail: string, leadId: string): Promise<void> {
   try {
     const { data: lead } = await supabase
       .from("outreach_leads")
@@ -391,15 +392,22 @@ async function enrichInbound(replyId: string, text: string, contactEmail: string
       referralTarget?: { name?: string; title?: string; company?: string };
     };
     const isReferral = cj.intent === "referral";
+    // Auto-handle declines/OOO inline (same rule as sendpilot-webhook).
+    const autoHandle = cj.intent === "decline" || cj.intent === "ooo";
     await supabase.from("outreach_replies").update({
       intent: cj.intent,
       confidence: cj.confidence,
       reasoning: cj.reasoning,
       classified_at: new Date().toISOString(),
+      handled: autoHandle ? true : undefined,
       referral_target_name:    isReferral ? (cj.referralTarget?.name ?? null) : null,
       referral_target_title:   isReferral ? (cj.referralTarget?.title ?? null) : null,
       referral_target_company: isReferral ? (cj.referralTarget?.company ?? null) : null,
     }).eq("id", replyId);
+
+    if (isReferral && !cj.referralTarget?.name && cj.referralTarget?.title) {
+      await fireReferralTitleSearch(supabase, leadId, cj.referralTarget.title);
+    }
 
     if (cj.intent === "question" || cj.intent === "interested") {
       const draftRes = await fetch(`${aiBase}?op=draft_reply`, {

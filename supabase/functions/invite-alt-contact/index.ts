@@ -12,14 +12,11 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.103.3";
 import { createHash } from "node:crypto";
-import { firstNameForGreeting } from "../_shared/text.ts";
-
-// Default connect-note template for reply_referral alt_contacts. Tunable
-// via OUTREACH_REFERRAL_CONNECT_NOTE env var; substitutions: {firstName}
-// (recipient), {referrerFirstName} (original prospect who pointed us to
-// them). Kept compact for LinkedIn's 300-char note limit.
-const REFERRAL_CONNECT_NOTE_DEFAULT =
-  "Hej {firstName}, {referrerFirstName} sagde jeg skulle prikke til dig — har en kort video til dig";
+import { canonicalSenderFor } from "../_shared/workspaces.ts";
+// firstNameForGreeting was used by the old referral connect-note default;
+// kept the import nuked when we ripped out auto-notes. If a future caller
+// passes body.messageOverride that needs templating, do the substitution
+// at the call site, not here.
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -38,15 +35,24 @@ Deno.serve(async (request) => {
   const token = authHeader.replace(/^Bearer\s+/i, "");
   if (!token) return json({ error: "missing bearer" }, 401);
 
-  const userClient = createClient(
-    Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_ANON_KEY") ?? Deno.env.get("SUPABASE_PUBLISHABLE_KEY") ?? "",
-    { global: { headers: { Authorization: `Bearer ${token}` } } },
-  );
-  const { data: { user }, error: userErr } = await userClient.auth.getUser();
-  if (userErr || !user) return json({ error: "invalid auth" }, 401);
-  const email = (user.email ?? "").toLowerCase();
-  if (!ALLOWED.has(email)) return json({ error: "forbidden" }, 403);
+  // Two valid caller types:
+  // - service role (poll-alt-searches auto-fire): no user identity, but the
+  //   caller is trusted infra. invite-alt-contact attribution is 'auto'.
+  // - user JWT (UI button): validated through Supabase Auth + workspace allowlist.
+  const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+  const isServiceRole = SERVICE_ROLE.length > 0 && token === SERVICE_ROLE;
+  let email = "auto";
+  if (!isServiceRole) {
+    const userClient = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_ANON_KEY") ?? Deno.env.get("SUPABASE_PUBLISHABLE_KEY") ?? "",
+      { global: { headers: { Authorization: `Bearer ${token}` } } },
+    );
+    const { data: { user }, error: userErr } = await userClient.auth.getUser();
+    if (userErr || !user) return json({ error: "invalid auth" }, 401);
+    email = (user.email ?? "").toLowerCase();
+    if (!ALLOWED.has(email)) return json({ error: "forbidden" }, 403);
+  }
 
   const admin = createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
@@ -75,8 +81,39 @@ Deno.serve(async (request) => {
     .maybeSingle();
   if (origErr) return json({ error: "db fetch orig", details: origErr.message }, 500);
   if (!orig) return json({ error: "original pipeline row not found" }, 404);
-  if (!orig.sendpilot_sender_id) {
-    return json({ error: "original has no sendpilot_sender_id (cannot send connection)" }, 400);
+
+  // Workspace drift guard: alt_contacts are inserted with workspace_id =
+  // parent pipeline's workspace_id (poll-alt-searches + sendpilot-webhook).
+  // If they ever diverge (manual edit, corrupt import, future bug), refuse
+  // the send. Codex flagged that the planted lead later uses alt.workspace_id
+  // while we invite from orig.workspace_id's sender — drift would let the
+  // accept webhook resolve the wrong workspace downstream.
+  if (alt.workspace_id !== orig.workspace_id) {
+    return json({
+      error: "workspace mismatch between alt_contact and parent pipeline — refusing send",
+      alt_workspace_id: alt.workspace_id,
+      pipeline_workspace_id: orig.workspace_id,
+    }, 409);
+  }
+
+  // Canonical sender lookup: never trust orig.sendpilot_sender_id blindly.
+  // The workspace_senders table is the source of truth — we send under THAT
+  // account regardless of what's stamped on the pipeline row. Prevents
+  // cross-workspace contamination if pipeline data drifts.
+  const canonicalSenderId = await canonicalSenderFor(admin, orig.workspace_id as string);
+  if (!canonicalSenderId) {
+    return json({
+      error: "no canonical sender registered for workspace — add a row to workspace_senders",
+      workspace_id: orig.workspace_id,
+    }, 500);
+  }
+  if (orig.sendpilot_sender_id && orig.sendpilot_sender_id !== canonicalSenderId) {
+    console.warn("invite-alt-contact: pipeline sender mismatch — using canonical", {
+      pipeline_lead_id: orig.sendpilot_lead_id,
+      pipeline_sender: orig.sendpilot_sender_id,
+      canonical_sender: canonicalSenderId,
+      workspace_id: orig.workspace_id,
+    });
   }
 
   const { data: origLead } = await admin
@@ -86,7 +123,10 @@ Deno.serve(async (request) => {
     .maybeSingle();
 
   const now = new Date().toISOString();
-  const isReplyReferral = alt.source === "reply_referral";
+  // Both reply_referral (named referral, no URL) and reply_referral_search
+  // (title-only referral → SendPilot-found URL) use the referral connect note.
+  // They share the same UX semantics: the prospect pointed us at someone.
+  const isReplyReferral = alt.source === "reply_referral" || alt.source === "reply_referral_search";
 
   // Plant an outreach_leads row for the alternate so the future accept
   // webhook can look them up by linkedin_url and the SendSpark render uses
@@ -109,24 +149,22 @@ Deno.serve(async (request) => {
     campaign_id: orig.campaign_id ?? null,
   }, { onConflict: "linkedin_url" });
 
-  // Connect-note: if the caller supplied one, use it verbatim. Otherwise
-  // for reply_referral alts, default to a referral-aware note so Morten sees
-  // "Justyna sagde jeg skulle prikke til dig" instead of a bare connect.
-  // For sendpilot/team_page alts we still send bare (higher accept rate on
-  // cold connects).
-  let connectMessage = body.messageOverride?.trim() ?? "";
-  if (!connectMessage && isReplyReferral) {
-    const template = Deno.env.get("OUTREACH_REFERRAL_CONNECT_NOTE") || REFERRAL_CONNECT_NOTE_DEFAULT;
-    connectMessage = template
-      .replaceAll("{firstName}", altFirst || "der")
-      .replaceAll("{referrerFirstName}", firstNameForGreeting(origLead?.first_name) || "vores fælles kontakt");
-  }
+  // Connect-note policy: never auto-attach a note. Bare connects out-perform
+  // note-bearing connects across the board (LinkedIn flags noted invites as
+  // outreach; bare looks like a normal professional connection). Referral
+  // context — including the referrer's name — moves to the post-accept first
+  // DM, where there's room to do it right.
+  //
+  // The only way a note goes out now is if the caller explicitly supplies
+  // body.messageOverride. UI buttons can still pass one for one-off cases;
+  // the auto-fire path from poll-alt-searches never does.
+  const connectMessage = body.messageOverride?.trim() ?? "";
 
   const connectRes = await fetch("https://api.sendpilot.ai/v1/inbox/connect", {
     method: "POST",
     headers: { "X-API-Key": SP_API_KEY, "Content-Type": "application/json" },
     body: JSON.stringify({
-      senderId: orig.sendpilot_sender_id,
+      senderId: canonicalSenderId,
       recipientLinkedinUrl: alt.linkedin_url,
       ...(connectMessage ? { message: connectMessage } : {}),
     }),

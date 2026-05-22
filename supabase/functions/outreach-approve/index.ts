@@ -1,5 +1,5 @@
-// Approval endpoint called from the /outreach UI. Authenticated user
-// (louis@carterco.dk or rm@tresyv.dk) acts on a pipeline lead:
+// Approval endpoint called from the /outreach UI. Authenticated user must
+// be a member of the lead's workspace (workspace_members). Actions:
 //   approve → POST /v1/inbox/send → status='sent'
 //   reject  → status='rejected'
 //   render  → POST /v1/dynamics/.../prospect → kicks a SendSpark render
@@ -9,6 +9,7 @@ import { createClient } from "npm:@supabase/supabase-js@2.103.3";
 import { firstNameForGreeting, normalizeCompanyName, urlOrigin } from "../_shared/text.ts";
 import { checkLeadReplied } from "../_shared/sendpilot-client.ts";
 import { sendsparkCredsFor } from "../_shared/sendspark-config.ts";
+import { canonicalSenderFor } from "../_shared/workspaces.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -16,7 +17,6 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const ALLOWED = new Set(["louis@carterco.dk", "rm@tresyv.dk", "haugefrom@haugefrom.com"]);
 const SP_API_KEY = Deno.env.get("SENDPILOT_API_KEY") ?? "";
 const SS_DYNAMIC = Deno.env.get("SENDSPARK_DYNAMIC") ?? "";
 
@@ -38,7 +38,7 @@ Deno.serve(async (request) => {
   const { data: { user }, error: userErr } = await userClient.auth.getUser();
   if (userErr || !user) return json({ error: "invalid auth" }, 401);
   const email = (user.email ?? "").toLowerCase();
-  if (!ALLOWED.has(email)) return json({ error: "forbidden" }, 403);
+  if (!email) return json({ error: "forbidden" }, 403);
 
   // Service-role client for mutations.
   const admin = createClient(
@@ -82,36 +82,48 @@ Deno.serve(async (request) => {
   // Fetch the pipeline row.
   const { data: pipe, error: fetchErr } = await admin
     .from("outreach_pipeline")
-    .select("sendpilot_lead_id, contact_email, linkedin_url, status, rendered_message, video_link, accepted_at, workspace_id, sendpilot_sender_id, campaign_id")
+    .select("sendpilot_lead_id, contact_email, linkedin_url, status, rendered_message, video_link, accepted_at, sent_at, workspace_id, sendpilot_sender_id, campaign_id")
     .eq("sendpilot_lead_id", leadId)
     .maybeSingle();
   if (fetchErr) return json({ error: "db fetch", details: fetchErr.message }, 500);
   if (!pipe) return json({ error: "lead not found" }, 404);
 
-  // Workspace-wide fallback: leads ingested via sendpilot-poll sometimes land
-  // without a sendpilot_sender_id (the poll payload doesn't always include
-  // it). Both Tresyv and CarterCo use exactly one SendPilot sender per
-  // workspace, so we can safely backfill from the most recent row in the
-  // same workspace that does have one. If we ever run multiple senders per
-  // workspace this needs to become campaign-aware.
-  let resolvedSenderId = pipe.sendpilot_sender_id as string | null;
-  if (!resolvedSenderId && pipe.workspace_id) {
-    const { data: senderRow } = await admin
-      .from("outreach_pipeline")
-      .select("sendpilot_sender_id, updated_at")
-      .eq("workspace_id", pipe.workspace_id)
-      .not("sendpilot_sender_id", "is", null)
-      .order("updated_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (senderRow?.sendpilot_sender_id) {
-      resolvedSenderId = senderRow.sendpilot_sender_id as string;
-      // Backfill the row so future calls don't need the lookup.
-      await admin.from("outreach_pipeline")
-        .update({ sendpilot_sender_id: resolvedSenderId })
-        .eq("sendpilot_lead_id", leadId);
-      console.log(`outreach-approve: backfilled sender_id=${resolvedSenderId} for lead=${leadId} (workspace=${pipe.workspace_id})`);
-    }
+  // Workspace authorization: the authed user must be a member of the lead's
+  // workspace. Replaces the old hard-coded operator allowlist so any
+  // workspace member (e.g. Caroline on OdaGroup) can approve their own
+  // workspace's leads.
+  if (!pipe.workspace_id) {
+    return json({ error: "lead has no workspace_id" }, 409);
+  }
+  const { data: membership, error: memErr } = await admin
+    .from("workspace_members")
+    .select("role")
+    .eq("workspace_id", pipe.workspace_id)
+    .eq("user_email", email)
+    .maybeSingle();
+  if (memErr) return json({ error: "db fetch membership", details: memErr.message }, 500);
+  if (!membership) return json({ error: "forbidden" }, 403);
+
+  // Canonical sender: always look up from workspace_senders, never trust the
+  // pipeline row blindly. If the pipeline row was stamped with a wrong
+  // sender_id (legacy data, manual edit, bug), the workspace_senders table
+  // is the source of truth and we'd rather send from the right account than
+  // honor a corrupt value. If pipeline.sender is missing, the canonical
+  // lookup also serves as the backfill source.
+  const resolvedSenderId = await canonicalSenderFor(admin, pipe.workspace_id as string);
+  if (pipe.sendpilot_sender_id && resolvedSenderId && pipe.sendpilot_sender_id !== resolvedSenderId) {
+    console.warn("outreach-approve: pipeline sender mismatch — using canonical", {
+      lead: leadId,
+      pipeline_sender: pipe.sendpilot_sender_id,
+      canonical_sender: resolvedSenderId,
+      workspace_id: pipe.workspace_id,
+    });
+  }
+  if (resolvedSenderId && !pipe.sendpilot_sender_id) {
+    // Backfill so the action queue / phone-scout etc see the right value.
+    await admin.from("outreach_pipeline")
+      .update({ sendpilot_sender_id: resolvedSenderId })
+      .eq("sendpilot_lead_id", leadId);
   }
 
   const now = new Date().toISOString();
@@ -174,6 +186,17 @@ Deno.serve(async (request) => {
 
   if (decision === "render") {
     if (!pipe.contact_email) return json({ error: "lead has no contact_email" }, 400);
+    // Guard: never re-render a lead that has been sent. The DM in LinkedIn
+    // points at the original video URL — re-rendering replaces the asset on
+    // Tresyv's CDN, breaks the link the prospect already clicked, and burns
+    // SendSpark credits for an asset nobody will see.
+    if (pipe.sent_at) {
+      return json({
+        error: "lead has already been sent; re-rendering would orphan the link in the delivered DM",
+        sent_at: pipe.sent_at,
+        status: pipe.status,
+      }, 409);
+    }
     const { data: lead } = await admin
       .from("outreach_leads")
       .select("first_name, last_name, company, title, website, contact_email")
