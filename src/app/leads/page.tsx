@@ -224,6 +224,9 @@ export default function LeadsPage() {
 
   const isWaitingLead = (l: Lead) => {
     if (!l.next_action_at) return false;
+    // Reply-waiting leads belong in Aktive (isActiveLead surfaces them); no
+    // dual-listing here, otherwise the same lead shows in both tabs.
+    if (leadsWithInboundReply.has(l.id)) return false;
     const eligible =
       !l.outcome ||
       l.outcome === "callback" ||
