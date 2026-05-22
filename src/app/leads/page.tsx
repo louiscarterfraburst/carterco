@@ -190,6 +190,42 @@ export default function LeadsPage() {
     });
   }
 
+  // Operator clicked an SMS button → log outbound event so the chip flips
+  // off + clear the stale relay-set retry timer. Optimistically appends the
+  // new event into local state so the UI updates without a refetch.
+  async function logOutboundSms(leadId: string, body: string) {
+    try {
+      const res = await fetch("/api/sms-sent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ leadId, body }),
+      });
+      if (!res.ok) {
+        console.warn("sms-sent log failed:", await res.text().catch(() => ""));
+        return;
+      }
+      const data = (await res.json()) as { event: ConversationEvent };
+      setConversationEvents((curr) => ({
+        ...curr,
+        [leadId]: [data.event, ...(curr[leadId] ?? [])],
+      }));
+      setLeads((curr) =>
+        curr.map((l) =>
+          l.id === leadId
+            ? {
+                ...l,
+                next_action_at: null,
+                next_action_type: null,
+                last_action_fired_at: null,
+              }
+            : l,
+        ),
+      );
+    } catch (e) {
+      console.warn("sms-sent log threw:", e);
+    }
+  }
+
   // Set of lead IDs where the most recent SMS event is inbound — meaning the
   // prospect replied and we haven't sent back yet. Used by isActiveLead to keep
   // these leads visible in Aktive even when next_action_at is in the future.
@@ -466,11 +502,9 @@ export default function LeadsPage() {
         )
       : null;
 
-    // SMS handoff to iPhone (2026-05-22 Phase 2). When the operator marks
-    // "no answer", we open Messages.app with the templated draft prefilled
-    // via the sms: URL scheme. iOS handles it natively; macOS picks it up
-    // through Continuity. The SMS leaves from the operator's real number.
-    // We don't know if they actually hit send — log-as-sent is honor system.
+    // SMS handoff to iPhone (2026-05-22 Phase 2). Open Messages.app with
+    // the templated draft prefilled via sms: URL, then log to backend so
+    // the "Svar venter" chip flips off + the stale retry timer clears.
     if (scheduleRetry && current?.phone && smsBody) {
       const phoneClean = current.phone.replace(/[^\d+]/g, "");
       const link = document.createElement("a");
@@ -479,6 +513,7 @@ export default function LeadsPage() {
       document.body.appendChild(link);
       link.click();
       link.remove();
+      void logOutboundSms(leadId, smsBody);
     }
 
     setLeads((curr) =>
@@ -1143,6 +1178,7 @@ export default function LeadsPage() {
                 slotsLine={slotsLine}
                 identity={identity}
                 conversationEvents={conversationEvents[lead.id] ?? []}
+                onSent={logOutboundSms}
               />
             ))}
           </ol>
@@ -1175,6 +1211,7 @@ function LeadRow({
   slotsLine,
   identity,
   conversationEvents,
+  onSent,
 }: {
   lead: Lead;
   index: number;
@@ -1192,6 +1229,7 @@ function LeadRow({
   slotsLine: string;
   identity: Identity;
   conversationEvents: ConversationEvent[];
+  onSent: (leadId: string, body: string) => void;
 }) {
   const urgent =
     !!lead.response_time && URGENCY[lead.response_time] === "urgent";
@@ -1378,6 +1416,7 @@ function LeadRow({
           slotsLine={slotsLine}
           identity={identity}
           conversationEvents={conversationEvents}
+          onSent={onSent}
         />
       ) : null}
     </li>
@@ -1395,6 +1434,7 @@ function DetailPanel({
   slotsLine,
   identity,
   conversationEvents,
+  onSent,
 }: {
   lead: Lead;
   hasRung: boolean;
@@ -1408,6 +1448,7 @@ function DetailPanel({
   slotsLine: string;
   identity: Identity;
   conversationEvents: ConversationEvent[];
+  onSent: (leadId: string, body: string) => void;
 }) {
   // Resolved — terminal state, shown only in "Vis alle".
   // `callback`, `follow_up`, and `interested`-with-nudge stay editable in Aktive.
@@ -1568,7 +1609,7 @@ function DetailPanel({
 
         <ConversationTimeline events={conversationEvents} />
         {canSms && (
-          <AiSmsButton lead={lead} />
+          <AiSmsButton lead={lead} onSent={onSent} />
         )}
 
         {/* Step 2 — outcome + notes (only after Svarede; no_answer just queues retry) */}
@@ -1639,7 +1680,13 @@ function DetailPanel({
   );
 }
 
-function AiSmsButton({ lead }: { lead: Lead }) {
+function AiSmsButton({
+  lead,
+  onSent,
+}: {
+  lead: Lead;
+  onSent: (leadId: string, body: string) => void;
+}) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -1670,6 +1717,7 @@ function AiSmsButton({ lead }: { lead: Lead }) {
       document.body.appendChild(link);
       link.click();
       link.remove();
+      onSent(lead.id, data.draft);
     } catch (err) {
       setError(err instanceof Error ? err.message : "AI draft fejlede");
     } finally {
