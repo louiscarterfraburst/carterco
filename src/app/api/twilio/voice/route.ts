@@ -1,7 +1,10 @@
 // Twilio Voice webhook: fires when someone calls our +45 91 30 92 79 number.
-// Policy: never pick up. Let it ring out (a few seconds), hang up, then
-// follow up with an SMS asking who they are. The SMS reply is what places
-// them in the pipeline.
+// Policy: never pick up. Ring out a few seconds, hang up. Inbound call is
+// logged to test_responses so it shows up in the dashboard.
+//
+// As of 2026-05-22 (Phase 1 SMS rebuild) we no longer auto-fire a "hvem er
+// det?" SMS to unknown callers — that was reckless (any wrong number got
+// texted). Follow-up SMS, if any, is now operator-triggered from /leads.
 
 import { NextResponse } from "next/server";
 import {
@@ -10,14 +13,10 @@ import {
   findSubmissionByCaller,
   insertResponse,
   getWebhookUrl,
-  sendTwilioSMS,
 } from "../_helpers";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-// Danish challenge SMS sent after every unknown inbound call.
-const CHALLENGE_SMS = "Hej, hvem er det? (har fået ny telefon)";
 
 export async function POST(req: Request) {
   const authToken = process.env.TWILIO_AUTH_TOKEN;
@@ -50,17 +49,6 @@ export async function POST(req: Request) {
     matched_via: sub ? "phone" : null,
     match_confidence: sub ? 0.95 : null,
   });
-
-  // Only challenge unknown callers — if we already matched them to a
-  // submission via phone, sending the "who is it" SMS would be weird.
-  // Silent on send failure (e.g. landline that can't receive SMS).
-  if (from && !sub) {
-    try {
-      await sendTwilioSMS(from, CHALLENGE_SMS);
-    } catch (e) {
-      console.error("[twilio/voice] SMS challenge send failed:", e);
-    }
-  }
 
   // Don't pick up. Pause ~6s so it rings a few times then drops naturally
   // ("missed call, in a meeting"), then hang up. No greeting, no recording.
