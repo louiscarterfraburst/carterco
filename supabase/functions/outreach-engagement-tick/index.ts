@@ -32,6 +32,7 @@ import {
 } from "../_shared/sequences.ts";
 import { checkLeadReplied } from "../_shared/sendpilot-client.ts";
 import { canonicalSenderFor } from "../_shared/workspaces.ts";
+import { addBusinessHours } from "../_shared/business-time.ts";
 
 const corsHeaders = {
     "Access-Control-Allow-Origin": "*",
@@ -335,7 +336,7 @@ async function evaluateLead(
             sequence_step: 0,
             sequence_started_at: now.toISOString(),
             sequence_step_entered_at: now.toISOString(),
-            sequence_parked_until: addHours(now, firstStep.waitHours).toISOString(),
+            sequence_parked_until: addBusinessHours(now, firstStep.waitHours).toISOString(),
             sequence_completed_at: null,
         }).eq("sendpilot_lead_id", row.sendpilot_lead_id);
         return 0;
@@ -359,7 +360,7 @@ async function evaluateLead(
             sequence_step: 0,
             sequence_started_at: now.toISOString(),
             sequence_step_entered_at: now.toISOString(),
-            sequence_parked_until: addHours(now, firstStep.waitHours).toISOString(),
+            sequence_parked_until: addBusinessHours(now, firstStep.waitHours).toISOString(),
             sequence_completed_at: null,
         }).eq("sendpilot_lead_id", row.sendpilot_lead_id);
         // Don't fall through; the next tick (or instant trigger) advances it.
@@ -392,8 +393,8 @@ async function evaluateLead(
     const enteredAt = parseTs(row.sequence_step_entered_at)
         ?? parseTs(row.sequence_started_at)
         ?? now;
-    const waitDeadline = addHours(enteredAt, step.waitHours);
-    const maxWaitDeadline = addHours(enteredAt, step.maxWaitHours ?? step.waitHours);
+    const waitDeadline = addBusinessHours(enteredAt, step.waitHours);
+    const maxWaitDeadline = addBusinessHours(enteredAt, step.maxWaitHours ?? step.waitHours);
 
     // Lead-mode bypass only applies to step 0 (the step the lead just
     // entered via enrolment). Subsequent steps must respect their wait
@@ -557,7 +558,7 @@ async function advanceStep(
     await supabase.from("outreach_pipeline").update({
         sequence_step: nextIdx,
         sequence_step_entered_at: now.toISOString(),
-        sequence_parked_until: addHours(now, next.waitHours).toISOString(),
+        sequence_parked_until: addBusinessHours(now, next.waitHours).toISOString(),
         sequence_step_attempts: 0,
     }).eq("sendpilot_lead_id", sendpilotLeadId);
 }
