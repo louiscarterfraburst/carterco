@@ -375,15 +375,19 @@ export default function LeadsPage() {
     void loadLeads();
     void refreshNotificationStatus();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
+  }, [user, workspace?.id]);
 
   async function loadLeads() {
     setError(null);
+    // Defense-in-depth alongside RLS: never render another workspace's leads
+    // even if the user is a member of multiple workspaces.
+    if (!workspace?.id) { setLeads([]); return; }
     const { data, error } = await supabase
       .from("leads")
       .select(
         "id, created_at, name, company, email, phone, monthly_leads, response_time, call_status, call_status_at, outcome, outcome_at, notes, is_draft, draft_updated_at, meeting_at, callback_at, next_action_at, next_action_type, retry_count, last_action_fired_at",
       )
+      .eq("workspace_id", workspace.id)
       .order("created_at", { ascending: false })
       .limit(50);
 
