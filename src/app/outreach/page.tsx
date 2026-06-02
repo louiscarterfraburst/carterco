@@ -138,6 +138,7 @@ type PipelineRow = {
   personalized_hook: string | null;
   hook_bucket: string | null;
   hook_trace: string | null;
+  hook_context: string | null;
   hook_lang: "da" | "en" | null;
   // Tresyv 3-arm A/B. v1_long / v2_short are text-only (no SendSpark render),
   // v3_video uses the existing video flow. Null for non-Tresyv workspaces.
@@ -1722,9 +1723,19 @@ function PendingTab(props: {
                       {r.hook_bucket ? (
                         <div className="tabular mt-1 text-[11px] text-[var(--ink)]/45">
                           <span className="rounded-sm bg-[var(--ink)]/8 px-1.5 py-0.5 font-medium text-[var(--ink)]/65">
-                            {r.hook_bucket === "1" ? "Eget opslag" : r.hook_bucket === "2" ? "Delt opslag" : "Rolle"}
+                            {r.hook_bucket === "1" ? "Eget opslag"
+                              : r.hook_bucket === "2" ? "Engageret"
+                              : r.hook_bucket === "3" ? "Profiltekst"
+                              : r.hook_bucket === "5" ? "Baggrund"
+                              : r.hook_bucket === "6" ? "Virksomhed"
+                              : "Standard"}
                           </span>
-                          {r.hook_trace ? <span className="ml-1.5 italic">{r.hook_trace}</span> : null}
+                          {r.hook_context ? <span className="ml-1.5 italic">{r.hook_context}</span> : null}
+                        </div>
+                      ) : null}
+                      {r.personalized_hook ? (
+                        <div className="mt-1 border-l-2 border-[var(--ink)]/15 pl-2 text-[12px] leading-relaxed text-[var(--ink)]/70">
+                          {r.personalized_hook}
                         </div>
                       ) : null}
 

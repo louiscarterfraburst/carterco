@@ -20,3 +20,13 @@ comment on column public.outreach_pipeline.personalized_hook is
 -- bucket-by-bucket cascade). Lets a floored lead resume deeper on a later touch.
 alter table public.outreach_pipeline
   add column if not exists hook_buckets_tried text;
+
+-- Two-layer evaluator reasoning (added when the cascade became evaluator+writer:
+-- scrape all sources -> evaluator picks the single best angle with a "why" ->
+-- writer writes the line). hook_context holds the chosen-angle age + why, shown
+-- in /outreach so the operator sees WHY this angle before render.
+alter table public.outreach_pipeline
+  add column if not exists hook_context text;
+
+comment on column public.outreach_pipeline.hook_context is
+  'Two-layer evaluator reasoning for the chosen hook angle (age tag + why this angle beat the others). Surfaced in /outreach for operator review before render.';
