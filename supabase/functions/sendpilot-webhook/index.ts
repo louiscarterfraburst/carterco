@@ -589,8 +589,15 @@ async function lookupLead(sendpilotLeadId: string, linkedinUrl: string) {
     // outreach_leads — the row gets promoted to outreach_leads only on
     // connection.accepted, so the active pipeline table stays small
     // (~5% acceptance rate means ~95% of staged leads never need a row).
-    const promoted = await promoteFromInbox(sendpilotLeadId, linkedinUrl, slug);
-    if (promoted) return promoted;
+    try {
+      const promoted = await promoteFromInbox(sendpilotLeadId, linkedinUrl, slug);
+      if (promoted) return promoted;
+    } catch (e) {
+      // e.g. synthesizeContactEmail has no mailbox branch for this workspace.
+      // Skip promotion (lead stays unpromoted, visibly absent) rather than
+      // crash the webhook — the thrown message names the misconfigured workspace.
+      console.error("promoteFromInbox skipped:", e instanceof Error ? e.message : e);
+    }
   }
   return null;
 }
@@ -661,9 +668,14 @@ async function synthesizeContactEmail(
   if (workspaceId === ODAGROUP_WORKSPACE_ID) {
     return `kontakt+li-${cleanSlug}-${hash}@odagroup.dk`;
   }
-  // Fallback — only OdaGroup uses lead_inbox right now. Adding a new client
-  // means adding a branch here.
-  return `noreply+li-${cleanSlug}-${hash}@example.invalid`;
+  if (workspaceId === CARTERCO_WORKSPACE_ID) {
+    // CarterCo's own replies land in carterco.dk (matches the
+    // carterco+…@carterco.dk alias scheme already used for seeded leads).
+    return `carterco+li-${cleanSlug}-${hash}@carterco.dk`;
+  }
+  // No mailbox wired for this workspace — fail loud rather than mint a dead
+  // address that silently drops replies. Add a branch above when onboarding.
+  throw new Error(`synthesizeContactEmail: no reply mailbox configured for workspace ${workspaceId}`);
 }
 
 function linkedinSlug(url: string): string {
