@@ -64,9 +64,10 @@ def slugof(u):
 
 
 def fetch_leads(limit):
+    off = int(os.environ.get("LEAD_OFFSET", "0"))
     statuses = "(pending_pre_render,pending_alt_review,sent,pending_approval)"
     rows = sb_get(f"outreach_pipeline?select=contact_email&workspace_id=eq.{CC_WS}"
-                  f"&status=in.{statuses}&order=updated_at.desc&limit={limit*3}")
+                  f"&status=in.{statuses}&order=updated_at.desc&offset={off}&limit={limit*3}")
     emails = [r["contact_email"] for r in rows if r.get("contact_email")]
     out, seen = [], set()
     # query leads one IN-batch via PostgREST

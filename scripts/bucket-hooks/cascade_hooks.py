@@ -36,7 +36,7 @@ The hook lives where a true thing about THEM meets a true thing about the PITCH.
   b) Below is what is true about Carter & Co's pitch.
   c) Find the strongest OVERLAP between (a) and (b), and write the line ON that overlap.
 The overlap IS the connection — that is why the line passes the DELETE TEST: remove it and the link to the pitch is gone. A line that does not sit on an overlap is decorative and FAILS.
-IF THE OVERLAP IS THIN OR FORCED, return an empty hook (we floor). A stretched or clever-but-fake bridge is WORSE than an honest floor. Do not manufacture an overlap that isn't really there.
+FLOOR ONLY AS A LAST RESORT. If you have a real, specific signal that plausibly connects to one of the pitch truths, WRITE the line — do NOT be precious about whether the overlap is "perfect." Reserve the empty-hook floor for: no real signal at all, bare title+tenure, or a connection that would have to be fabricated (a pun on nothing, a genuine stretch). A real signal that decently connects BEATS a floor; only a forced/fake overlap loses to a floor. When you have something concrete and it plausibly ties to the pitch, write it.
 
 WHAT'S TRUE ABOUT THE PITCH (the overlap must hit one of these):
   - Inbound leads go cold fast; the first minutes after a lead lands decide whether it converts.
