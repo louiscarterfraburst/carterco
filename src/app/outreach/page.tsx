@@ -133,6 +133,12 @@ type PipelineRow = {
   message_strategy_rationale: string | null;
   message_model: string | null;
   message_language: "da" | "en" | null;
+  // Becc-bucket personalization (CarterCo). The hook is baked into
+  // rendered_message at render-ready; bucket + trace are shown as context.
+  personalized_hook: string | null;
+  hook_bucket: string | null;
+  hook_trace: string | null;
+  hook_lang: "da" | "en" | null;
   // Tresyv 3-arm A/B. v1_long / v2_short are text-only (no SendSpark render),
   // v3_video uses the existing video flow. Null for non-Tresyv workspaces.
   first_dm_variant: "v1_long" | "v2_short" | "v3_video" | null;
@@ -1711,6 +1717,14 @@ function PendingTab(props: {
                       {r.message_strategy_rationale ? (
                         <div className="tabular mt-1 text-[11px] italic text-[var(--ink)]/45">
                           AI: {r.message_strategy_rationale}
+                        </div>
+                      ) : null}
+                      {r.hook_bucket ? (
+                        <div className="tabular mt-1 text-[11px] text-[var(--ink)]/45">
+                          <span className="rounded-sm bg-[var(--ink)]/8 px-1.5 py-0.5 font-medium text-[var(--ink)]/65">
+                            {r.hook_bucket === "1" ? "Eget opslag" : r.hook_bucket === "2" ? "Delt opslag" : "Rolle"}
+                          </span>
+                          {r.hook_trace ? <span className="ml-1.5 italic">{r.hook_trace}</span> : null}
                         </div>
                       ) : null}
 
