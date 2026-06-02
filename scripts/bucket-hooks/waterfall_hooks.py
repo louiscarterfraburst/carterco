@@ -64,17 +64,27 @@ def b1_block(posts):
     return "\n".join(f"- [POST, {p['age_days']}d] {p['text']}" for p in own[:4])
 
 
-def b2_block(reactions, posts):
+def b2_block(reactions, posts, comments=None):
     out = []
     for p in posts:
         if p["is_repost"]:
             out.append(f"- [SHARED/REPOST, {p['age_days']}d] {p['text']}")
-    for r in (reactions or [])[:6]:
-        t = r.get("text") or r.get("content") or (r.get("post") or {}).get("text") if isinstance(r, dict) else None
-        act = r.get("action") or r.get("reactionType") or "engaged with" if isinstance(r, dict) else ""
-        if t:
-            out.append(f"- [{act}] {str(t)[:240]}")
+    for c in (comments or [])[:5]:
+        mine = (c.get("commentary") or "").strip() if isinstance(c, dict) else ""
+        on = ((c.get("post") or {}).get("content") or "")[:120] if isinstance(c, dict) else ""
+        if mine:
+            out.append(f'- [THEIR COMMENT] "{mine[:220]}"' + (f"  (on a post about: {on})" if on else ""))
+    for r in (reactions or [])[:5]:
+        liked = ((r.get("post") or {}).get("content") or r.get("content") or "") if isinstance(r, dict) else ""
+        if liked:
+            out.append(f"- [LIKED] {str(liked)[:200]}")
     return "\n".join(out) if out else None
+
+
+def is_owner(title):
+    t = (title or "").lower()
+    return any(w in t for w in ["founder", "co-founder", "owner", "ejer", "indehaver",
+               "stifter", "medstifter", "grundlægger", "partner", "selvstændig", "self-employed"])
 
 
 def b3_block(profile):
@@ -128,29 +138,29 @@ def b6_block(website):
 
 
 def waterfall(lead, posts, profile):
-    """Sequential cascade. Returns (bucket, line). Lazy-fetches B2 + B6."""
+    """Sequential cascade w/ lazy scrapes. Owners get B6 bumped up (Becc)."""
     url = lead["linkedin_url"]
-    # 1 — self-authored posts (prefetched)
-    blk = b1_block(posts)
-    if blk and (line := write_line(lead, 1, blk)):
-        return "1", line
-    # 2 — engaged (lazy: reactions actor)
-    react = apify("harvestapi~linkedin-profile-reactions", {"queries": [url], "maxItems": 8})
-    blk = b2_block(react, posts)
-    if blk and (line := write_line(lead, 2, blk)):
-        return "2", line
-    # 3 — self-written (prefetched profile)
-    blk = b3_block(profile)
-    if blk and (line := write_line(lead, 3, blk)):
-        return "3", line
-    # 5 — background (same profile, no new scrape)
-    blk = b5_block(profile)
-    if blk and (line := write_line(lead, 5, blk)):
-        return "5", line
-    # 6 — company (lazy: Firecrawl)
-    blk = b6_block((lead.get("website") or "").strip())
-    if blk and (line := write_line(lead, 6, blk)):
-        return "6", line
+    cache = {}
+
+    def block(b):
+        if b == "1":
+            return b1_block(posts)
+        if b == "2":
+            react = cache.setdefault("react", apify("harvestapi~linkedin-profile-reactions", {"profiles": [url], "maxItems": 8}))
+            com = cache.setdefault("com", apify("harvestapi~linkedin-profile-comments", {"profiles": [url], "maxItems": 8}))
+            return b2_block(react, posts, com)
+        if b == "3":
+            return b3_block(profile)
+        if b == "5":
+            return b5_block(profile)
+        if b == "6":
+            return b6_block((lead.get("website") or "").strip())
+
+    order = ["1", "2", "6", "3", "5"] if is_owner(lead.get("title")) else ["1", "2", "3", "5", "6"]
+    for b in order:
+        blk = block(b)
+        if blk and (line := write_line(lead, b, blk)):
+            return b, line
     return "floor", WEBSITE_FLOOR
 
 

@@ -115,3 +115,35 @@ accepts/month) it's a few dollars/month. Apify is on a paid plan ($29/mo cap).
   batch) — optional; each prospect only ever sees their own line.
 - Time-axis is prepared (state persists) but nothing re-invokes `enrich-buckets`
   on touch 2+ yet for floored leads.
+
+---
+
+## Source notes — Becc Holland masterclass (FlipTheScript × JustCall, end-2022)
+
+From the 1-hour transcript. Key points that shaped this build:
+
+- **The overlap method (verbatim):** "I make a list of what's true about the
+  premise [the prospect], a list of what's true about my company, and I find the
+  overlap. There is ALWAYS an overlap." → this is exactly our CORE MECHANIC.
+- **The hook is the un-automatable part.** Tools can *tease out* the premise (the
+  signal) at scale, but "a platform can't hook it — without the hook people feel
+  sus." → that's why scraping (premise) and the Sonnet writeLine (hook) are split.
+  We built the AI-era version of her 2022 thesis: the model now *can* hook.
+- **Owners/founders are the exception:** company-level (B6) is normally lowest
+  efficacy, "UNLESS you're selling to business owners" — their company is their
+  ego, so it hooks as hard as self-authored. → we bump B6 up for owners (`isOwner`).
+- **The cheesy examples (black-out / Starbucks) are METHOD illustrations, not the
+  style.** She calls them "all cheesy examples" done "on the fly" to prove the
+  overlap-always-exists point. We keep the method, drop the gimmicky US tone.
+- **Hook by word-twist:** reorganize 2-3 words of their own content into your
+  pitch ("your line about scale → what if you could scale...").
+- **Why it works (psychology):** personalization is a PATTERN INTERRUPT (breaks
+  the "this is a sales email" pattern → higher open/read). Self-authored is #1
+  because it both validates their ego (dopamine) and signals you invested time
+  (reciprocity: "want 50 of my minutes? give me 5 first by researching me").
+- **Relevance vs personalization:** relevance = one-to-many (cohort: trigger-based
+  or static persona). Personalization = one-to-one (the 6 buckets). CarterCo's
+  cold outbound is **pure personalization** (no trigger — they didn't engage with
+  CarterCo's marketing), so the buckets are the whole game.
+- **Avoid the clichés** ("følger lige op", "bobler til toppen", "circling back") —
+  even the floor line must not sound like a stock sales email.

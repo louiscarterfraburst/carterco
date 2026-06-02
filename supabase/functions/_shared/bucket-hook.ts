@@ -33,6 +33,7 @@ The hook lives where a true thing about THEM meets a true thing about the PITCH.
   b) Below is what is true about Carter & Co's pitch.
   c) Find the strongest OVERLAP between (a) and (b), and write the line ON that overlap.
 The overlap IS the connection — that is why the line passes the DELETE TEST: remove it and the link to the pitch is gone. A line that does not sit on an overlap is decorative and FAILS.
+IF THE OVERLAP IS THIN OR FORCED, return an empty hook (we floor). A stretched or clever-but-fake bridge is WORSE than an honest floor. Do not manufacture an overlap that isn't really there.
 
 WHAT'S TRUE ABOUT THE PITCH (the overlap must hit one of these):
   - Inbound leads go cold fast; the first minutes after a lead lands decide whether it converts.
@@ -57,6 +58,7 @@ THE VOICE.
 - Peer, NEVER a judge. You are a younger operator who genuinely noticed something, not their examiner. Credit their experience, defer to it, put the problem as something THEY already know. Defer DOWN ("du kender det bedre end mig"), never up.
 - BANNED grading words (they sound condescending / bedrevidende): imponerende, respekt for, sjældent man ser, stærkt, flot, godt gjort, godt observeret, dygtig, "du ved bedre end de fleste".
 - Do NOT recite their facts back ("Så du byggede X", "I saw you did Y"). Reference, do not narrate.
+- HOOK BY WORD-TWIST. Where you can, take 2-3 words from their own world/content and twist them into the cooling-leads problem (reorganize their phrase), instead of explaining. Their words, bent toward the pitch.
 - DANISH-MODEST (Jante) but WITH SPINE. A Danish LinkedIn DM: understated, warm, a genuine light question is fine. Too confident reads as cocky — but do not over-hedge into wishy-washy. The target is QUIET CONFIDENCE IN THE OBSERVATION, HUMBLE IN TONE. Not every line a "jeg gætter på" guess; some may state the bridge with a little backbone while staying modest.
 - VARY THE MOVE. No single phrase ("jeg gætter på", "du ved bedre end", "det er sjældent") may dominate. Rotate: a genuine question, "det har du nok mærket", "jeg tænker...", a plain modest-but-confident bridge, "mon ikke...".
 - LinkedIn-light: warmer and shorter than a cold email. ~15-20 words, one clause about them + the bridge. End in a colon (:) that leads into the video.
@@ -126,18 +128,37 @@ async function scrapeProfile(url: string): Promise<any> {
 async function scrapeReactions(url: string): Promise<unknown[]> {
   return await apify("harvestapi~linkedin-profile-reactions", { profiles: [url], maxItems: 8 });
 }
+async function scrapeComments(url: string): Promise<unknown[]> {
+  return await apify("harvestapi~linkedin-profile-comments", { profiles: [url], maxItems: 8 });
+}
+
+// Becc: company-level (B6) is low efficacy EXCEPT for business owners/founders —
+// their company IS their ego, so it hooks as hard as self-authored. Bump B6 up
+// the order for them.
+function isOwner(title?: string): boolean {
+  const t = (title || "").toLowerCase();
+  return ["founder", "co-founder", "owner", "ejer", "indehaver", "stifter",
+    "medstifter", "grundlægger", "partner", "selvstændig", "self-employed"].some((w) => t.includes(w));
+}
 
 // ---- per-bucket signal blocks (null = nothing here) ----
 function b1(posts: Post[]): string | null {
   const own = posts.filter((p) => !p.is_repost);
   return own.length ? own.slice(0, 4).map((p) => `- [POST, ${p.age_days}d] ${p.text}`).join("\n") : null;
 }
-function b2(posts: Post[], reactions: unknown[]): string | null {
+function b2(posts: Post[], reactions: unknown[], comments: unknown[]): string | null {
   const out: string[] = [];
   for (const p of posts) if (p.is_repost) out.push(`- [SHARED/REPOST, ${p.age_days}d] ${p.text}`);
-  for (const r of (reactions as Array<Record<string, unknown>>).slice(0, 6)) {
-    const t = String((r.content ?? r.text ?? "") || "");
-    if (t) out.push(`- [engaged with] ${t.slice(0, 220)}`);
+  // Comments = their OWN words (high signal — nearly B1 quality).
+  for (const c of (comments as Array<Record<string, unknown>>).slice(0, 5)) {
+    const mine = String(c.commentary ?? "").trim();
+    const on = String(((c.post as Record<string, unknown>) || {}).content ?? "").slice(0, 120);
+    if (mine) out.push(`- [THEIR COMMENT] "${mine.slice(0, 220)}"${on ? `  (on a post about: ${on})` : ""}`);
+  }
+  // Likes = what resonates with them.
+  for (const r of (reactions as Array<Record<string, unknown>>).slice(0, 5)) {
+    const liked = String(((r.post as Record<string, unknown>) || {}).content ?? r.content ?? "").trim();
+    if (liked) out.push(`- [LIKED] ${liked.slice(0, 200)}`);
   }
   return out.length ? out.join("\n") : null;
 }
@@ -229,39 +250,42 @@ export async function generateBucketHook(
     }).eq("sendpilot_lead_id", leadId);
   };
 
-  // 1 — self-authored posts (also yields shared/reposts for step 2)
-  const posts = await scrapePosts(url);
-  tried.push("1");
-  let blk = b1(posts);
-  let r = blk ? await writeLine(lead, blk) : null;
-  if (r) { await persist(r.hook, "1", r.lang, "self-authored post"); return { ok: true, hook: r.hook, bucket: "1" }; }
+  // Lazy scrape cache — each source fetched at most once.
+  // deno-lint-ignore no-explicit-any
+  const c: { posts?: Post[]; profile?: any; reactions?: unknown[]; comments?: unknown[] } = {};
+  const posts = async () => (c.posts ??= await scrapePosts(url));
+  const profile = async () => (c.profile ??= await scrapeProfile(url));
 
-  // 2 — engaged (reposts already in hand; + reactions lazily)
-  tried.push("2");
-  const reactions = await scrapeReactions(url);
-  blk = b2(posts, reactions);
-  r = blk ? await writeLine(lead, blk) : null;
-  if (r) { await persist(r.hook, "2", r.lang, "engaged content"); return { ok: true, hook: r.hook, bucket: "2" }; }
+  const TRACE: Record<string, string> = {
+    "1": "self-authored post", "2": "engaged content (comment/like/share)",
+    "3": "self-written profile", "5": "background", "6": "company signal",
+  };
+  async function block(bucket: string): Promise<string | null> {
+    switch (bucket) {
+      case "1": return b1(await posts());
+      case "2": {
+        const [p, re, co] = [await posts(), (c.reactions ??= await scrapeReactions(url)), (c.comments ??= await scrapeComments(url))];
+        return b2(p, re, co);
+      }
+      case "3": return b3(await profile());
+      case "5": return b5(await profile());
+      case "6": return await b6((lead.website || "").trim());
+      default: return null;
+    }
+  }
 
-  // 3 + 5 — one profile scrape covers both
-  const profile = await scrapeProfile(url);
-  tried.push("3");
-  blk = b3(profile);
-  r = blk ? await writeLine(lead, blk) : null;
-  if (r) { await persist(r.hook, "3", r.lang, "self-written profile"); return { ok: true, hook: r.hook, bucket: "3" }; }
-  tried.push("5");
-  blk = b5(profile);
-  r = blk ? await writeLine(lead, blk) : null;
-  if (r) { await persist(r.hook, "5", r.lang, "background"); return { ok: true, hook: r.hook, bucket: "5" }; }
+  // Becc: owners/founders get company (B6) bumped up — their company is their ego.
+  const order = isOwner(lead.title) ? ["1", "2", "6", "3", "5"] : ["1", "2", "3", "5", "6"];
+  for (const bucket of order) {
+    tried.push(bucket);
+    const blk = await block(bucket);
+    const r = blk ? await writeLine(lead, blk) : null;
+    if (r) { await persist(r.hook, bucket, r.lang, TRACE[bucket] ?? bucket); return { ok: true, hook: r.hook, bucket }; }
+  }
 
-  // 6 — company (deep: site + careers + news)
-  tried.push("6");
-  blk = await b6((lead.website || "").trim());
-  r = blk ? await writeLine(lead, blk) : null;
-  if (r) { await persist(r.hook, "6", r.lang, "company signal"); return { ok: true, hook: r.hook, bucket: "6" }; }
-
-  // floor — honest line, no fake personalization. State persisted so a later
-  // touch can resume (re-scrape may surface a fresh post / new company event).
-  await persist(null, "floor", "da", "no connected signal across buckets 1/2/3/5/6");
+  // floor — honest line, no fake personalization. State (hook_buckets_tried)
+  // persisted so a later touch can resume (re-scrape may surface a fresh post /
+  // new company event).
+  await persist(null, "floor", "da", `no connected overlap across buckets ${order.join("/")}`);
   return { ok: true, hook: FLOOR, bucket: "floor" };
 }
