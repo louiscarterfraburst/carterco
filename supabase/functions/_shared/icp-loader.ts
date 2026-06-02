@@ -7,6 +7,7 @@
 // result down. Each call is one DB roundtrip — don't call per-lead.
 
 import { ICP as FALLBACK } from "./icp.ts";
+import { CARTERCO_WORKSPACE_ID } from "./workspaces.ts";
 
 export type ResolvedIcp = {
   versionId: string | null;     // null when falling back to file constants
@@ -67,7 +68,15 @@ export async function loadActiveIcp(
     };
   }
 
-  // Fallback to factory defaults. Should never hit in production once seeded.
+  // Fallback to factory defaults. The file constants in icp.ts are CarterCo's
+  // ICP, so the fallback is ONLY valid for the CarterCo workspace. Any other
+  // workspace without an active icp_versions row must NOT be silently scored
+  // against CarterCo's ICP — fail loud so the missing seed is fixed.
+  if (workspaceId !== CARTERCO_WORKSPACE_ID) {
+    throw new Error(
+      `loadActiveIcp: no active icp_versions row for workspace ${workspaceId} and no per-workspace fallback (icp.ts defaults are CarterCo-only)`,
+    );
+  }
   return {
     versionId: null,
     version: 0,
