@@ -176,7 +176,7 @@ async function handleRenderReady(evt: SendSparkEvent, email: string, videoLink: 
 
     const { data: pipe } = await supabase
         .from("outreach_pipeline")
-        .select("sendpilot_lead_id, contact_email, status, campaign_id, referred_from_pipeline_lead_id, sent_at")
+        .select("sendpilot_lead_id, contact_email, status, campaign_id, referred_from_pipeline_lead_id, sent_at, personalized_hook")
         .eq("contact_email", email)
         .maybeSingle();
 
@@ -248,12 +248,21 @@ async function handleRenderReady(evt: SendSparkEvent, email: string, videoLink: 
         template = pickTemplate(pipe.campaign_id ?? undefined);
     }
 
-    const message = template
+    const templated = template
         .replaceAll("{firstName}", firstName)
         .replaceAll("{referrerFirstName}", referrerFirstName)
         .replaceAll("{company}", company)
         .replaceAll("{website}", website)
         .replaceAll("{videoLink}", videoLink);
+
+    // Becc-bucket personalization (CarterCo): when a hook was generated for this
+    // cold lead, it REPLACES the generic website opener. The hook already ends
+    // in a colon leading into the video. Referral opens keep their own template;
+    // no hook => fall back to the static templated message (Bucket-6 website line).
+    const hook = (pipe.personalized_hook ?? "").trim();
+    const message = (!pipe.referred_from_pipeline_lead_id && hook)
+        ? `Hej ${firstName}\n\n${hook}\n${videoLink}`
+        : templated;
 
     const now = new Date().toISOString();
 
