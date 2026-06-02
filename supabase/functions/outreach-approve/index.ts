@@ -82,7 +82,7 @@ Deno.serve(async (request) => {
   // Fetch the pipeline row.
   const { data: pipe, error: fetchErr } = await admin
     .from("outreach_pipeline")
-    .select("sendpilot_lead_id, contact_email, linkedin_url, status, rendered_message, video_link, accepted_at, sent_at, workspace_id, sendpilot_sender_id, campaign_id")
+    .select("sendpilot_lead_id, contact_email, linkedin_url, status, rendered_message, video_link, accepted_at, sent_at, workspace_id, sendpilot_sender_id, campaign_id, invite_source, lemlist_lead_id, lemlist_campaign_id")
     .eq("sendpilot_lead_id", leadId)
     .maybeSingle();
   if (fetchErr) return json({ error: "db fetch", details: fetchErr.message }, 500);
@@ -240,6 +240,51 @@ Deno.serve(async (request) => {
     ? body.messageOverride.trim()
     : pipe.rendered_message;
   if (!message) return json({ error: "no message to send" }, 400);
+
+  // Lemlist branch: the message + video URL are already pushed to the lemlist
+  // lead as custom variables (renderedMessage / videoUrl) by sendspark-webhook
+  // when render finished. Approving here means resuming the paused lemlist
+  // lead — its linkedinSend step then fires through Louis's Chrome extension
+  // with the approved variables. No SendPilot involved.
+  if (pipe.invite_source === "lemlist") {
+    const apiKey = Deno.env.get("LEMLIST_API") ?? "";
+    if (!apiKey) return json({ error: "LEMLIST_API not configured" }, 500);
+    if (!pipe.lemlist_lead_id) return json({ error: "lead has no lemlist_lead_id" }, 400);
+    if (!pipe.lemlist_campaign_id) return json({ error: "lead has no lemlist_campaign_id" }, 400);
+
+    const auth = "Basic " + btoa(":" + apiKey);
+
+    // If the human edited the message, push the override back as a custom var
+    // so the linkedinSend step picks up the new text (the message argument is
+    // ignored — lemlist substitutes from custom vars on the lead).
+    if (body.messageOverride && body.messageOverride.trim() && body.messageOverride.trim() !== pipe.rendered_message) {
+      const patchUrl = `https://api.lemlist.com/api/campaigns/${pipe.lemlist_campaign_id}/leads/${pipe.lemlist_lead_id}`;
+      await fetch(patchUrl, {
+        method: "PATCH",
+        headers: { Authorization: auth, "Content-Type": "application/json" },
+        body: JSON.stringify({ renderedMessage: body.messageOverride.trim() }),
+      });
+    }
+
+    // Resume the lemlist lead → triggers the next sequence step (linkedinSend)
+    // which fires the DM via the Chrome extension.
+    const startUrl = `https://api.lemlist.com/api/leads/start/${pipe.lemlist_lead_id}`;
+    const r = await fetch(startUrl, { method: "POST", headers: { Authorization: auth } });
+    const ok = r.status === 200 || r.status === 201;
+    const respText = await r.text();
+
+    await admin.from("outreach_pipeline").update({
+      status: ok ? "sent" : "failed",
+      sent_at: ok ? now : null,
+      decided_at: now,
+      decided_by: email,
+      error: ok ? null : `lemlist /leads/start HTTP ${r.status}: ${respText.slice(0, 300)}`,
+      rendered_message: message,
+    }).eq("sendpilot_lead_id", leadId);
+
+    return json({ ok, decision: "lemlist_resumed", status: r.status, response: respText.slice(0, 500) });
+  }
+
   if (!resolvedSenderId) {
     return json({ error: "lead has no sendpilot_sender_id and no fallback sender found in workspace" }, 400);
   }

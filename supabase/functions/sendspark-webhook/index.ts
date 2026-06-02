@@ -176,7 +176,7 @@ async function handleRenderReady(evt: SendSparkEvent, email: string, videoLink: 
 
     const { data: pipe } = await supabase
         .from("outreach_pipeline")
-        .select("sendpilot_lead_id, contact_email, status, campaign_id, referred_from_pipeline_lead_id, sent_at, personalized_hook")
+        .select("sendpilot_lead_id, contact_email, status, campaign_id, referred_from_pipeline_lead_id, sent_at, personalized_hook, invite_source, lemlist_lead_id, lemlist_campaign_id")
         .eq("contact_email", email)
         .maybeSingle();
 
@@ -277,6 +277,35 @@ async function handleRenderReady(evt: SendSparkEvent, email: string, videoLink: 
         queued_at: now,
         status: "pending_approval",
     }).eq("sendpilot_lead_id", pipe.sendpilot_lead_id);
+
+    // Lemlist branch: push rendered_message + video link as custom variables
+    // on the lemlist lead so the campaign's linkedinSend step uses them when
+    // it fires. Don't resume yet — outreach-approve calls /leads/start once
+    // the human approves the rendered DM (mirrors the SendPilot approval gate).
+    if ((pipe as { invite_source?: string }).invite_source === "lemlist") {
+        const lemlistLeadId = (pipe as { lemlist_lead_id?: string }).lemlist_lead_id;
+        const lemlistCampaignId = (pipe as { lemlist_campaign_id?: string }).lemlist_campaign_id;
+        const apiKey = Deno.env.get("LEMLIST_API") ?? "";
+        if (lemlistLeadId && lemlistCampaignId && apiKey) {
+            const auth = "Basic " + btoa(":" + apiKey);
+            const patchUrl = `https://api.lemlist.com/api/campaigns/${lemlistCampaignId}/leads/${lemlistLeadId}`;
+            const r = await fetch(patchUrl, {
+                method: "PATCH",
+                headers: { Authorization: auth, "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    renderedMessage: message,
+                    videoUrl: videoLink,
+                    personalizedHook: hook || null,
+                    hookBucket: (pipe as { hook_bucket?: string }).hook_bucket ?? null,
+                }),
+            });
+            if (!r.ok) {
+                console.warn("lemlist PATCH lead variables failed", {
+                    lemlistLeadId, status: r.status, body: await r.text(),
+                });
+            }
+        }
+    }
 
     return json({ ok: true, branch: "queued_for_approval" });
 }

@@ -29,19 +29,20 @@ const ROOT = path.resolve(__dirname, "../..");
 const CAMPAIGN_NAME = "CarterCo — ad_funnel_leak (DK)";
 const TIMEZONE = "Europe/Copenhagen";
 
-// Voice mirrors clients/carterco/agent-brief.md + outreach_sequences.steps.
-// Liquid placeholders: {{firstName}}, {{companyName}} are lemlist built-ins.
-// For per-lead AI-personalised first DM, upgrade by pre-computing the message
-// as a custom variable on the lead (e.g. {{firstDM}}) and swapping FIRST_DM
-// below to reference it. See docs/lemlist.md for the upgrade path.
-const FIRST_DM = [
-  "Hej {{firstName}}, så I kører annoncer for {{companyName}} i øjeblikket — hurtig spørgsmål: hvad sker der lige nu når leadsne lander?",
-  "",
-  "Skriver en del med danske SMV'er om response-time og opfølgning, og det er som regel der det halter.",
-  "",
-  "Hvis det er noget hos jer, fortæller jeg gerne hvad jeg har bygget hos andre — sig til.",
-].join("\n");
+// First DM is rendered server-side by sendspark-webhook (after enrich-buckets +
+// SendSpark video render) and pushed to the lemlist lead as `renderedMessage` +
+// `videoUrl` custom variables. outreach-approve resumes the paused lead after
+// human approval; lemlist's linkedinSend then substitutes {{renderedMessage}}
+// and fires the DM via the Chrome extension. Same per-lead bucket-hook +
+// SendSpark video personalization as /outreach today.
+//
+// Fallback: if {{renderedMessage}} is empty (e.g. render failed and the lead
+// resumes anyway), lemlist will substitute "" and send a blank line. The
+// approval gate is the safeguard against that.
+const FIRST_DM = "{{renderedMessage}}";
 
+// Qualifier and graceful exit mirror outreach_sequences seeded
+// unwatched_followup_v1 byte-for-byte (verified live in DB 2026-06-02).
 const QUALIFIER = [
   "Hej {{firstName}}",
   "",
