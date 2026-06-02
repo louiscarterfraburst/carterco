@@ -54,6 +54,8 @@ REJECT (return an empty hook so we cascade or floor):
   - anything that fails the delete test.
 We would rather floor (a plain honest line) than send something fake-specific. Never invent a signal.
 
+RECENCY MATTERS — huge difference between 1 day and 1 year. Each signal shows its age (e.g. [POST, 2d] = 2 days old). A fresh signal (days, up to ~2 weeks) is timely — you may anchor it in time naturally ("forleden", "i denne uge", "lige nu"). An older one (1-2 months) is NOT fresh — reference the TOPIC, never imply it just happened ("du var lige til..." about a 2-month-old event is wrong). Prefer the freshest signal when choosing. If everything is old, lean on their durable field/role/company rather than a stale moment.
+
 THE VOICE.
 - Peer, NEVER a judge. You are a younger operator who genuinely noticed something, not their examiner. Credit their experience, defer to it, put the problem as something THEY already know. Defer DOWN ("du kender det bedre end mig"), never up.
 - BANNED grading words (they sound condescending / bedrevidende): imponerende, respekt for, sjældent man ser, stærkt, flot, godt gjort, godt observeret, dygtig, "du ved bedre end de fleste".
@@ -143,24 +145,32 @@ function isOwner(title?: string): boolean {
 
 // ---- per-bucket signal blocks (null = nothing here) ----
 function b1(posts: Post[]): string | null {
-  const own = posts.filter((p) => !p.is_repost);
+  const own = posts.filter((p) => !p.is_repost).sort((a, b) => a.age_days - b.age_days); // freshest first
   return own.length ? own.slice(0, 4).map((p) => `- [POST, ${p.age_days}d] ${p.text}`).join("\n") : null;
 }
+const ageDays = (ts?: number): number => (ts ? Math.round((Date.now() - ts) / 86400000) : 999);
 function b2(posts: Post[], reactions: unknown[], comments: unknown[]): string | null {
-  const out: string[] = [];
-  for (const p of posts) if (p.is_repost) out.push(`- [SHARED/REPOST, ${p.age_days}d] ${p.text}`);
-  // Comments = their OWN words (high signal — nearly B1 quality).
-  for (const c of (comments as Array<Record<string, unknown>>).slice(0, 5)) {
+  const items: { age: number; line: string }[] = [];
+  for (const p of posts) if (p.is_repost) items.push({ age: p.age_days, line: `[SHARED/REPOST, ${p.age_days}d] ${p.text}` });
+  // Comments = their OWN words (high signal); filter to fresh, show age.
+  for (const c of comments as Array<Record<string, unknown>>) {
     const mine = String(c.commentary ?? "").trim();
+    if (!mine) continue;
+    const age = ageDays(c.createdAtTimestamp as number);
+    if (age > FRESH_DAYS) continue;
     const on = String(((c.post as Record<string, unknown>) || {}).content ?? "").slice(0, 120);
-    if (mine) out.push(`- [THEIR COMMENT] "${mine.slice(0, 220)}"${on ? `  (on a post about: ${on})` : ""}`);
+    items.push({ age, line: `[THEIR COMMENT, ${age}d] "${mine.slice(0, 220)}"${on ? `  (on a post about: ${on})` : ""}` });
   }
-  // Likes = what resonates with them.
-  for (const r of (reactions as Array<Record<string, unknown>>).slice(0, 5)) {
+  // Likes = what resonates; filter to fresh, show age.
+  for (const r of reactions as Array<Record<string, unknown>>) {
     const liked = String(((r.post as Record<string, unknown>) || {}).content ?? r.content ?? "").trim();
-    if (liked) out.push(`- [LIKED] ${liked.slice(0, 200)}`);
+    if (!liked) continue;
+    const age = ageDays(r.createdAtTimestamp as number);
+    if (age > FRESH_DAYS) continue;
+    items.push({ age, line: `[LIKED, ${age}d] ${liked.slice(0, 200)}` });
   }
-  return out.length ? out.join("\n") : null;
+  items.sort((a, b) => a.age - b.age); // freshest first
+  return items.length ? items.slice(0, 8).map((i) => "- " + i.line).join("\n") : null;
 }
 // deno-lint-ignore no-explicit-any
 function b3(p: any): string | null {

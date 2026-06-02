@@ -61,24 +61,42 @@ def b1_block(posts):
     own = [p for p in posts if not p["is_repost"]]
     if not own:
         return None
+    own = sorted(own, key=lambda p: p["age_days"])  # freshest first
     return "\n".join(f"- [POST, {p['age_days']}d] {p['text']}" for p in own[:4])
 
 
+def _age_days(ts):
+    return round((time.time() * 1000 - ts) / 86400000) if ts else 999
+
+
 def b2_block(reactions, posts, comments=None):
-    out = []
+    items = []  # (age, line)
     for p in posts:
         if p["is_repost"]:
-            out.append(f"- [SHARED/REPOST, {p['age_days']}d] {p['text']}")
-    for c in (comments or [])[:5]:
-        mine = (c.get("commentary") or "").strip() if isinstance(c, dict) else ""
-        on = ((c.get("post") or {}).get("content") or "")[:120] if isinstance(c, dict) else ""
-        if mine:
-            out.append(f'- [THEIR COMMENT] "{mine[:220]}"' + (f"  (on a post about: {on})" if on else ""))
-    for r in (reactions or [])[:5]:
-        liked = ((r.get("post") or {}).get("content") or r.get("content") or "") if isinstance(r, dict) else ""
-        if liked:
-            out.append(f"- [LIKED] {str(liked)[:200]}")
-    return "\n".join(out) if out else None
+            items.append((p["age_days"], f"[SHARED/REPOST, {p['age_days']}d] {p['text']}"))
+    for c in (comments or []):
+        if not isinstance(c, dict):
+            continue
+        mine = (c.get("commentary") or "").strip()
+        if not mine:
+            continue
+        age = _age_days(c.get("createdAtTimestamp"))
+        if age > 90:
+            continue
+        on = ((c.get("post") or {}).get("content") or "")[:120]
+        items.append((age, f'[THEIR COMMENT, {age}d] "{mine[:220]}"' + (f"  (on a post about: {on})" if on else "")))
+    for r in (reactions or []):
+        if not isinstance(r, dict):
+            continue
+        liked = ((r.get("post") or {}).get("content") or r.get("content") or "")
+        if not liked:
+            continue
+        age = _age_days(r.get("createdAtTimestamp"))
+        if age > 90:
+            continue
+        items.append((age, f"[LIKED, {age}d] {str(liked)[:200]}"))
+    items.sort(key=lambda x: x[0])
+    return "\n".join("- " + ln for _, ln in items[:8]) if items else None
 
 
 def is_owner(title):
