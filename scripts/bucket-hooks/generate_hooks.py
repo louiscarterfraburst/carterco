@@ -117,17 +117,21 @@ SYS_PROMPT = """You write the single opening LINE of a cold LinkedIn message for
 "Jeg var lige inde på {website} og optog en kort video om én ting, jeg tror I mister lidt værdi på:"
 
 HARD RULES:
-- LANGUAGE: write in the language the prospect themselves uses. Infer it from their posts — if their posts are in French, write French; Danish posts -> Danish; English posts -> English. Only if there are no posts, default to Danish for Denmark-based / Danish-named prospects, English otherwise. NEVER write Danish to someone who clearly posts in another language.
+- LANGUAGE: write the ENTIRE hook in the language named by the "WRITE IN" directive at the top of the user message. This is non-negotiable — do not switch to Danish if the directive says English.
 - Measured, direct operator voice. No hype, no emojis, no flattery, no buzzwords.
 - NEVER fabricate. Only use the signals given. No "jeg så din demo / deltog i / elskede" claims.
-- The line MUST end leading into the video, ending with a colon (:).
-- 1-2 sentences, concrete.
+- NEVER invent statistics, percentages, or numbers. Banned: "10-15%", "de fleste virksomheder mister X", "3x", any made-up figure. Speak qualitatively ("et sted hvor værdi typisk siver", "noget der koster tid"), never with fake precision.
+- NATURAL DANISH, not Danglish. In a Danish hook use Danish business vocabulary. Do NOT pepper it with English jargon — avoid "sales enablement", "deal progression", "revenue", "pipeline visibility", "actual", etc. when a normal Danish phrasing exists (omsætning, pipeline, salgsproces, overblik). At most ONE English term, and only if it is genuinely standard in Danish (e.g. "pipeline", "leads").
+- ONE sentence, ~25 words max. Tight and punchy beats two clauses.
+- VARY your phrasing. Do not lean on one stock metaphor — "værdi/tid siver væk" is overused; reach for the specific friction instead (dobbeltarbejde, leads der køler af, manuel rapportering, deals der taber fart, overblik der mangler). Each hook should read as individually written, not templated.
+- The line MUST end in a colon (:) that leads naturally into the video link on the next line. Never end on a dangling preposition (not "... mister værdi på:"). The clause before the colon must be complete.
 
 PERSONALIZATION PRIORITY (use the HIGHEST bucket that has a credible signal):
   Bucket 1 = an ORIGINAL recent post the prospect wrote ABOUT A TOPIC (reference as "dit opslag om ...").
   Bucket 2 = a REPOST the prospect shared (reference as "du delte ...").
   Bucket 3 = their ROLE — open from the concrete pain their title actually owns.
-DROP and never reference (fall to Bucket 3 if these are the only posts):
+"bucket" in the output is ALWAYS one of "1", "2", or "3" — never "DROP" or anything else. You ALWAYS write a real, sendable hook. "Dropping" a post means: silently ignore that post and write a Bucket-3 role hook instead. NEVER tell the prospect you are skipping them, NEVER write a meta-comment about their post being off-limits — the prospect reads this line.
+IGNORE and never reference (write a Bucket-3 role hook instead if these are the only posts):
   - Job-search OR job-change/career-move posts: "søger nyt job", "leaving X", "next adventure", "excited to join", "after N years it's time", new-role / departure announcements. A post about the prospect's OWN career move is off limits even if recent and positive.
   - Pure hiring/recruiting posts ("vi søger en sælger").
   - Personal / humblebrag: marathons, holidays, anniversaries, personal milestones.
@@ -138,19 +142,59 @@ Output ONLY JSON, no fences:
 {"hook": "...", "bucket": "1|2|3", "reasoning": "one short sentence", "language": "da|en"}"""
 
 
-def make_hook(lead, posts):
-    name = ((lead.get("first_name") or "") + " " + (lead.get("last_name") or "")).strip()
-    title = lead.get("title") or "(unknown)"
-    company = lead.get("company") or "(unknown)"
-    lines = [f"Prospect: {name} — {title} at {company}."]
-    if posts:
-        lines.append("Recent posts (<=90 days):")
-        for p in posts:
-            kind = "REPOST" if p["is_repost"] else "ORIGINAL"
-            lines.append(f"- [{kind}, {p['age_days']}d ago] {p['text']}")
-    else:
-        lines.append("No fresh posts found — use Bucket 3 (role).")
-    user = "\n".join(lines)
+LANG_NAME = {"da": "Danish", "en": "English"}
+# Romance/other strong markers — presence signals a clearly non-Danish prospect.
+_FOREIGN_MARKERS = [" le ", " la ", " les ", " des ", " une ", " qu'", "l'", "d'", " et ",
+                    " que ", " qui ", " pas ", "après", " für ", " und ", " mit ", " der ",
+                    " el ", " los ", " para ", " con "]
+
+
+def detect_target_lang(posts):
+    """Danish is the default (CarterCo is a DK operator; Danes posting in English
+    still get Danish). Flip to English only when posts are clearly in a foreign
+    Romance/Germanic language (e.g. French) — that signals a non-Danish prospect
+    we'd address in the B2B lingua franca, not Danish."""
+    blob = " ".join(p["text"].lower() for p in posts)
+    if not blob.strip():
+        return "da"
+    foreign = sum(blob.count(m) for m in _FOREIGN_MARKERS)
+    danish = blob.count("æ") + blob.count("ø") + blob.count("å") + \
+        sum(blob.count(m) for m in [" og ", " jeg ", " ikke ", " som ", " til "])
+    return "en" if foreign >= 3 and foreign > danish else "da"
+
+
+# A hook must end on a COMPLETE clause before the colon — not a dangling
+# preposition ("... på:") or a hanging modal/conjunction ("... uden at skulle:").
+_PREPS = {"på", "til", "om", "med", "for", "af", "i", "ved", "fra", "over",
+          "under", "mod", "uden", "ad", "efter", "on", "to", "of", "with", "for", "in", "at"}
+_INCOMPLETE = {"skulle", "kunne", "ville", "måtte", "at", "og", "men", "fordi",
+               "som", "der", "hvor", "hvis", "når", "the", "a", "and", "to", "that"}
+_META = ["springer over", "skal du handle", "off-limits", "off limits",
+         "jeg kan ikke", "i can't", "i'll skip", "i will skip"]
+
+
+def validate_hook(out):
+    """Deterministic quality gate. Returns an error string, or None if clean."""
+    h = (out.get("hook") or "").strip()
+    if not h:
+        return "empty hook"
+    if str(out.get("bucket")) not in {"1", "2", "3"}:
+        return f"bucket must be 1/2/3, got '{out.get('bucket')}'"
+    if not h.endswith(":"):
+        return "must end with a colon leading into the video"
+    last = h.rstrip(":").strip().split()[-1].lower().strip(",.") if h.rstrip(":").strip() else ""
+    if last in _PREPS or last in _INCOMPLETE:
+        return f"incomplete clause before the colon (ends '{last}:')"
+    if len(h.split()) > 34:
+        return "too long — one tight sentence, ~25 words"
+    low = h.lower()
+    for bad in _META:
+        if bad in low:
+            return f"meta-comment to the prospect ('{bad}')"
+    return None
+
+
+def _anthropic(user):
     resp = http_json(
         "https://api.anthropic.com/v1/messages",
         {"model": HAIKU, "max_tokens": 500, "system": SYS_PROMPT,
@@ -163,7 +207,39 @@ def make_hook(lead, posts):
     try:
         return json.loads(txt[s:e + 1])
     except Exception:
-        return {"hook": "(parse-fail) " + txt[:120], "bucket": "?", "reasoning": "", "language": "?"}
+        return {"hook": "(parse-fail) " + txt[:120], "bucket": "?", "reasoning": ""}
+
+
+def draft_hook(user_content):
+    """Call Haiku, validate, and retry ONCE with the failure reason if needed."""
+    out = _anthropic(user_content)
+    err = validate_hook(out)
+    if err:
+        retry = user_content + (f"\n\nYour previous hook was REJECTED: {err}. "
+                                "Rewrite the hook fixing exactly that. Keep bucket and language the same.")
+        out = _anthropic(retry)
+        out["_retried"] = err
+    return out
+
+
+def build_user(name, title, company, posts, lang):
+    lines = [f"WRITE IN: {LANG_NAME[lang]}", "",
+             f"Prospect: {name} — {title} at {company}."]
+    if posts:
+        lines.append("Recent posts (<=90 days):")
+        for p in posts:
+            kind = "REPOST" if p["is_repost"] else "ORIGINAL"
+            lines.append(f"- [{kind}, {p['age_days']}d ago] {p['text']}")
+    else:
+        lines.append("No fresh posts found — use Bucket 3 (role).")
+    return "\n".join(lines)
+
+
+def make_hook(lead, posts):
+    name = ((lead.get("first_name") or "") + " " + (lead.get("last_name") or "")).strip()
+    lang = detect_target_lang(posts)
+    return draft_hook(build_user(name, lead.get("title") or "(unknown)",
+                                 lead.get("company") or "(unknown)", posts, lang))
 
 
 def main():

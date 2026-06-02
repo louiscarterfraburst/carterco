@@ -10,8 +10,7 @@ floor-up classifier drops them to the role floor instead of referencing them.
 Costs only Anthropic (cheap). To run the full live pipeline once Apify is
 topped up: scripts/bucket-hooks/generate_hooks.py
 """
-import json, urllib.request
-from generate_hooks import load_env, SYS_PROMPT, HAIKU
+from generate_hooks import load_env, detect_target_lang, draft_hook, build_user  # noqa
 
 ENV = load_env()
 ANTHROPIC = ENV["ANTHROPIC_API_KEY"]
@@ -42,27 +41,10 @@ CACHED = [
 
 
 def make_hook(name, title, company, posts):
-    lines = [f"Prospect: {name} — {title} at {company}."]
-    if posts:
-        lines.append("Recent posts (<=90 days):")
-        for kind, age, text in posts:
-            lines.append(f"- [{kind}, {age}d ago] {text}")
-    else:
-        lines.append("No fresh posts found — use Bucket 3 (role).")
-    body = json.dumps({
-        "model": HAIKU, "max_tokens": 500, "system": SYS_PROMPT,
-        "messages": [{"role": "user", "content": "\n".join(lines)}],
-    }).encode()
-    req = urllib.request.Request("https://api.anthropic.com/v1/messages", data=body,
-                                 headers={"Content-Type": "application/json",
-                                          "x-api-key": ANTHROPIC, "anthropic-version": "2023-06-01"})
-    resp = json.loads(urllib.request.urlopen(req, timeout=60).read())
-    txt = "".join(b.get("text", "") for b in resp.get("content", []) if b.get("type") == "text").strip()
-    s, e = txt.find("{"), txt.rfind("}")
-    try:
-        return json.loads(txt[s:e + 1])
-    except Exception:
-        return {"hook": "(parse-fail) " + txt[:120], "bucket": "?", "reasoning": ""}
+    # posts here are (kind, age, text) tuples; adapt to the dict shape build_user wants.
+    pd = [{"is_repost": k == "REPOST", "age_days": a, "text": t} for (k, a, t) in posts]
+    lang = detect_target_lang(pd)
+    return draft_hook(build_user(name, title, company, pd, lang))
 
 
 print("=" * 100)
