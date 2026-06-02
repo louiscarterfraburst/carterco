@@ -79,7 +79,7 @@ export default function Privatlivspolitik() {
             </p>
             <ul className="mt-3 flex flex-col gap-2 pl-5 marker:text-[#ff6b2c]">
               <li className="list-disc"><strong className="text-[var(--cream)]">Supabase</strong> — hosting af databasen hvor leads gemmes (EU-region).</li>
-              <li className="list-disc"><strong className="text-[var(--cream)]">Calendly</strong> — booking af opkald, hvis du vælger at bruge kalender-linket.</li>
+              <li className="list-disc"><strong className="text-[var(--cream)]">cal.com</strong> — booking af opkald, hvis du vælger at bruge kalender-linket.</li>
               <li className="list-disc"><strong className="text-[var(--cream)]">Plausible Analytics</strong> — anonym, cookie-fri trafikmåling. Ingen personoplysninger.</li>
             </ul>
           </section>

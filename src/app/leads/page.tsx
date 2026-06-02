@@ -175,7 +175,7 @@ export default function LeadsPage() {
   }>({
     displayName: "Louis",
     companyName: "CarterCo",
-    calendlyUrl: "https://calendly.com/louis-carter/30min",
+    calendlyUrl: "https://cal.com/louis-carter-3twilu/20min",
     signoff: "Louis",
   });
   const notesTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(
@@ -363,7 +363,7 @@ export default function LeadsPage() {
       setIdentity({
         displayName: settings?.display_name?.trim() || "Louis",
         companyName: settings?.company_name?.trim() || "CarterCo",
-        calendlyUrl: settings?.calendly_url?.trim() || "https://calendly.com/louis-carter/30min",
+        calendlyUrl: settings?.calendly_url?.trim() || "https://cal.com/louis-carter-3twilu/20min",
         signoff: settings?.signoff?.trim() || settings?.display_name?.trim() || "Louis",
       });
     })();

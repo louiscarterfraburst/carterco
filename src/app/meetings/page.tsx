@@ -170,7 +170,7 @@ export default function MeetingsPage() {
               Møder
             </h1>
             <p className="mt-6 max-w-xs text-sm leading-relaxed text-[var(--ink)]/55">
-              Kommende og tidligere bookede samtaler fra Calendly.
+              Kommende og tidligere bookede samtaler fra cal.com.
             </p>
 
             <form onSubmit={sendLink} className="mt-10 flex flex-col gap-3">

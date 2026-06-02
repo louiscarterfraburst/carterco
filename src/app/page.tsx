@@ -4,6 +4,7 @@ import { FormEvent, KeyboardEvent, ReactNode, useEffect, useRef, useState } from
 import { createClient } from "@/utils/supabase/client";
 import { LeadQuiz } from "@/components/lead-quiz";
 import { ExitIntent } from "@/components/exit-intent";
+import { BOOKING_URL, bookingUrl } from "@/lib/booking";
 
 declare global {
   interface Window {
@@ -73,7 +74,7 @@ const steps: Step[] = [
 type FormState = Record<StepKey, string>;
 type FieldErrors = Partial<Record<StepKey, string>>;
 
-const calendlyUrl = "https://calendly.com/louis-carterco/30min";
+const calendlyUrl = BOOKING_URL;
 
 // Logos render at a default height. Square/stacked marks need more height
 // than wordmarks to read at the same visual weight — override per logo.
@@ -655,11 +656,11 @@ export default function Home() {
       return;
     }
 
-    const params = new URLSearchParams({
+    const bookingHref = bookingUrl({
       name: cleaned.name,
       email: cleaned.email,
-      a1: cleaned.company,
-      a2: cleaned.phone,
+      company: cleaned.company,
+      phone: cleaned.phone,
       utm_source: "carterco.dk",
       utm_medium: "hero_form",
     });
@@ -673,7 +674,7 @@ export default function Home() {
     // Supabase insert but still proceed to Calendly so probes can't
     // distinguish a block from a pass.
     if (honeypotRef.current.trim().length > 0) {
-      window.location.href = `${calendlyUrl}?${params.toString()}`;
+      window.location.href = bookingHref;
       setSubmitted(true);
       return;
     }
@@ -723,7 +724,7 @@ export default function Home() {
       return;
     }
 
-    window.location.href = `${calendlyUrl}?${params.toString()}`;
+    window.location.href = bookingHref;
     setSubmitted(true);
   }
 

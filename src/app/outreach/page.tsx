@@ -401,7 +401,7 @@ export default function OutreachPage() {
   const [identity, setIdentity] = useState<Identity>({
     displayName: "Louis",
     companyName: "Carter & Co",
-    calendlyUrl: "https://calendly.com/louis-carter/30min",
+    calendlyUrl: "https://cal.com/louis-carter-3twilu/20min",
     signoff: "Louis",
   });
   const [loading, setLoading] = useState(true);
@@ -464,7 +464,7 @@ export default function OutreachPage() {
       setIdentity({
         displayName: settings.display_name?.trim() || "Louis",
         companyName: settings.company_name?.trim() || "Carter & Co",
-        calendlyUrl: settings.calendly_url?.trim() || "https://calendly.com/louis-carter/30min",
+        calendlyUrl: settings.calendly_url?.trim() || "https://cal.com/louis-carter-3twilu/20min",
         signoff: settings.signoff?.trim() || settings.display_name?.trim() || "Louis",
       });
     })();

@@ -223,9 +223,9 @@ export default function SettingsPage() {
                     placeholder="CarterCo"
                     className="focus-cream tabular w-full rounded-sm border border-[var(--ink)]/15 bg-transparent px-3 py-2 text-sm outline-none focus:border-[var(--ink)]/35" />
                 </Field>
-                <Field label="Calendly-link">
+                <Field label="Booking-link">
                   <input type="url" value={settings.calendly_url ?? ""} onChange={(e) => setS({ ...settings, calendly_url: e.target.value })}
-                    placeholder="https://calendly.com/dit-navn/30min"
+                    placeholder="https://cal.com/dit-navn/20min"
                     className="focus-cream tabular w-full rounded-sm border border-[var(--ink)]/15 bg-transparent px-3 py-2 text-sm outline-none focus:border-[var(--ink)]/35" />
                 </Field>
                 <Field label="Signatur (vises som /Navn)">
