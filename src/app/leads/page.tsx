@@ -164,6 +164,14 @@ export default function LeadsPage() {
   // SMS handoff (AI-svar / iMessage / SMS chips) is CarterCo-specific; gate it
   // behind the workspace capability flag so client panels (Soho, …) stay clean.
   const smsEnabled = activeWorkspace?.sms_enabled ?? false;
+  // Per-workspace email branding. When booking_url is set, the "Skriv mail" draft
+  // uses the client's follow-up template (their booking link + signoff) instead of
+  // the CarterCo identity template.
+  const branding: Branding = {
+    bookingUrl: activeWorkspace?.booking_url ?? null,
+    signoff: activeWorkspace?.signoff ?? null,
+    companyName: activeWorkspace?.name ?? null,
+  };
   function chooseWorkspace(id: string) {
     setSelectedWorkspaceId(id);
     if (typeof window !== "undefined") {
@@ -1325,6 +1333,7 @@ export default function LeadsPage() {
                 onNote={logNote}
                 names={memberNames}
                 smsEnabled={smsEnabled}
+                branding={branding}
               />
             ))}
           </ol>
@@ -1361,6 +1370,7 @@ function LeadRow({
   onNote,
   names,
   smsEnabled,
+  branding,
 }: {
   lead: Lead;
   index: number;
@@ -1382,6 +1392,7 @@ function LeadRow({
   onNote: (leadId: string, body: string) => void;
   names: Record<string, string>;
   smsEnabled: boolean;
+  branding: Branding;
 }) {
   const urgent =
     !!lead.response_time && URGENCY[lead.response_time] === "urgent";
@@ -1578,6 +1589,7 @@ function LeadRow({
           onNote={onNote}
           names={names}
           smsEnabled={smsEnabled}
+          branding={branding}
         />
       ) : null}
     </li>
@@ -1599,6 +1611,7 @@ function DetailPanel({
   onNote,
   names,
   smsEnabled,
+  branding,
 }: {
   lead: Lead;
   hasRung: boolean;
@@ -1616,6 +1629,7 @@ function DetailPanel({
   onNote: (leadId: string, body: string) => void;
   names: Record<string, string>;
   smsEnabled: boolean;
+  branding: Branding;
 }) {
   // Resolved — terminal state, shown only in "Vis alle".
   // `callback`, `follow_up`, and `interested`-with-nudge stay editable in Aktive.
@@ -1699,7 +1713,7 @@ function DetailPanel({
             value={contactSummary(lead)}
           />
           <ContactAction
-            href={hasEmail ? mailtoHref(lead.email, lead.name, identity, slotsLine) : "#"}
+            href={hasEmail ? mailtoHref(lead.email, lead.name, identity, slotsLine, branding) : "#"}
             enabled={hasEmail}
             icon={<MailIcon />}
             label="Skriv mail"
@@ -2784,12 +2798,44 @@ type Identity = {
   signoff: string;
 };
 
+// Per-workspace email branding. When bookingUrl is set (e.g. Soho's Nexudus
+// link), the email draft uses the client's follow-up template instead of the
+// operator's CarterCo identity. PLACEHOLDER booking link until Louis sets it.
+type Branding = {
+  bookingUrl: string | null;
+  signoff: string | null;
+  companyName: string | null;
+};
+
 function buildSmsBody(name: string | null, identity: Identity, slotsLine?: string) {
   const slot = slotsLine ? ` Hvordan ser din kalender ud ${slotsLine}?` : "";
   return `Hej ${firstName(name)}, det er ${identity.displayName} fra ${identity.companyName} - jeg prøvede lige at ringe.${slot} /${identity.signoff}`;
 }
 
-function buildEmailDraft(name: string | null, identity: Identity, slotsLine?: string) {
+function buildEmailDraft(
+  name: string | null,
+  identity: Identity,
+  slotsLine?: string,
+  branding?: Branding,
+) {
+  // Client follow-up template (Soho etc.) — used when the workspace has a
+  // booking link. Low-pressure, first-name, their booking link + signoff.
+  if (branding?.bookingUrl) {
+    const company = branding.companyName ?? "os";
+    const sign = branding.signoff ?? company;
+    const subject = `Mødelokale hos ${company}`;
+    const body = `Hej ${firstName(name)},
+
+Vi prøvede at fange dig efter din henvendelse om mødelokale hos ${company}. Du kan booke en tid her: ${branding.bookingUrl}
+
+Du er også velkommen til at svare på denne mail, hvis du har spørgsmål.
+
+Mvh
+${sign}`;
+    return { subject, body };
+  }
+
+  // Default CarterCo operator template.
   const subject = `Kort follow-up fra ${identity.companyName}`;
   const slotPara = slotsLine
     ? `Hvordan ser din kalender ud ${slotsLine}? Ellers foreslå selv et tidspunkt.\n\n`
@@ -2804,9 +2850,15 @@ ${slotPara}Du kan også booke direkte her: ${identity.calendlyUrl}
   return { subject, body };
 }
 
-function mailtoHref(email: string | null | undefined, name: string | null, identity: Identity, slotsLine?: string) {
+function mailtoHref(
+  email: string | null | undefined,
+  name: string | null,
+  identity: Identity,
+  slotsLine?: string,
+  branding?: Branding,
+) {
   if (!email) return "#";
-  const { subject, body } = buildEmailDraft(name, identity, slotsLine);
+  const { subject, body } = buildEmailDraft(name, identity, slotsLine, branding);
   const query = `subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   return `mailto:${email}?${query}`;
 }
