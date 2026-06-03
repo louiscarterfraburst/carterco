@@ -207,19 +207,41 @@ Still to build: a per-receptionist dashboard — calls made today, **answer rate
 
 ---
 
-## 7. SMS cadence (proposal-promised: confirmations, reminders, no-show)
+## 7. Follow-up cadence — DESIGNED 2026-06-03 (via /sales-cadence)
 
-Inbound, consented leads — transactional, not cold. Each touch triggers off
-existing fields. (Note: this widens carterco's documented SMS rule — keep it
-one-way; booking link goes to a page, not an SMS reply thread.)
+Inbound, consented, hot leads → goal = book a room viewing. Call-first, one-way
+SMS + email follow-ups (booking links, never reply threads). **4 attempts,
+gentler (one touch/day max), channel-mixed** so no 3-in-a-row same channel.
 
-| When | Trigger | Purpose |
-|---|---|---|
-| T+0 | new lead row | confirm receipt + expectation + self-serve link |
-| after no-answer | `call_status='no_answer'`, by `retry_count` | re-engage, attempt-count variants |
-| on booking | `meeting_at` set | confirmation |
-| −24h / −2h | before `meeting_at` | reminder (cut no-shows) |
-| no-show | `meeting_at` passed, no outcome | rebook link |
+The model fix: `outcome` is terminal (set once — correct); the **no-answer
+escalation is attempt-aware**, keyed on `retry_count`. Today every no-answer
+fired the same copy + delay — that's the flatness being fixed.
+
+| Attempt | Day | Call | If no answer → follow-up |
+|---|---|---|---|
+| 1 | 0 | call on enquiry | **SMS V1** "vi prøvede at ringe" + book-link |
+| 2 | 1 | call | **Email 1** value-add (offer + book-link) |
+| 3 | 2 | call | **SMS V2** short nudge + link |
+| 4 | 4 | call | **Email 2 (breakup)** "vi lukker medmindre…" → dormant |
+
+Branches: answered+booked → confirmation + reminder (no-show defense);
+answered+interested-not-booked → §8 positive-never-booked queue; not interested → close.
+
+SMS copy variants (DK, one-way, book-link not reply):
+1. `Hej {{navn}}, vi prøvede at ringe ang. dit mødelokale hos Soho. Ring tilbage på {{nummer}} — eller book direkte: {{link}}`
+2. `Hej {{navn}}, der er stadig ledige tider til mødelokale hos Soho. Vælg en tid: {{link}} eller ring {{nummer}}`
+
+**Build status / blockers:**
+- Buildable now (channel-independent): per-attempt copy module
+  (`smsBodyForAttempt(retry_count)`), the 4-step gentler timing ladder
+  (`nextDelayForRetryCount`), and an attempt UI ("Forsøg 2/4" + which SMS fires).
+- **Blocked — SMS sending:** carterco killed server Twilio; SMS is operator-fired
+  phone handoff. For 5 receptionists that = texts from 5 personal numbers (footgun).
+  Clean path = **Telavox SMS** (`POST …/me/sms`, Soho's one number) → needs the
+  **same calling-seat token blocking dial** (§4). Do NOT ship personal-phone SMS.
+- **Blocked — email:** automated email (Email 1/2 + booking confirmations +
+  reminders) needs the **sender domain `hej@soho.dk` + SPF/DKIM/DMARC** (§10).
+  Decision: build SMS+call ladder when token lands; add email when domain lands.
 
 ---
 
