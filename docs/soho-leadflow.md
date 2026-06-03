@@ -344,3 +344,33 @@ reopen the lead. Unmatched (existing member) → ignore.
 
 **Needs from Soho:** admin to create the webhook (we give URL + shared secret);
 possibly admin API creds for the email lookup. Same access ask as the booking link.
+
+---
+
+## 12. Reporting conversions back to Meta — Conversions API (RESEARCHED 2026-06-03)
+
+The payoff of the whole funnel: tell Meta which leads actually **booked**, so the
+algorithm optimizes toward bookers (and, with value, true ROAS) — not form-fills.
+
+**Mechanism = server-side CAPI event:**
+- `POST https://graph.facebook.com/v21.0/{DATASET_ID}/events?access_token={CAPI_TOKEN}`
+- Primary event = **`Schedule`** (Meta's standard event for "booked an
+  appointment/visit") fired on the Nexudus booking (§11). Optionally `Lead` on
+  form-fill (top-funnel) and `Purchase` w/ value if a rental value is known.
+- Payload: `event_name`, `event_time`, `action_source:"system_generated"`,
+  `event_id` (dedup), `user_data{ em:sha256(email), ph:sha256(phone),
+  fbc, fbp, client_ip_address, client_user_agent }`, `custom_data{ value, currency:"DKK" }`.
+- **`fbc` is the match key** — format `fb.1.<ts_ms>.<fbclid>`, derived from the
+  `fbclid` captured at the landing page (§3). **fbc/fbp are NOT hashed**; PII is
+  SHA-256. Never fabricate fbc; only set it when a real fbclid exists.
+- Fire within minutes (Nexudus webhook is real-time → fine). Events accepted ≤7 days.
+
+**Dependency chain (CAPI is the last link):**
+ad `fbclid` → landing captures it (§3) → stored on lead → Nexudus booking webhook
+(§11) → POST `Schedule` to CAPI with `fbc` + hashed PII → Meta credits the ad.
+
+**Needs:** Soho **Dataset/Pixel ID** + a **CAPI access token** on ad account
+`146975948684005` (same Meta-access ask as the spend side, §3/§10). Blocked until
+the landing page (fbclid), Nexudus trigger, and Meta token all exist.
+
+Sources: Meta CAPI docs (graph.facebook.com `/events`), fbp/fbc parameters.
