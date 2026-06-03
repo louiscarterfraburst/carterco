@@ -259,22 +259,31 @@ to plain "Hej," if missing; book-link = Nexudus URL, not a reply thread):
 
 ---
 
-## 8. "Positive but never booked" reactivation
+## 8. Outcome model + "delt link, ikke booket" watch (DESIGNED 2026-06-03)
 
-Highest-ROI warm pool — they raised a hand and stalled. Distinct from the area-2
-cold 6–8k reactivation.
+The receptionist's job per lead = **make contact + share the booking link**, then
+let Nexudus tell us if it converted. So outcomes are light and in Soho's language:
 
-```sql
-outcome IN ('interested','callback','follow_up')
-AND meeting_at IS NULL
-AND outcome <> 'customer'
-AND outcome_at < now() - interval '3 days'
-AND (next_action_at IS NULL OR next_action_at < now())
-```
-Cadence (reuses `next_action_at` / `retry_count`): Day 3 SMS nudge with a concrete
-available slot → Day 7 reception call flagged with *why* warm → Day 14 final SMS +
-link, then dormant. Surface as its own panel queue ("interesseret, ikke booket").
-Reactivated bookings must credit the original first-touch ad.
+**Outcome buttons (tailored — replaces CarterCo's booked/customer/interested/…):**
+- **Delt link** (talked, interested, shared the Nexudus link) → enters the
+  *venter på booking* watch (below)
+- **Ring tilbage** (callback)
+- **Ikke relevant** (close — the only thing that closes a lead)
+- **Booket** (manual fallback; normally **auto-set by Nexudus**, see §11)
+
+**The watch + resurface ladder (the core mechanic):**
+After "Delt link", the lead is watched. Nexudus auto-flips it to **Booket** if
+they book (§11). If they don't, it resurfaces for a gentle nudge on an
+escalating, front-loaded ladder — **gaps of 1 · 1 · 2 days** (nudge at day 1,
+day 2, day 4), then **quiet. Never closed.** Stays open; Nexudus auto-books it
+whenever they eventually do, even months later.
+
+- Reuses `next_action_at` / `retry_count` (same machinery as the no-answer ladder,
+  different intervals).
+- Each resurface brings the lead back into the actionable queue with context
+  ("delte link for X dage siden, ikke booket"), receptionist judgement to nudge.
+- Buildable now with a **manual** Booket; the auto-flip needs Nexudus creds (§11).
+- Reactivated bookings must credit the original first-touch ad (attribution §3).
 
 ---
 
@@ -305,4 +314,63 @@ Reactivated bookings must credit the original first-touch ad.
   export) — cost side of attribution. *Not* needed for ingestion.
 - **CAPI dataset** on Soho's ad account (`asset_id=146975948684005`).
 - **Sender domain** for SMS/email + SPF/DKIM/DMARC (proposal item).
+- **Nexudus**: admin access to add a webhook (Settings → Integrations) + the
+  booking link + (maybe) admin API creds for the coworker-email lookup (§11).
 - Run Meta instant form **in parallel** during cutover so no leads drop mid-switch.
+
+---
+
+## 11. Nexudus booking integration (RESEARCHED 2026-06-03 — feasible)
+
+Soho runs on **Nexudus**. Closes the loop: when a lead books a room, the panel
+auto-marks **Booket** (no receptionist action) — and that's the conversion +
+attribution signal.
+
+**Mechanism = webhook** (mirrors our `meta-leadgen-webhook` exactly):
+- Events (Settings → Integrations): **Booking Create (6), Booking Update (7),
+  Booking Delete (8)**.
+- Security: **HMAC-SHA256**, header `X-Nexudus-Hook-Signature` + shared secret.
+  Retries up to 10×, auto-disables after 10 consecutive failures.
+- Booking entity fields: `Id`, `UniqueId`, `CoworkerId` + nested `Coworker`
+  (the booker — email lives here), `ResourceId`/`ResourceName` (room),
+  `FromTime`/`ToTime` (+Utc), `IsCancelled`, `Tentative`, `CreatedOn`.
+- Admin REST base: `https://spaces.nexudus.com/api` (Bearer/Basic). Member-portal
+  API (`learn.nexudus.com/llms.txt`) is customer-scoped — not what we use here.
+
+**Flow:** Booking Create → verify signature → resolve booker email (nested
+`Coworker`, or GET coworker by `CoworkerId`) → match to a lead (email; fallback
+phone/name) → set `outcome='booket'` + `meeting_at = FromTime`. Booking Delete →
+reopen the lead. Unmatched (existing member) → ignore.
+
+**Needs from Soho:** admin to create the webhook (we give URL + shared secret);
+possibly admin API creds for the email lookup. Same access ask as the booking link.
+
+---
+
+## 12. Reporting conversions back to Meta — Conversions API (RESEARCHED 2026-06-03)
+
+The payoff of the whole funnel: tell Meta which leads actually **booked**, so the
+algorithm optimizes toward bookers (and, with value, true ROAS) — not form-fills.
+
+**Mechanism = server-side CAPI event:**
+- `POST https://graph.facebook.com/v21.0/{DATASET_ID}/events?access_token={CAPI_TOKEN}`
+- Primary event = **`Schedule`** (Meta's standard event for "booked an
+  appointment/visit") fired on the Nexudus booking (§11). Optionally `Lead` on
+  form-fill (top-funnel) and `Purchase` w/ value if a rental value is known.
+- Payload: `event_name`, `event_time`, `action_source:"system_generated"`,
+  `event_id` (dedup), `user_data{ em:sha256(email), ph:sha256(phone),
+  fbc, fbp, client_ip_address, client_user_agent }`, `custom_data{ value, currency:"DKK" }`.
+- **`fbc` is the match key** — format `fb.1.<ts_ms>.<fbclid>`, derived from the
+  `fbclid` captured at the landing page (§3). **fbc/fbp are NOT hashed**; PII is
+  SHA-256. Never fabricate fbc; only set it when a real fbclid exists.
+- Fire within minutes (Nexudus webhook is real-time → fine). Events accepted ≤7 days.
+
+**Dependency chain (CAPI is the last link):**
+ad `fbclid` → landing captures it (§3) → stored on lead → Nexudus booking webhook
+(§11) → POST `Schedule` to CAPI with `fbc` + hashed PII → Meta credits the ad.
+
+**Needs:** Soho **Dataset/Pixel ID** + a **CAPI access token** on ad account
+`146975948684005` (same Meta-access ask as the spend side, §3/§10). Blocked until
+the landing page (fbclid), Nexudus trigger, and Meta token all exist.
+
+Sources: Meta CAPI docs (graph.facebook.com `/events`), fbp/fbc parameters.
