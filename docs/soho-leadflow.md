@@ -12,12 +12,42 @@ Locked decisions:
 - Lead source is a **landing-page form**, replacing Meta native instant forms.
   Builder of the page is TBD — design must not depend on who builds it.
 
-Soho `/leads` workspace_id: **`7f13f551-9514-4a5a-b1bf-98eb95c1a469`**
-(owner info@soho.dk; louis@carterco.dk kept as operator member; 6 receptionist members TBD).
+Workspaces (two — event funnel kept separate):
+- **Soho** (rooms) `7f13f551-9514-4a5a-b1bf-98eb95c1a469` — info@soho.dk (owner),
+  louis@carterco.dk (operator), + Pernille (pm@), Victoria (vh@), Rosa (rlj@),
+  Lee (lvl@).
+- **Soho Events** `9d2a8cd2-ea01-4ab0-92c5-84e4256ccca7` — info@ (owner), louis@,
+  Sahra (sahra@, event-only). Event ads (point 4) route here.
+- A persistent **TEST lead** ("TEST – Realtime tjek") is kept in Soho on purpose.
 
 Soho Meta identifiers (from Leads Center): `business_id=1902356403310858`,
 ad account `asset_id=146975948684005`. Existing pipeline stages in Meta:
 Intake → Mødelokaler → Kontor → Qualified.
+
+Deploy model: feature branch → PR → **`main` (= production carterco.dk, auto-deploy)**.
+
+---
+
+## 0. Status (2026-06-03)
+
+**Shipped to prod:**
+- Two workspaces + 6 people with first names (`workspace_members.display_name`).
+- `/leads` **workspace switcher** (multi-workspace users swap; per-workspace
+  `workspace_id` filtering).
+- **Ring-click logging** — clicking Ring writes a `phone` event
+  (`/api/call-clicked`, `sender`=receptionist). Foundation for agent attribution.
+- **Live activity** — `/leads` subscribes to `leads` + `lead_conversation_events`
+  via Supabase Realtime (publication enabled on both); new leads, calls, notes
+  appear with no refresh. Optimistic append for the actor.
+- **Attributed notes** — `/api/note-added` + NoteComposer (⌘/Ctrl+Enter).
+- **CallSummaryChip** — `📞 Rosa 14:32` row glance (anti-double-dial).
+- **SMS gating** — `workspaces.sms_enabled` (CarterCo only); client panels are
+  call-first (no AI-svar / "· SMS" / SMS chips leaking in).
+- Push-notification banner compacted to a slim bar.
+
+**Pending (build order §9):** lead-intake (landing page), Telavox dial wiring
+(blocked on a calling seat), agent-overview dashboard, SMS cadence, attribution
++ CAPI, positive-never-booked queue.
 
 ---
 
@@ -126,57 +156,106 @@ link because **call records flow back** — answered/not, duration, which agent 
 which auto-populates both contact logging (§5) and the agent overview (§6) with
 no manual entry.
 
-Needs from Soho: **Telavox API token** + per-receptionist extension/identity
-mapping (which `/leads` member = which Telavox extension).
+**Telavox CAPI — verified 2026-06-03** (token in `.env.local` as `TELAVOX_API`):
+- Base: `https://home.telavox.se/api/capi` (admin.telavox.com also works).
+- Auth: `Authorization: Bearer <JWT>` (token type "Custom integration", per-user).
+- **Dial:** `POST /v1/extensions/users/me/dial` body
+  `{"phoneNumber":"0045…","autoAnswer":true}` — `00` intl prefix, NOT `+`.
+- **Call history (poll):** `GET /v1/extensions/users/me/calls/history?callType=ALL`
+  → answered/duration/etc. There are **no webhooks in CAPI**, so call logging is
+  **poll-based**, not push.
+- SMS also available: `POST /v1/extensions/users/me/sms`.
+- `/me` = the token owner, so a per-receptionist token dials from that
+  receptionist's phone and returns their calls → attribution is intrinsic. One
+  shared token works if they share a device.
 
-> TODO: confirm exact Telavox API endpoint + auth from their account/API docs
-> before building. Do not assume the shape.
+> BLOCKER: dial returns 400 "this user does not have access to this feature"
+> unless the token belongs to a Telavox user with a real calling extension +
+> CTI/click-to-call licence. Auth + read work regardless. Current token (Louis's
+> Soho login) is a management seat without dial. Emailed Casper for a token from a
+> calling seat. Both token types (Custom + CTI) hit the same wall → it's the seat.
 
-Flow: click dial → POST to Telavox (from = agent extension, to = lead phone) →
-on call result, write a `lead_conversation_events` row (channel `phone`,
-`source='telavox'`, `metadata` = {duration, answered, telavox_call_id},
-`sender` = agent) and set `performed_by`.
-
----
-
-## 5. Contact noted
-
-Uses existing `public.lead_conversation_events` (`supabase/lead_conversation_events.sql`):
-- channel `phone` (auto from Telavox) or `note` (manual), `direction`,
-  `body`, `sender`.
-- Surfaced as a per-lead timeline in the panel.
-- Every event records **who** logged it → feeds the overview.
-- Idempotent on `(source, source_id)` — use `telavox` + `telavox_call_id` so
-  call records don't double-insert.
-
----
-
-## 6. Agent overview (6 receptionists)
-
-Add **`performed_by`** (member email) to call/outcome actions on `leads`, and it
-already exists as `sender` on conversation events. Dashboard, per receptionist:
-- leads assigned / handled
-- calls made today, **answer rate** (from Telavox records)
-- viewings booked, rooms rented
-- **speed-to-first-call** (created_at → first call) — the core SLA
-
-With Telavox-API these populate from real call data, not self-report.
+Flow once unblocked: click dial → POST `…/me/dial` → poll `…/me/calls/history` →
+reconcile real call records into `lead_conversation_events` (channel `phone`,
+`source='telavox'`, `metadata`={duration, answered, telavox_call_id}, `sender`=agent).
+The ring-click log (shipped) already records the intent; Telavox records enrich it.
 
 ---
 
-## 7. SMS cadence (proposal-promised: confirmations, reminders, no-show)
+## 5. Contact noted — SHIPPED
 
-Inbound, consented leads — transactional, not cold. Each touch triggers off
-existing fields. (Note: this widens carterco's documented SMS rule — keep it
-one-way; booking link goes to a page, not an SMS reply thread.)
+`public.lead_conversation_events`, surfaced as a live per-lead timeline:
+- channel `phone` (ring-click via `/api/call-clicked`; Telavox records later) or
+  `note` (manual via `/api/note-added` + NoteComposer). `sender` = the author's
+  email; rendered as their first name via the workspace name map (fallback to
+  local-part).
+- **Realtime**: timeline + row chip update across all open panels with no refresh.
+- Telavox call records (when unblocked) idempotent on `(source, source_id)` =
+  `telavox` + `telavox_call_id`.
 
-| When | Trigger | Purpose |
-|---|---|---|
-| T+0 | new lead row | confirm receipt + expectation + self-serve link |
-| after no-answer | `call_status='no_answer'`, by `retry_count` | re-engage, attempt-count variants |
-| on booking | `meeting_at` set | confirmation |
-| −24h / −2h | before `meeting_at` | reminder (cut no-shows) |
-| no-show | `meeting_at` passed, no outcome | rebook link |
+---
+
+## 6. Agent overview (NOT yet built)
+
+The data foundation exists: every call/note event carries `sender` (the actor's
+email), so "who did what when" is already captured — no `performed_by` column
+needed (earlier plan superseded; `sender` on events is the source of truth).
+
+Still to build: a per-receptionist dashboard — calls made today, **answer rate**
+(from Telavox records once unblocked), viewings booked, rooms rented,
+**speed-to-first-call** (created_at → first call) — scoped per workspace.
+
+---
+
+## 7. Follow-up cadence — DESIGNED 2026-06-03 (via /sales-cadence)
+
+Inbound, hot leads → goal = book a room viewing. **Calibrated for DK + a
+low-stakes meeting-room enquiry: low-pressure, self-serve-first, and it NEVER
+closes the lead.** Call-first; SMS + email follow-ups carry a booking link (never
+a reply thread).
+
+Tone rules: plain Danish, no hype, no manufactured urgency ("limited times!"),
+no breakup. Lead with the booking link and let them act (autonomy > pursuit).
+
+The model fix: `outcome` is terminal (set once — correct); the **no-answer
+follow-up is attempt-aware**, keyed on `retry_count`. Today every no-answer fired
+the same copy + delay — that's the flatness being fixed.
+
+| Touch | Day | Call | If no answer → follow-up |
+|---|---|---|---|
+| 1 | 0 | call on enquiry (fast) | **ONE message** (first-name personalized) + Nexudus book-link |
+| — | after | — | **Go quiet. NO close, NO breakup.** Lead stays open + eligible for §8 reactivation. Receptionist may *manually* nudge a promising lead — not a baked-in second chase. |
+
+Deliberately **one follow-up only** (Louis 2026-06-03): lowest-pressure, very DK,
+and the self-serve link is already in it. It's **operator-fired**, so a second
+touch is the receptionist's judgement, not automation.
+
+Branches: answered+booked → confirmation + reminder (no-show defense);
+answered+interested-not-booked → §8 positive-never-booked queue; only an explicit
+**"ikke interesseret"** closes the lead — a non-responder is never closed.
+
+Copy (DK, one-way, **first-name** `{{fornavn}}` = first token of name, fallback
+to plain "Hej," if missing; book-link = Nexudus URL, not a reply thread):
+- `Hej {{fornavn}}, vi prøvede at fange dig ang. mødelokale hos Soho. Book en tid her: {{nexudus_link}} — eller ring til os på {{nummer}}.`
+
+**Channels (per Louis 2026-06-03):**
+- **SMS → Telavox** (`POST /v1/extensions/users/me/sms`) or a Telavox deeplink —
+  sent from **Soho's one number**, NOT the personal-phone `sms:` handoff. Both
+  tie to the Telavox calling seat → **blocked on the same token as dial** (§4).
+  (Deeplink for SMS is unconfirmed; the API endpoint is confirmed.)
+- **Email → operator-fired draft** from the receptionist's own `*@soho.dk`
+  mailbox (the "Skriv mail" handoff). **Not blocked by the sender domain** — that
+  only gates *automated* server email (booking confirmations/reminders).
+
+**Build status:**
+- Buildable now: the **one-touch email-draft** follow-up — Soho-correct template
+  (per-workspace booking link + signoff, not Louis/CarterCo), first-name
+  personalization. Needs **Soho's Nexudus booking link** (Louis getting later) +
+  a per-workspace branding field (booking_url/signoff on `workspaces`).
+  Soho runs on **Nexudus** — likely the source of availability/bookings too;
+  worth a later integration conversation.
+- Blocked on Telavox seat token: SMS (via Telavox), dial.
+- Blocked on sender domain: automated confirmations/reminders.
 
 ---
 
@@ -201,26 +280,29 @@ Reactivated bookings must credit the original first-touch ad.
 
 ## 9. Build order
 
-1. **Plumbing:** Soho workspace + members (6 receptionists) + push subscriptions;
-   generalize `meta-leadgen-relay` → `lead-intake` with per-workspace token;
-   attribution migration (§3 columns) + `performed_by`.
-2. **Landing page + snippet:** form wired to `lead-intake`, param capture correct
-   from the first lead.
-3. **Telavox:** API click-to-call + call-record → conversation_events + agent attribution.
-4. **Reception panel:** dial button, contact timeline, positive-never-booked queue,
-   agent overview.
-5. **SMS cadence.**
-6. **Attribution + CAPI:** spend join (needs Meta access), CAPI on booked/customer,
-   cohort report.
+1. **Plumbing:** ✅ workspaces + members + names + switcher + realtime + ring-click
+   logging + attributed notes + SMS gating. ⏳ still: generalize
+   `meta-leadgen-relay` → `lead-intake` with per-workspace token; attribution
+   columns (§3).
+2. **Landing page + snippet:** ⏳ pending — needs the page to exist (owner TBD).
+3. **Telavox:** ⏳ CAPI verified; dial wiring blocked on a calling-seat token.
+4. **Reception panel:** ✅ dial button + contact timeline (live). ⏳ still:
+   positive-never-booked queue, agent-overview dashboard.
+5. **SMS cadence:** ⏳ pending (Soho's own one-way cadence; SMS gating already
+   keeps CarterCo's handoff out of Soho).
+6. **Attribution + CAPI:** ⏳ pending (needs Meta spend access).
 
 ---
 
-## 10. Open items / access needed
+## 10. Open items / access needed (blocked on Soho/Casper)
 
-- **Telavox API token** + receptionist→extension mapping.
+- **Telavox token from a calling-enabled seat** (current one can't dial — see §4
+  blocker). Emailed Casper.
+- **Leads CSV** (the 6–8k existing leads) — for area-2 reactivation.
+- **Landing-page owner** confirmed (us / Soho) — either way they get the snippet +
+  contract. Blocks lead-intake.
 - **Meta read access** for spend (MCP reauth as Soho-access identity, or daily
-  export) — for the cost side of attribution. *Not* needed for ingestion.
+  export) — cost side of attribution. *Not* needed for ingestion.
 - **CAPI dataset** on Soho's ad account (`asset_id=146975948684005`).
-- **Landing-page owner** confirmed (us / Soho) — either way they get the snippet + contract.
 - **Sender domain** for SMS/email + SPF/DKIM/DMARC (proposal item).
 - Run Meta instant form **in parallel** during cutover so no leads drop mid-switch.
