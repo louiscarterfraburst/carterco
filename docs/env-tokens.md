@@ -60,7 +60,7 @@ Used by: `scripts/test-leads/auto_submit.py`, `scripts/test-leads/poll_inbox.py`
 
 ## Quick "can I do X?" lookup
 
-- **Send a one-off LinkedIn DM** → `SENDPILOT_API_KEY` + `POST /v1/inbox/messages` (or use `/v1/inbox/connect` for a fresh invite+note)
+- **Send a one-off LinkedIn DM** → `SENDPILOT_API_KEY` + `POST /v1/inbox/send` with `{senderId, recipientLinkedinUrl, message}` (NOT `/v1/inbox/messages` — that 404s; `/v1/inbox/connect` is invite-only). Full reference: `docs/sendpilot-api.md`
 - **Create / edit a lemlist campaign or sequence** → `LEMLIST_API` + `POST /campaigns` / `POST /sequences/{id}/steps` (Basic auth, see `docs/lemlist.md`)
 - **Look up a phone number for a name+company** → `PROSPEO_API_KEY` (`/search-person`)
 - **Pull a LinkedIn profile / company page as markdown** → `JINA_API_KEY` + `https://r.jina.ai/<url>`
