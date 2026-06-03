@@ -244,7 +244,7 @@ const outboundCards = [
     title: "CEO · Tagværk ApS",
     initials: "SE",
     preview:
-      "Hi Sara — saw you just won the Frederiksberg tender. If you want more leads like that, I…",
+      "Hi Sara, saw you just won the Frederiksberg tender. If you want more leads like that, I…",
     chip: "1st-degree",
   },
   {
@@ -313,9 +313,9 @@ const leadsRotation: PhoneLead[] = [
       { t: "11:00", available: false },
     ],
     thread: [
-      { from: "us", text: "Hi Mette — thanks for the interest in the Nordlys package. Got time for a quick call tomorrow at 10?", time: "14:32" },
+      { from: "us", text: "Hi Mette, thanks for the interest in the Nordlys package. Got time for a quick call tomorrow at 10?", time: "14:32" },
       { from: "them", text: "Yes, that works :)", time: "14:34" },
-      { from: "us", text: "Perfect — sending a calendar invite now.", time: "14:35" },
+      { from: "us", text: "Perfect. Sending a calendar invite now.", time: "14:35" },
     ],
     callPath: "missed",
     outcome: "booked",
@@ -337,9 +337,9 @@ const leadsRotation: PhoneLead[] = [
       { t: "14:30", available: false },
     ],
     thread: [
-      { from: "us", text: "Hi Jonas — thanks for the chat about the Bygma quote. Got 20 min Friday at 13:30?", time: "11:04" },
+      { from: "us", text: "Hi Jonas, thanks for the chat about the Bygma quote. Got 20 min Friday at 13:30?", time: "11:04" },
       { from: "them", text: "That works", time: "11:06" },
-      { from: "us", text: "Great — calendar invite coming now.", time: "11:07" },
+      { from: "us", text: "Great. Calendar invite coming now.", time: "11:07" },
     ],
     callPath: "answered",
     callDuration: "3:42",
@@ -362,7 +362,7 @@ const leadsRotation: PhoneLead[] = [
       { t: "10:30", available: false },
     ],
     thread: [
-      { from: "us", text: "Hi Sara — saw you looked at the balcony package. Up for a call day after at 09:30?", time: "09:46" },
+      { from: "us", text: "Hi Sara, saw you looked at the balcony package. Up for a call day after at 09:30?", time: "09:46" },
       { from: "them", text: "Yes please", time: "09:48" },
       { from: "us", text: "Sending the invite now.", time: "09:49" },
     ],
@@ -823,7 +823,7 @@ export default function Home() {
             className="max-w-xl text-lg leading-relaxed text-[var(--cream)]/70 sm:max-w-2xl sm:text-xl"
             style={{ textWrap: "balance" }}
           >
-            Leads cool. Meetings get missed. Pipelines wither. I build the system that finds them, calls them before they cool, nurtures them until they're ready — so you close more deals.
+            Leads cool. Meetings get missed. Pipelines wither. I build the system that finds them, calls them before they cool, nurtures them until they're ready, so you close more deals.
           </p>
 
           {/* CTA group — signature lives in the founder card per DESIGN.md
@@ -1197,7 +1197,7 @@ export default function Home() {
                               <span
                                 key={`${stage.n}-supporting-${idx}`}
                                 className="relative grid h-9 w-9 place-items-center overflow-hidden rounded-full border border-[var(--cream)]/15 bg-[radial-gradient(ellipse_at_top,rgba(255,184,107,0.10),rgba(15,13,10,0.55))] text-[10px] font-bold uppercase tracking-wider text-[var(--cream)]/65 shadow-[0_3px_8px_rgba(0,0,0,0.35)]"
-                                aria-label={isEmpty ? "Additional client — coming" : `Also: ${c.name}`}
+                                aria-label={isEmpty ? "Additional client, coming" : `Also: ${c.name}`}
                                 title={c.name}
                               >
                                 {isEmpty ? (
@@ -2186,7 +2186,7 @@ export default function Home() {
                               <span className="rounded-full bg-[var(--clay)]/15 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider text-[var(--clay)]">AI</span>
                             </div>
                             <p className="truncate text-[11px] text-[var(--cream)]/65">
-                              Hi Jonas — saw you're ramping your pharma field team…
+                              Hi Jonas, saw you're ramping your pharma field team…
                             </p>
                             <div className="mt-3 flex items-center justify-between border-t border-[var(--cream)]/8 pt-2.5">
                               <span className="text-[9px] uppercase tracking-[0.18em] text-[var(--cream)]/40">Drafted · 12ms</span>
@@ -2258,7 +2258,7 @@ export default function Home() {
                               <div className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-[linear-gradient(135deg,#5a4a3a,#7a6a5a)] text-[8px] font-bold text-[#fff8ea]">JU</div>
                               <div className="min-w-0 flex-1">
                                 <p className="text-[10px] leading-snug text-[var(--cream)]/80 italic">
-                                  &ldquo;You should talk to Morten — he runs operations at TechSupply, just switched tools.&rdquo;
+                                  &ldquo;You should talk to Morten. He runs operations at TechSupply, just switched tools.&rdquo;
                                 </p>
                                 <p className="mt-1 text-[8px] uppercase tracking-wider text-[var(--cream)]/45">— Justyna</p>
                               </div>
@@ -2562,7 +2562,7 @@ export default function Home() {
                     By the hour, every month. You only pay for what I actually do.
                   </p>
                   <p>
-                    Take the quiz — see where your own system leaks.
+                    Take the quiz. See where your own system leaks.
                   </p>
                   <div className="pt-2">
                     <button
