@@ -209,39 +209,51 @@ Still to build: a per-receptionist dashboard — calls made today, **answer rate
 
 ## 7. Follow-up cadence — DESIGNED 2026-06-03 (via /sales-cadence)
 
-Inbound, consented, hot leads → goal = book a room viewing. Call-first, one-way
-SMS + email follow-ups (booking links, never reply threads). **4 attempts,
-gentler (one touch/day max), channel-mixed** so no 3-in-a-row same channel.
+Inbound, hot leads → goal = book a room viewing. **Calibrated for DK + a
+low-stakes meeting-room enquiry: low-pressure, self-serve-first, and it NEVER
+closes the lead.** Call-first; SMS + email follow-ups carry a booking link (never
+a reply thread).
+
+Tone rules: plain Danish, no hype, no manufactured urgency ("limited times!"),
+no breakup. Lead with the booking link and let them act (autonomy > pursuit).
 
 The model fix: `outcome` is terminal (set once — correct); the **no-answer
-escalation is attempt-aware**, keyed on `retry_count`. Today every no-answer
-fired the same copy + delay — that's the flatness being fixed.
+follow-up is attempt-aware**, keyed on `retry_count`. Today every no-answer fired
+the same copy + delay — that's the flatness being fixed.
 
-| Attempt | Day | Call | If no answer → follow-up |
+| Touch | Day | Call | If no answer → follow-up |
 |---|---|---|---|
-| 1 | 0 | call on enquiry | **SMS V1** "vi prøvede at ringe" + book-link |
-| 2 | 1 | call | **Email 1** value-add (offer + book-link) |
-| 3 | 2 | call | **SMS V2** short nudge + link |
-| 4 | 4 | call | **Email 2 (breakup)** "vi lukker medmindre…" → dormant |
+| 1 | 0 | call on enquiry (fast) | **Msg 1** "vi prøvede at fange dig" + book-link |
+| 2 | 1–2 | call | **Msg 2** gentle nudge, other channel, + book-link |
+| — | after | — | **Go quiet. NO close, NO breakup.** Lead stays open + eligible for §8 reactivation |
+
+It's **operator-fired** — the receptionist decides per lead whether to send the
+next touch. The ladder is a suggestion, not an autoblast.
 
 Branches: answered+booked → confirmation + reminder (no-show defense);
-answered+interested-not-booked → §8 positive-never-booked queue; not interested → close.
+answered+interested-not-booked → §8 positive-never-booked queue; only an explicit
+**"ikke interesseret"** closes the lead — a non-responder is never closed.
 
-SMS copy variants (DK, one-way, book-link not reply):
-1. `Hej {{navn}}, vi prøvede at ringe ang. dit mødelokale hos Soho. Ring tilbage på {{nummer}} — eller book direkte: {{link}}`
-2. `Hej {{navn}}, der er stadig ledige tider til mødelokale hos Soho. Vælg en tid: {{link}} eller ring {{nummer}}`
+Copy (DK, one-way, book-link not reply):
+1. `Hej {{navn}}, vi prøvede at fange dig ang. mødelokale hos Soho. Book en tid her: {{link}} — eller ring til os på {{nummer}}.`
+2. `Hej {{navn}}, her er linket til at booke mødelokale igen: {{link}}. Sig endelig til hvis du har spørgsmål 🙂`
 
-**Build status / blockers:**
-- Buildable now (channel-independent): per-attempt copy module
-  (`smsBodyForAttempt(retry_count)`), the 4-step gentler timing ladder
-  (`nextDelayForRetryCount`), and an attempt UI ("Forsøg 2/4" + which SMS fires).
-- **Blocked — SMS sending:** carterco killed server Twilio; SMS is operator-fired
-  phone handoff. For 5 receptionists that = texts from 5 personal numbers (footgun).
-  Clean path = **Telavox SMS** (`POST …/me/sms`, Soho's one number) → needs the
-  **same calling-seat token blocking dial** (§4). Do NOT ship personal-phone SMS.
-- **Blocked — email:** automated email (Email 1/2 + booking confirmations +
-  reminders) needs the **sender domain `hej@soho.dk` + SPF/DKIM/DMARC** (§10).
-  Decision: build SMS+call ladder when token lands; add email when domain lands.
+**Channels (per Louis 2026-06-03):**
+- **SMS → Telavox** (`POST /v1/extensions/users/me/sms`) or a Telavox deeplink —
+  sent from **Soho's one number**, NOT the personal-phone `sms:` handoff. Both
+  tie to the Telavox calling seat → **blocked on the same token as dial** (§4).
+  (Deeplink for SMS is unconfirmed; the API endpoint is confirmed.)
+- **Email → operator-fired draft** from the receptionist's own `*@soho.dk`
+  mailbox (the "Skriv mail" handoff). **Not blocked by the sender domain** — that
+  only gates *automated* server email (booking confirmations/reminders).
+
+**Build status:**
+- Buildable now: the **email-draft cadence** — Soho-correct templates
+  (per-workspace booking link + signoff, not Louis/CarterCo), attempt-aware copy,
+  optional AI-email draft. Needs **Soho's booking link** + a per-workspace
+  branding field (booking_url/signoff on `workspaces` or member identity).
+- Blocked on Telavox seat token: SMS (via Telavox), dial.
+- Blocked on sender domain: automated confirmations/reminders.
 
 ---
 
