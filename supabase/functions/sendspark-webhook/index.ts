@@ -255,13 +255,15 @@ async function handleRenderReady(evt: SendSparkEvent, email: string, videoLink: 
         .replaceAll("{website}", website)
         .replaceAll("{videoLink}", videoLink);
 
-    // Becc-bucket personalization (CarterCo): when a hook was generated for this
-    // cold lead, it REPLACES the generic website opener. The hook already ends
-    // in a colon leading into the video. Referral opens keep their own template;
-    // no hook => fall back to the static templated message (Bucket-6 website line).
+    // Becc-bucket personalization (CarterCo): when a body was generated for this
+    // cold lead, it REPLACES the generic website opener. personalized_hook now
+    // holds the full DM body (observation + bridge into the video) — the model
+    // never emits the URL, so we append the link on its own paragraph here.
+    // Referral opens keep their own template; no hook => fall back to the static
+    // templated message (Bucket-6 website line).
     const hook = (pipe.personalized_hook ?? "").trim();
     const message = (!pipe.referred_from_pipeline_lead_id && hook)
-        ? `Hej ${firstName}\n\n${hook}\n${videoLink}`
+        ? `Hej ${firstName}\n\n${hook}\n\n${videoLink}`
         : templated;
 
     const now = new Date().toISOString();
