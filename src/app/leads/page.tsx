@@ -152,7 +152,21 @@ export default function LeadsPage() {
   const [user, setUser] = useState<User | null>(null);
   const [email, setEmail] = useState("");
   const [token, setToken] = useState("");
-  const { workspace, loading: workspaceLoading } = useWorkspace(supabase, user);
+  const { workspace, workspaces, loading: workspaceLoading } = useWorkspace(supabase, user);
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string>(() =>
+    typeof window === "undefined" ? "" : window.localStorage.getItem("leads_workspace_id") ?? "",
+  );
+  const activeWorkspace = useMemo(() => {
+    if (!workspaces.length) return null;
+    return workspaces.find((w) => w.id === selectedWorkspaceId) ?? workspace ?? workspaces[0];
+  }, [selectedWorkspaceId, workspace, workspaces]);
+  const activeWorkspaceId = activeWorkspace?.id ?? "";
+  function chooseWorkspace(id: string) {
+    setSelectedWorkspaceId(id);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("leads_workspace_id", id);
+    }
+  }
   const [leads, setLeads] = useState<Lead[]>([]);
   const [conversationEvents, setConversationEvents] = useState<
     Record<string, ConversationEvent[]>
@@ -188,6 +202,32 @@ export default function LeadsPage() {
       next.add(leadId);
       return next;
     });
+    void logCallClick(leadId);
+  }
+
+  // Receptionist clicked "Ring" → log who/which-lead/when so we can attribute
+  // calls per agent (the agent overview). Mirrors logOutboundSms: optimistically
+  // appends the event into local state so the contact timeline updates without
+  // a refetch. The server route stamps sender = the authenticated user's email.
+  async function logCallClick(leadId: string) {
+    try {
+      const res = await fetch("/api/call-clicked", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ leadId }),
+      });
+      if (!res.ok) {
+        console.warn("call-clicked log failed:", await res.text().catch(() => ""));
+        return;
+      }
+      const data = (await res.json()) as { event: ConversationEvent };
+      setConversationEvents((curr) => ({
+        ...curr,
+        [leadId]: [data.event, ...(curr[leadId] ?? [])],
+      }));
+    } catch (e) {
+      console.warn("call-clicked log threw:", e);
+    }
   }
 
   // Operator clicked an SMS button → log outbound event so the chip flips
@@ -371,19 +411,21 @@ export default function LeadsPage() {
   }, [user, supabase]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || !activeWorkspaceId) return;
     void loadLeads();
     void refreshNotificationStatus();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
+  }, [user, activeWorkspaceId]);
 
   async function loadLeads() {
     setError(null);
+    if (!activeWorkspaceId) return;
     const { data, error } = await supabase
       .from("leads")
       .select(
         "id, created_at, name, company, email, phone, monthly_leads, response_time, call_status, call_status_at, outcome, outcome_at, notes, is_draft, draft_updated_at, meeting_at, callback_at, next_action_at, next_action_type, retry_count, last_action_fired_at",
       )
+      .eq("workspace_id", activeWorkspaceId)
       .order("created_at", { ascending: false })
       .limit(50);
 
@@ -757,7 +799,7 @@ export default function LeadsPage() {
         p256dh: subscriptionJson.keys?.p256dh,
         auth: subscriptionJson.keys?.auth,
         user_agent: navigator.userAgent,
-        workspace_id: workspace?.id,
+        workspace_id: activeWorkspace?.id,
       },
       { onConflict: "endpoint" },
     );
@@ -819,7 +861,7 @@ export default function LeadsPage() {
           phone: "+4512345678",
           monthly_leads: "50-250",
           response_time: "Under 5 min",
-          workspace_id: workspace?.id,
+          workspace_id: activeWorkspace?.id,
         },
       });
 
@@ -959,7 +1001,7 @@ export default function LeadsPage() {
   }
 
   /* ─── no workspace state ─── */
-  if (!workspaceLoading && !workspace) {
+  if (!workspaceLoading && !activeWorkspace) {
     return (
       <main className="safe-screen safe-pad-top safe-pad-bottom safe-px relative min-h-screen overflow-hidden bg-[var(--sand)] text-[var(--ink)]">
         <div className="grain-overlay" />
@@ -987,14 +1029,28 @@ export default function LeadsPage() {
       {/* Sticky top bar */}
       <div className="safe-pad-top sticky top-0 z-20 border-b border-[var(--ink)]/[0.10] bg-[var(--sand)]/85 backdrop-blur-xl">
         <div className="mx-auto flex w-full max-w-[1400px] min-w-0 items-center justify-between gap-3 px-4 py-3 sm:gap-4 sm:px-8 lg:px-12">
-          <Link
-            href="/"
-            className="tabular min-w-0 truncate text-[10px] uppercase tracking-[0.24em] text-[var(--ink)]/50 transition hover:text-[var(--ink)]/80 sm:tracking-[0.35em]"
-          >
-            CarterCo
-            <span className="mx-2 text-[var(--ink)]/25">/</span>
-            <span className="text-[var(--ink)]/75">Leads</span>
-          </Link>
+          <div className="flex min-w-0 items-center gap-3">
+            <Link
+              href="/"
+              className="tabular min-w-0 truncate text-[10px] uppercase tracking-[0.24em] text-[var(--ink)]/50 transition hover:text-[var(--ink)]/80 sm:tracking-[0.35em]"
+            >
+              CarterCo
+              <span className="mx-2 text-[var(--ink)]/25">/</span>
+              <span className="text-[var(--ink)]/75">Leads</span>
+            </Link>
+            {workspaces.length > 1 ? (
+              <select
+                value={activeWorkspace?.id ?? ""}
+                onChange={(e) => chooseWorkspace(e.target.value)}
+                className="focus-cream tabular shrink-0 rounded-sm border border-[var(--ink)]/15 bg-transparent px-2 py-1.5 text-[10px] uppercase tracking-[0.18em] text-[var(--ink)]/65 outline-none hover:border-[var(--ink)]/35 focus:border-[var(--ink)]/35"
+                title="Workspace"
+              >
+                {workspaces.map((w) => (
+                  <option key={w.id} value={w.id}>{w.name}</option>
+                ))}
+              </select>
+            ) : null}
+          </div>
 
           <div className="flex min-w-0 shrink-0 items-center gap-1 sm:gap-2">
             <SegmentedToggle value={view} onChange={setView} />
