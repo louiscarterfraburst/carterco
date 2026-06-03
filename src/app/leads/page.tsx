@@ -1176,7 +1176,7 @@ export default function LeadsPage() {
           </div>
 
           <div className="flex min-w-0 shrink-0 items-center gap-1 sm:gap-2">
-            <SegmentedToggle value={view} onChange={setView} />
+            <SegmentedToggle value={view} onChange={setView} preset={outcomePreset} />
             <div className="mx-1 hidden h-4 w-px bg-[var(--ink)]/10 sm:block" />
             <Link
               href="/meetings"
@@ -2584,9 +2584,11 @@ function toDatetimeLocal(iso: string) {
 function SegmentedToggle({
   value,
   onChange,
+  preset,
 }: {
   value: View;
   onChange: (v: View) => void;
+  preset: string;
 }) {
   return (
     <div
@@ -2603,7 +2605,11 @@ function SegmentedToggle({
           { key: "customers", label: "Kunder" },
           { key: "all", label: "Alle" },
         ] as const
-      ).map(({ key, label }) => {
+      )
+        // "Kunder" (outcome=customer) is a sales concept — hide it for the
+        // meeting-room preset where the win is a booking, not a "customer".
+        .filter((t) => !(preset === "meeting_room" && t.key === "customers"))
+        .map(({ key, label }) => {
         const selected = value === key;
         return (
           <button
