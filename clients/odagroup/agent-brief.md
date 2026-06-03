@@ -165,7 +165,15 @@ Return JSON only. No preamble, no code fences.
   - English: *"If it's relevant, happy to show a 15-min demo focused on concrete use cases."*
 - **Banned:** emoji, exclamation marks, "Hope you're well", "I noticed you're", "Just wanted to reach out", "synergi", "leverage", "best in class", "value-add", "drive value", "circle back", "quick question".
 - **No signature.** SendPilot appends it.
-- **No links** in the first message — the longer pitch + URL goes in a follow-up step.
+- **One link allowed in the first message** — the Jarvis booklet, anchored
+  *after* the CTA as a single secondary line. Never bare-pasted on its own
+  line at the top, never before the CTA, never as the primary ask. The demo
+  offer remains the primary CTA; the booklet is the self-serve path for
+  buyers who prefer to read before booking.
+  - Danish: *"Eller læs den korte version her: https://jarvis-ignite-narrative.lovable.app"*
+  - English: *"Or read the short version here: https://jarvis-ignite-narrative.lovable.app"*
+  - (TODO: migrate to a custom OdaGroup-owned domain — e.g. jarvis.odagroup.com
+    301 → lovable.app — for branding. Edit this brief and re-sync when DNS is live.)
 
 ---
 
@@ -186,7 +194,7 @@ Input:
 Acceptable output:
 ```json
 {
-  "message": "Hej Lars,\n\nMSL-debriefs er stadig overraskende manuelle hos de fleste — værdifulde scientific signaler ender ofte i fritekst-noter eller bliver helt tabt mellem felt og brand-team, og compliance-kravene gør det ikke nemmere at strukturere undervejs.\n\nJarvis er et AI-native lag oven på jeres eksisterende systemer, som håndterer hands-free MSL-debriefing og automatisk strukturerer medical insights med transparens og audit-trail bygget ind. Bruges i dag hos en global pharma-virksomhed i Europa og Asien.\n\nHvis det giver mening, viser jeg gerne en kort demo (15 min) med fokus på konkrete use cases.",
+  "message": "Hej Lars,\n\nMSL-debriefs er stadig overraskende manuelle hos de fleste — værdifulde scientific signaler ender ofte i fritekst-noter eller bliver helt tabt mellem felt og brand-team, og compliance-kravene gør det ikke nemmere at strukturere undervejs.\n\nJarvis er et AI-native lag oven på jeres eksisterende systemer, som håndterer hands-free MSL-debriefing og automatisk strukturerer medical insights med transparens og audit-trail bygget ind. Bruges i dag hos en global pharma-virksomhed i Europa og Asien.\n\nHvis det giver mening, viser jeg gerne en kort demo (15 min) med fokus på konkrete use cases.\n\nEller læs den korte version her: https://jarvis-ignite-narrative.lovable.app",
   "strategy": "medical_affairs",
   "language": "da",
   "rationale": "MSL Excellence Lead → medical_affairs; DK → Danish"
@@ -203,7 +211,7 @@ Input:
 Acceptable output:
 ```json
 {
-  "message": "Hi Priya,\n\nMost of the AI work landing on innovation desks in pharma right now is either generic horizontal copilots that ignore field workflows, or pilots that look great in a deck but never make it past a single affiliate. Neither moves the needle on what reps and MSLs actually do day-to-day.\n\nJarvis is a pharma-native AI layer running in production today — meeting prep, hands-free debriefs, HCP intelligence — sitting on top of existing CRM rather than competing with it. Already operating across Europe and Asia at one of the global tier-1s.\n\nIf it's relevant, happy to show a 15-min demo focused on concrete use cases.",
+  "message": "Hi Priya,\n\nMost of the AI work landing on innovation desks in pharma right now is either generic horizontal copilots that ignore field workflows, or pilots that look great in a deck but never make it past a single affiliate. Neither moves the needle on what reps and MSLs actually do day-to-day.\n\nJarvis is a pharma-native AI layer running in production today — meeting prep, hands-free debriefs, HCP intelligence — sitting on top of existing CRM rather than competing with it. Already operating across Europe and Asia at one of the global tier-1s.\n\nIf it's relevant, happy to show a 15-min demo focused on concrete use cases.\n\nOr read the short version here: https://jarvis-ignite-narrative.lovable.app",
   "strategy": "ai_innovation",
   "language": "en",
   "rationale": "Digital Innovation Director → ai_innovation; UK → English"

@@ -15,7 +15,17 @@
 // sendpilot_lead_id OR linkedin_url) are skipped, so re-runs don't re-render.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.103.3";
-import { normalizeWebsiteUrl } from "../_shared/text.ts";
+import { normalizeWebsiteUrl, firstNameForGreeting } from "../_shared/text.ts";
+import { matchTresyvClient } from "../_shared/tresyv-clients.ts";
+import {
+  assignFirstDmVariant,
+  renderTresyvBody,
+  TRESYV_V1_LONG,
+  TRESYV_V2_SHORT,
+  type FirstDmVariant,
+} from "../_shared/tresyv-arm-templates.ts";
+
+const TRESYV_WORKSPACE_ID = "2740ba1f-d5d5-4008-bf43-b45367c73134";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -299,6 +309,65 @@ async function processAcceptedLead(spLead: SendPilotLead): Promise<ProcessResult
     return "missing_website";
   }
 
+  // Tresyv customer blocklist: never pitch an existing Tresyv customer.
+  // Mirrors the check in sendpilot-webhook. Both ingress points must enforce
+  // it (the poll catches accepts the webhook missed due to delivery flakes).
+  if (workspaceId === TRESYV_WORKSPACE_ID) {
+    const matched = matchTresyvClient(lead.company);
+    if (matched) {
+      await supabase.from("outreach_pipeline").upsert({
+        sendpilot_lead_id: leadId,
+        linkedin_url: linkedinUrl,
+        contact_email: lead.contact_email,
+        is_cold: true,
+        status: "rejected",
+        accepted_at: now,
+        workspace_id: workspaceId,
+        campaign_id: campaignId || null,
+        sendpilot_sender_id: senderId || null,
+        decided_at: now,
+        decided_by: "auto:tresyv_client_blocklist",
+        error: `existing Tresyv client (${matched}) — blocked from outreach`,
+      }, { onConflict: "sendpilot_lead_id" });
+      return "blocked_tresyv_client";
+    }
+  }
+
+  // Tresyv 3-arm A/B: same assignment + routing logic as sendpilot-webhook.
+  // The poll catches accepts the webhook missed (delivery failures, replays),
+  // so both ingress paths MUST do the same coin flip + arm routing.
+  let variant: FirstDmVariant | null = null;
+  let renderedMessage: string | null = null;
+  if (workspaceId === TRESYV_WORKSPACE_ID) {
+    variant = assignFirstDmVariant();
+    if (variant === "v1_long" || variant === "v2_short") {
+      const fn = firstNameForGreeting(lead.first_name);
+      const ws = normalizeWebsiteUrl(lead.website);
+      const tpl = variant === "v1_long" ? TRESYV_V1_LONG : TRESYV_V2_SHORT;
+      renderedMessage = renderTresyvBody(tpl, fn, ws);
+    }
+  }
+
+  if (variant === "v1_long" || variant === "v2_short") {
+    await supabase.from("outreach_pipeline").upsert({
+      sendpilot_lead_id: leadId,
+      linkedin_url: linkedinUrl,
+      contact_email: lead.contact_email,
+      is_cold: true,
+      status: "pending_approval",
+      accepted_at: now,
+      queued_at: now,
+      rendered_at: now,
+      rendered_message: renderedMessage,
+      first_dm_variant: variant,
+      workspace_id: workspaceId,
+      campaign_id: campaignId || null,
+      sendpilot_sender_id: senderId || null,
+    }, { onConflict: "sendpilot_lead_id" });
+    scheduleScoutPhones("pipeline", leadId);
+    return "pending_approval_text_arm";
+  }
+
   await supabase.from("outreach_pipeline").upsert({
     sendpilot_lead_id: leadId,
     linkedin_url: linkedinUrl,
@@ -309,9 +378,40 @@ async function processAcceptedLead(spLead: SendPilotLead): Promise<ProcessResult
     workspace_id: workspaceId,
     campaign_id: campaignId || null,
     sendpilot_sender_id: senderId || null,
+    first_dm_variant: variant, // null or "v3_video"
   }, { onConflict: "sendpilot_lead_id" });
 
+  scheduleScoutPhones("pipeline", leadId);
   return "pending_pre_render";
+}
+
+// Fire scout-phones in the background. Best-effort: failures are logged
+// but don't fail the poll. EdgeRuntime.waitUntil keeps the function alive
+// long enough for the scout call to complete. Mirrors the helper in
+// sendpilot-webhook so polled-accept leads get phone enrichment with the
+// same latency as webhook-accept leads.
+function scheduleScoutPhones(kind: "pipeline" | "alt", id: string): void {
+  // deno-lint-ignore no-explicit-any
+  const er: any = (globalThis as any).EdgeRuntime;
+  const task = (async () => {
+    try {
+      const url = `${Deno.env.get("SUPABASE_URL")}/functions/v1/scout-phones`;
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ kind, id }),
+      });
+      if (!res.ok) {
+        console.warn("scout-phones non-200", res.status, await res.text());
+      }
+    } catch (e) {
+      console.error("scout-phones fire error", kind, id, e);
+    }
+  })();
+  if (er && typeof er.waitUntil === "function") er.waitUntil(task);
 }
 
 async function lookupLead(sendpilotLeadId: string, linkedinUrl: string) {

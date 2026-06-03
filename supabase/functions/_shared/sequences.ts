@@ -48,6 +48,11 @@ export type Sequence = {
     // "this client has a custom flow".
     workspaceId: string | null;
     position: number;
+    // Arm-aware routing for A/B tests. Null = matches any variant (default);
+    // 'v1_long' / 'v2_short' / 'v3_video' = only enrol leads with this exact
+    // first_dm_variant stamped on their pipeline row. Used by Tresyv to
+    // route per-arm follow-up copy.
+    matchFirstDmVariant: string | null;
 };
 
 export const DEFAULT_GLOBAL_EXCLUDES: Signal[] = ["replied"];
@@ -61,6 +66,7 @@ type SequenceRow = {
     excludes_global: string[];
     steps: SequenceStep[];
     position: number;
+    match_first_dm_variant: string | null;
 };
 
 // Load every active sequence row in one query. Engine calls this once per
@@ -68,7 +74,7 @@ type SequenceRow = {
 export async function loadAllSequences(sb: SupabaseClient): Promise<Sequence[]> {
     const { data, error } = await sb
         .from("outreach_sequences")
-        .select("id, workspace_id, description, trigger_signal, excludes_global, steps, position")
+        .select("id, workspace_id, description, trigger_signal, excludes_global, steps, position, match_first_dm_variant")
         .eq("is_active", true)
         .order("position", { ascending: true });
     if (error) {
@@ -87,6 +93,7 @@ function rowToSequence(r: SequenceRow): Sequence {
         steps: r.steps ?? [],
         workspaceId: r.workspace_id,
         position: r.position,
+        matchFirstDmVariant: r.match_first_dm_variant ?? null,
     };
 }
 

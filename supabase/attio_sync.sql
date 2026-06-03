@@ -27,7 +27,7 @@ begin
 
     -- Skip noise: only fire when a field Attio cares about actually changed.
     -- INSERTs always fire; UPDATEs only fire if status, outcome, last_reply_at,
-    -- contact_email, or linkedin_url changed. Cron-tick updates that don't
+    -- contact_email, linkedin_url, or phone fields changed. Cron-tick updates that don't
     -- touch these fields shouldn't burn Attio API quota.
     relevant_change := tg_op = 'INSERT' or (
         coalesce(old.status::text, '')         is distinct from coalesce(new.status::text, '')
@@ -35,6 +35,8 @@ begin
         or coalesce(old.last_reply_at, 'epoch'::timestamptz) is distinct from coalesce(new.last_reply_at, 'epoch'::timestamptz)
         or coalesce(old.contact_email, '')      is distinct from coalesce(new.contact_email, '')
         or coalesce(old.linkedin_url, '')       is distinct from coalesce(new.linkedin_url, '')
+        or coalesce(old.phone_direct, '')       is distinct from coalesce(new.phone_direct, '')
+        or coalesce(old.phone_office, '')       is distinct from coalesce(new.phone_office, '')
     );
     if not relevant_change then
         return new;

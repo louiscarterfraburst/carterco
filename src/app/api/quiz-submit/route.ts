@@ -1,10 +1,8 @@
-// Lead-quiz contact gate. Called from the LeadQuiz component after the
-// user fills the contact step (name + email required, phone optional).
-// Persists the submission, then fires an outbound SMS if a phone was given
-// so the prospect gets a callback offer within minutes.
+// Lead-quiz submission endpoint. Persists the submission + mirrors into
+// the leads table. As of 2026-05-22 (Phase 1 SMS rebuild) does NOT fire
+// any outbound SMS — operator-triggered only via /leads.
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/utils/supabase/admin";
-import { sendTwilioSMS } from "@/app/api/twilio/_helpers";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,6 +12,9 @@ type Body = {
   email?: string;
   phone?: string;
   url?: string;
+  // 2026-05-21: chosen path on the result step — "loom" = async audit via
+  // CRM share; "meeting" = 30-min call. Drives SMS body wording.
+  path?: "loom" | "meeting";
   monthlyLeads?: number;
   dealValue?: number;
   closeRate?: number;
@@ -46,10 +47,6 @@ function normalizePhone(raw: string): string | null {
   // Already has country digits but no +, accept as-is with leading +.
   if (digits.length >= 10) return `+${digits}`;
   return null;
-}
-
-function formatKr(value: number): string {
-  return Math.round(value).toLocaleString("da-DK") + " kr";
 }
 
 export async function POST(req: Request) {
@@ -126,31 +123,10 @@ export async function POST(req: Request) {
     console.error("quiz-submit: leads-mirror failed", e);
   }
 
-  // Fire SMS to the prospect (phone is required). Failure is non-fatal —
-  // submission is already saved and the user still sees the result.
-  {
-    const firstName = name.split(/\s+/)[0] ?? name;
-    const lossLine = body.totalLoss
-      ? `Dine tal viser ca. ${formatKr(body.totalLoss)}/md i tabt potentiale. `
-      : "";
-    const smsBody =
-      `Hej ${firstName}, det er Louis fra Carter & Co. ${lossLine}` +
-      `Skal vi tage 15 min i denne uge og kigge på de konkrete huller? ` +
-      `Skriv tilbage med en tid der passer.`;
-    try {
-      const sid = await sendTwilioSMS(phone, smsBody);
-      await supabase
-        .from("quiz_submissions")
-        .update({ sms_sid: sid, sms_sent_at: new Date().toISOString() })
-        .eq("id", row.id);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      await supabase
-        .from("quiz_submissions")
-        .update({ sms_error: msg.slice(0, 500) })
-        .eq("id", row.id);
-    }
-  }
+  // Auto-SMS removed 2026-05-22 — Phase 1 of the SMS rebuild. All
+  // outgoing SMS is now operator-triggered from /leads via Louis's
+  // personal iPhone (Phase 2). Lead row is still saved + mirrored to
+  // /leads, just no auto-text on submission.
 
   return NextResponse.json({ ok: true, id: row.id });
 }

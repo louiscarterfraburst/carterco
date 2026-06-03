@@ -107,11 +107,19 @@ Deno.serve(async (req) => {
   if (op === "draft_email") {
     const leadId = String(body.leadId ?? "").trim();
     if (!leadId) return json({ error: "leadId required" }, 400);
+    // Optional strategy override. When the engagement engine fires
+    // email_draft for a specific sequence step, it passes the step's
+    // intended strategy so different steps don't collapse into
+    // first_contact / first_contact / first_contact.
+    const rawStrategy = body.strategy;
+    const strategyOverride = typeof rawStrategy === "string" && rawStrategy.length > 0
+      ? rawStrategy as EmailStrategy
+      : null;
     const admin = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
     );
-    const result = await draftEmail(admin, leadId);
+    const result = await draftEmail(admin, leadId, strategyOverride);
     if ("error" in result) return json(result, 502);
     return json(result);
   }
@@ -143,6 +151,7 @@ type EmailStrategy =
 async function draftEmail(
   admin: ReturnType<typeof createClient>,
   leadId: string,
+  strategyOverride: EmailStrategy | null = null,
 ): Promise<
   | { id: string; subject: string; body: string; strategy: EmailStrategy; rationale: string; language: string; to: string }
   | { error: string }
@@ -182,9 +191,13 @@ async function draftEmail(
   const language = ["DK", "SE", "NO"].includes(country) ? "da" : "en";
 
   // Pick the strategy. Sonnet validates this — but we suggest the default
-  // based on state so the model has a strong prior.
+  // based on state so the model has a strong prior. If the engagement engine
+  // passed an explicit strategy (per-sequence-step), use that as the prior
+  // instead of the state-derived guess.
   let suggestedStrategy: EmailStrategy = "first_contact";
-  if (pipe.referred_from_pipeline_lead_id) suggestedStrategy = "referral_intro";
+  if (strategyOverride) {
+    suggestedStrategy = strategyOverride;
+  } else if (pipe.referred_from_pipeline_lead_id) suggestedStrategy = "referral_intro";
   else if (pipe.call_outcome) suggestedStrategy = "reconnect_post_call";
   else if (pipe.last_reply_intent && pipe.last_reply_intent !== "decline" && pipe.last_reply_intent !== "ooo") suggestedStrategy = "reply_redirect";
   else if (pipe.accepted_at) suggestedStrategy = "warm_recap";
@@ -462,7 +475,9 @@ async function classifyReply(
     "",
     "If intent=referral, ALSO extract whatever target info is in the reply:",
     "- name:    the referred person's name if mentioned, else null. Use the form they wrote it (don't invent surnames).",
-    "- title:   the referred person's role/title if mentioned (e.g. 'owner', 'CMO', 'marketing manager'), else null.",
+    "- title:   the referred person's role/title if mentioned (e.g. 'owner', 'CMO', 'marketing manager', 'COO', 'salgschef'), else null.",
+    "           Only set title if it's an ACTUAL job role. DO NOT extract generic referential phrases like 'right person', 'rette person', 'someone', 'anyone' as a title — those mean we don't know and should be null.",
+    "           If the reply names multiple roles (e.g. 'COO eller marketingschef', 'CMO or marketing manager'), join them with ' or ' in title.",
     "- company: only if they referred us to a different company than theirs; usually null.",
     "Leave fields null when unknown rather than guessing. If intent != referral, omit referralTarget entirely.",
     "",

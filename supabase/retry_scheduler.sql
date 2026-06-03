@@ -1,4 +1,4 @@
--- Retry scheduler: fires pushes when next_action_at is due and advances cadence.
+-- Retry scheduler: fires pushes when next_action_at is due.
 -- Depends on pg_cron + pg_net (both installed).
 
 -- Clamp a timestamptz into Mon-Fri 09:00-17:00 Europe/Copenhagen. Input is
@@ -116,50 +116,18 @@ begin
     );
 
     if due.next_action_type = 'retry' then
-      if due.outcome = 'interested' then
-        next_ts := public.next_interested_nudge(due.retry_count + 1, now());
-        if next_ts is null then
-          -- Two nudges fired, no booking yet. Stop pushing; let the operator decide.
-          update public.leads
-          set next_action_at = null,
-              next_action_type = null,
-              last_action_fired_at = now(),
-              retry_count = due.retry_count + 1
-          where id = due.id;
-        else
-          update public.leads
-          set retry_count = due.retry_count + 1,
-              next_action_at = next_ts,
-              last_action_fired_at = now()
-          where id = due.id;
-        end if;
-      else
-        next_ts := public.next_retry_due(due.retry_count + 1, now());
-        if next_ts is null then
-          update public.leads
-          set outcome = 'unqualified',
-              outcome_at = now(),
-              next_action_at = null,
-              next_action_type = null,
-              callback_at = null,
-              last_action_fired_at = now(),
-              retry_count = least(due.retry_count + 1, 4)
-          where id = due.id;
-        else
-          update public.leads
-          set retry_count = due.retry_count + 1,
-              next_action_at = next_ts,
-              last_action_fired_at = now()
-          where id = due.id;
-        end if;
-      end if;
-    else
-      -- Callback fired. Give a 2h grace, then escalate into the no-answer ladder.
+      -- Notify once, but keep the action due until the operator handles it.
+      -- The operator click ("Intet svar", outcome, callback) is what schedules
+      -- the next cadence step. Moving next_action_at here hides overdue work.
       update public.leads
-      set last_action_fired_at = now(),
-          next_action_at = now() + interval '2 hours',
-          next_action_type = 'retry',
-          retry_count = 0
+      set retry_count = least(due.retry_count + 1, 4),
+          last_action_fired_at = now()
+      where id = due.id;
+    else
+      -- Callback reminders behave the same: notify once, leave the callback due
+      -- and visible until the operator handles it.
+      update public.leads
+      set last_action_fired_at = now()
       where id = due.id;
     end if;
 
@@ -173,14 +141,11 @@ $$;
 revoke all on function public.dispatch_due_retries() from public, anon, authenticated;
 
 -- Register cron job. Unschedule first so re-runs of this file are idempotent.
+-- Hotfix 2026-05-21: leave the cron unscheduled until the due queue has been
+-- reworked. The app must never hide overdue rows by advancing/clearing them
+-- without an operator action.
 do $$
 begin
   perform cron.unschedule('leads-dispatch-retries');
 exception when others then null;
 end$$;
-
-select cron.schedule(
-  'leads-dispatch-retries',
-  '* * * * *',
-  $$ select public.dispatch_due_retries(); $$
-);

@@ -51,7 +51,20 @@ type Lead = {
   last_action_fired_at: string | null;
 };
 
-type View = "active" | "meetings" | "customers" | "all";
+type ConversationEvent = {
+  id: string;
+  lead_id: string;
+  channel: "sms" | "email" | "linkedin" | "phone" | "note";
+  direction: "inbound" | "outbound" | "internal";
+  occurred_at: string;
+  sender: string | null;
+  recipient: string | null;
+  subject: string | null;
+  body: string;
+  source: string;
+};
+
+type View = "active" | "waiting" | "meetings" | "customers" | "all";
 
 type NotificationStatus =
   | "Ikke aktiv"
@@ -139,8 +152,25 @@ export default function LeadsPage() {
   const [user, setUser] = useState<User | null>(null);
   const [email, setEmail] = useState("");
   const [token, setToken] = useState("");
-  const { workspace, loading: workspaceLoading } = useWorkspace(supabase, user);
+  const { workspace, workspaces, loading: workspaceLoading } = useWorkspace(supabase, user);
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string>(() =>
+    typeof window === "undefined" ? "" : window.localStorage.getItem("leads_workspace_id") ?? "",
+  );
+  const activeWorkspace = useMemo(() => {
+    if (!workspaces.length) return null;
+    return workspaces.find((w) => w.id === selectedWorkspaceId) ?? workspace ?? workspaces[0];
+  }, [selectedWorkspaceId, workspace, workspaces]);
+  const activeWorkspaceId = activeWorkspace?.id ?? "";
+  function chooseWorkspace(id: string) {
+    setSelectedWorkspaceId(id);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("leads_workspace_id", id);
+    }
+  }
   const [leads, setLeads] = useState<Lead[]>([]);
+  const [conversationEvents, setConversationEvents] = useState<
+    Record<string, ConversationEvent[]>
+  >({});
   const [loading, setLoading] = useState(true);
   const [notifications, setNotifications] =
     useState<NotificationStatus>("Ikke aktiv");
@@ -172,16 +202,135 @@ export default function LeadsPage() {
       next.add(leadId);
       return next;
     });
+    void logCallClick(leadId);
   }
 
-  const isActiveLead = (l: Lead) =>
-    !l.outcome ||
-    l.outcome === "callback" ||
-    l.outcome === "follow_up" ||
-    (l.outcome === "interested" && !!l.next_action_at);
+  // Receptionist clicked "Ring" → log who/which-lead/when so we can attribute
+  // calls per agent (the agent overview). Mirrors logOutboundSms: optimistically
+  // appends the event into local state so the contact timeline updates without
+  // a refetch. The server route stamps sender = the authenticated user's email.
+  async function logCallClick(leadId: string) {
+    try {
+      const res = await fetch("/api/call-clicked", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ leadId }),
+      });
+      if (!res.ok) {
+        console.warn("call-clicked log failed:", await res.text().catch(() => ""));
+        return;
+      }
+      const data = (await res.json()) as { event: ConversationEvent };
+      setConversationEvents((curr) => ({
+        ...curr,
+        [leadId]: [data.event, ...(curr[leadId] ?? [])],
+      }));
+    } catch (e) {
+      console.warn("call-clicked log threw:", e);
+    }
+  }
+
+  // Operator clicked an SMS button → log outbound event so the chip flips
+  // off + clear the stale relay-set retry timer. Optimistically appends the
+  // new event into local state so the UI updates without a refetch.
+  async function logOutboundSms(leadId: string, body: string) {
+    try {
+      const res = await fetch("/api/sms-sent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ leadId, body }),
+      });
+      if (!res.ok) {
+        console.warn("sms-sent log failed:", await res.text().catch(() => ""));
+        return;
+      }
+      const data = (await res.json()) as { event: ConversationEvent };
+      setConversationEvents((curr) => ({
+        ...curr,
+        [leadId]: [data.event, ...(curr[leadId] ?? [])],
+      }));
+      setLeads((curr) =>
+        curr.map((l) =>
+          l.id === leadId
+            ? {
+                ...l,
+                next_action_at: null,
+                next_action_type: null,
+                last_action_fired_at: null,
+              }
+            : l,
+        ),
+      );
+    } catch (e) {
+      console.warn("sms-sent log threw:", e);
+    }
+  }
+
+  // Set of lead IDs where the most recent SMS event is inbound — meaning the
+  // prospect replied and we haven't sent back yet. Used by isActiveLead to keep
+  // these leads visible in Aktive even when next_action_at is in the future.
+  const leadsWithInboundReply = useMemo(() => {
+    const set = new Set<string>();
+    for (const [leadId, events] of Object.entries(conversationEvents)) {
+      const latestSms = events.find((e) => e.channel === "sms");
+      if (latestSms?.direction === "inbound") set.add(leadId);
+    }
+    return set;
+  }, [conversationEvents]);
+
+  const isActiveLead = (l: Lead) => {
+    const eligible =
+      !l.outcome ||
+      l.outcome === "callback" ||
+      l.outcome === "follow_up" ||
+      (l.outcome === "interested" && !!l.next_action_at);
+    if (!eligible) return false;
+    // An inbound SMS reply trumps any scheduled retry timer. The relay
+    // sets next_action_at = +2h on every inbound, which would otherwise
+    // park the lead in "Venter" exactly when it needs your attention.
+    if (leadsWithInboundReply.has(l.id)) return true;
+    // Hide waiting follow-ups/callbacks until they are actually due. Otherwise
+    // Aktive becomes a snooze list full of "opfølgning om 17 t" rows.
+    if (l.next_action_at) {
+      const dueMs = new Date(l.next_action_at).getTime() - Date.now();
+      if (dueMs > 0) return false;
+    }
+    return true;
+  };
+
+  const isWaitingLead = (l: Lead) => {
+    if (!l.next_action_at) return false;
+    // Reply-waiting leads belong in Aktive (isActiveLead surfaces them); no
+    // dual-listing here, otherwise the same lead shows in both tabs.
+    if (leadsWithInboundReply.has(l.id)) return false;
+    const eligible =
+      !l.outcome ||
+      l.outcome === "callback" ||
+      l.outcome === "follow_up" ||
+      (l.outcome === "interested" && !!l.next_action_at);
+    if (!eligible) return false;
+    return new Date(l.next_action_at).getTime() > Date.now();
+  };
 
   const visibleLeads = useMemo(() => {
-    if (view === "active") return leads.filter(isActiveLead);
+    if (view === "active") {
+      // Reply-waiting leads bubble to the top so they're not buried under
+      // 20+ stale rows. Within each group, preserve the existing order.
+      return leads.filter(isActiveLead).sort((a, b) => {
+        const aWaiting = leadsWithInboundReply.has(a.id) ? 1 : 0;
+        const bWaiting = leadsWithInboundReply.has(b.id) ? 1 : 0;
+        return bWaiting - aWaiting;
+      });
+    }
+    if (view === "waiting") {
+      return leads
+        .filter(isWaitingLead)
+        .sort(
+          (a, b) =>
+            new Date(a.next_action_at!).getTime() -
+            new Date(b.next_action_at!).getTime(),
+        );
+    }
     if (view === "customers")
       return leads.filter((l) => l.outcome === "customer");
     if (view === "meetings") {
@@ -208,11 +357,12 @@ export default function LeadsPage() {
 
   const stats = useMemo(() => {
     const active = leads.filter(isActiveLead).length;
+    const waiting = leads.filter(isWaitingLead).length;
     const customers = leads.filter((l) => l.outcome === "customer").length;
     const pending = pendingOutcomeLeads.length;
     const total = leads.length;
     const latest = leads[0]?.created_at ?? null;
-    return { active, customers, pending, total, latest };
+    return { active, waiting, customers, pending, total, latest };
   }, [leads, pendingOutcomeLeads]);
 
   useEffect(() => {
@@ -261,19 +411,21 @@ export default function LeadsPage() {
   }, [user, supabase]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || !activeWorkspaceId) return;
     void loadLeads();
     void refreshNotificationStatus();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
+  }, [user, activeWorkspaceId]);
 
   async function loadLeads() {
     setError(null);
+    if (!activeWorkspaceId) return;
     const { data, error } = await supabase
       .from("leads")
       .select(
         "id, created_at, name, company, email, phone, monthly_leads, response_time, call_status, call_status_at, outcome, outcome_at, notes, is_draft, draft_updated_at, meeting_at, callback_at, next_action_at, next_action_type, retry_count, last_action_fired_at",
       )
+      .eq("workspace_id", activeWorkspaceId)
       .order("created_at", { ascending: false })
       .limit(50);
 
@@ -288,6 +440,34 @@ export default function LeadsPage() {
       return bAt.localeCompare(aAt);
     });
     setLeads(sorted);
+    await loadConversationEvents(sorted.map((lead) => lead.id));
+  }
+
+  async function loadConversationEvents(leadIds: string[]) {
+    if (leadIds.length === 0) {
+      setConversationEvents({});
+      return;
+    }
+    const { data, error } = await supabase
+      .from("lead_conversation_events")
+      .select(
+        "id, lead_id, channel, direction, occurred_at, sender, recipient, subject, body, source",
+      )
+      .in("lead_id", leadIds)
+      .order("occurred_at", { ascending: false })
+      .limit(500);
+
+    if (error) {
+      console.warn("lead_conversation_events load failed", error.message);
+      return;
+    }
+
+    const grouped: Record<string, ConversationEvent[]> = {};
+    for (const event of (data ?? []) as ConversationEvent[]) {
+      grouped[event.lead_id] ??= [];
+      grouped[event.lead_id].push(event);
+    }
+    setConversationEvents(grouped);
   }
 
   async function sendLink(e: FormEvent<HTMLFormElement>) {
@@ -344,7 +524,11 @@ export default function LeadsPage() {
     setLeads([]);
   }
 
-  async function setCallStatus(leadId: string, status: CallStatus) {
+  async function setCallStatus(
+    leadId: string,
+    status: CallStatus,
+    smsBody?: string,
+  ) {
     const previous = leads;
     const nowIso = new Date().toISOString();
     const nextAt = status ? nowIso : null;
@@ -359,6 +543,20 @@ export default function LeadsPage() {
           new Date(Date.now() + nextDelayForRetryCount(priorCount)).toISOString(),
         )
       : null;
+
+    // SMS handoff to iPhone (2026-05-22 Phase 2). Open Messages.app with
+    // the templated draft prefilled via sms: URL, then log to backend so
+    // the "Svar venter" chip flips off + the stale retry timer clears.
+    if (scheduleRetry && current?.phone && smsBody) {
+      const phoneClean = current.phone.replace(/[^\d+]/g, "");
+      const link = document.createElement("a");
+      link.href = `sms:${phoneClean}&body=${encodeURIComponent(smsBody)}`;
+      link.rel = "noopener";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      void logOutboundSms(leadId, smsBody);
+    }
 
     setLeads((curr) =>
       curr.map((lead) =>
@@ -382,6 +580,11 @@ export default function LeadsPage() {
                 : status === "answered"
                   ? 0
                   : lead.retry_count,
+              last_action_fired_at: scheduleRetry
+                ? null
+                : status === "answered"
+                  ? null
+                  : lead.last_action_fired_at,
             }
           : lead,
       ),
@@ -395,10 +598,12 @@ export default function LeadsPage() {
       payload.next_action_at = retryAt;
       payload.next_action_type = "retry";
       payload.retry_count = nextRetryCount;
+      payload.last_action_fired_at = null;
     } else if (status === "answered") {
       payload.next_action_at = null;
       payload.next_action_type = null;
       payload.retry_count = 0;
+      payload.last_action_fired_at = null;
     }
 
     const { error } = await supabase
@@ -594,7 +799,7 @@ export default function LeadsPage() {
         p256dh: subscriptionJson.keys?.p256dh,
         auth: subscriptionJson.keys?.auth,
         user_agent: navigator.userAgent,
-        workspace_id: workspace?.id,
+        workspace_id: activeWorkspace?.id,
       },
       { onConflict: "endpoint" },
     );
@@ -656,7 +861,7 @@ export default function LeadsPage() {
           phone: "+4512345678",
           monthly_leads: "50-250",
           response_time: "Under 5 min",
-          workspace_id: workspace?.id,
+          workspace_id: activeWorkspace?.id,
         },
       });
 
@@ -796,7 +1001,7 @@ export default function LeadsPage() {
   }
 
   /* ─── no workspace state ─── */
-  if (!workspaceLoading && !workspace) {
+  if (!workspaceLoading && !activeWorkspace) {
     return (
       <main className="safe-screen safe-pad-top safe-pad-bottom safe-px relative min-h-screen overflow-hidden bg-[var(--sand)] text-[var(--ink)]">
         <div className="grain-overlay" />
@@ -824,14 +1029,28 @@ export default function LeadsPage() {
       {/* Sticky top bar */}
       <div className="safe-pad-top sticky top-0 z-20 border-b border-[var(--ink)]/[0.10] bg-[var(--sand)]/85 backdrop-blur-xl">
         <div className="mx-auto flex w-full max-w-[1400px] min-w-0 items-center justify-between gap-3 px-4 py-3 sm:gap-4 sm:px-8 lg:px-12">
-          <Link
-            href="/"
-            className="tabular min-w-0 truncate text-[10px] uppercase tracking-[0.24em] text-[var(--ink)]/50 transition hover:text-[var(--ink)]/80 sm:tracking-[0.35em]"
-          >
-            CarterCo
-            <span className="mx-2 text-[var(--ink)]/25">/</span>
-            <span className="text-[var(--ink)]/75">Leads</span>
-          </Link>
+          <div className="flex min-w-0 items-center gap-3">
+            <Link
+              href="/"
+              className="tabular min-w-0 truncate text-[10px] uppercase tracking-[0.24em] text-[var(--ink)]/50 transition hover:text-[var(--ink)]/80 sm:tracking-[0.35em]"
+            >
+              CarterCo
+              <span className="mx-2 text-[var(--ink)]/25">/</span>
+              <span className="text-[var(--ink)]/75">Leads</span>
+            </Link>
+            {workspaces.length > 1 ? (
+              <select
+                value={activeWorkspace?.id ?? ""}
+                onChange={(e) => chooseWorkspace(e.target.value)}
+                className="focus-cream tabular shrink-0 rounded-sm border border-[var(--ink)]/15 bg-transparent px-2 py-1.5 text-[10px] uppercase tracking-[0.18em] text-[var(--ink)]/65 outline-none hover:border-[var(--ink)]/35 focus:border-[var(--ink)]/35"
+                title="Workspace"
+              >
+                {workspaces.map((w) => (
+                  <option key={w.id} value={w.id}>{w.name}</option>
+                ))}
+              </select>
+            ) : null}
+          </div>
 
           <div className="flex min-w-0 shrink-0 items-center gap-1 sm:gap-2">
             <SegmentedToggle value={view} onChange={setView} />
@@ -893,6 +1112,7 @@ export default function LeadsPage() {
 
           <dl className="flex items-end gap-6 sm:gap-10">
             <Stat label="Aktive" value={String(stats.active)} accent />
+            <Stat label="Venter" value={String(stats.waiting)} />
             <Stat label="Kunder" value={String(stats.customers)} />
             <Stat label="I alt" value={String(stats.total)} />
             {stats.latest ? (
@@ -989,6 +1209,8 @@ export default function LeadsPage() {
             <p className="font-display text-2xl italic text-[var(--ink)]/40">
               {view === "active"
                 ? "Ingen aktive leads."
+                : view === "waiting"
+                  ? "Ingen ventende opfølgninger."
                 : "Ingen leads endnu."}
             </p>
             <p className="mt-3 tabular text-[10px] uppercase tracking-[0.3em] text-[var(--ink)]/30">
@@ -1011,6 +1233,8 @@ export default function LeadsPage() {
                 updateNotes={updateNotes}
                 slotsLine={slotsLine}
                 identity={identity}
+                conversationEvents={conversationEvents[lead.id] ?? []}
+                onSent={logOutboundSms}
               />
             ))}
           </ol>
@@ -1042,6 +1266,8 @@ function LeadRow({
   updateNotes,
   slotsLine,
   identity,
+  conversationEvents,
+  onSent,
 }: {
   lead: Lead;
   index: number;
@@ -1049,7 +1275,7 @@ function LeadRow({
   hasRung: boolean;
   onToggle: () => void;
   onRung: () => void;
-  setCallStatus: (id: string, s: CallStatus) => Promise<void>;
+  setCallStatus: (id: string, s: CallStatus, smsBody?: string) => Promise<void>;
   setOutcome: (
     id: string,
     o: Outcome,
@@ -1058,6 +1284,8 @@ function LeadRow({
   updateNotes: (id: string, v: string) => void;
   slotsLine: string;
   identity: Identity;
+  conversationEvents: ConversationEvent[];
+  onSent: (leadId: string, body: string) => void;
 }) {
   const urgent =
     !!lead.response_time && URGENCY[lead.response_time] === "urgent";
@@ -1073,6 +1301,12 @@ function LeadRow({
   const formattedPhone = lead.phone ? formatPhone(lead.phone) : "—";
   const displayName = lead.name ?? lead.email ?? "Udkast";
   const displayCompany = lead.company;
+  // Surface inbound SMS replies as a row chip. True when most recent SMS event
+  // is direction === "inbound" — i.e. they replied and we haven't sent back yet.
+  const latestSmsEvent = conversationEvents.find((e) => e.channel === "sms");
+  const hasInboundReplyWaiting = latestSmsEvent?.direction === "inbound";
+  const hasPendingAction =
+    Boolean(lead.next_action_at) || lead.outcome === "callback";
 
   return (
     <li
@@ -1125,7 +1359,10 @@ function LeadRow({
                 {time}
               </span>
             </div>
-            {lead.monthly_leads || lead.response_time || lead.next_action_at ? (
+            {lead.monthly_leads ||
+            lead.response_time ||
+            lead.next_action_at ||
+            hasInboundReplyWaiting ? (
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 {lead.monthly_leads ? (
                   <MetaTag>{lead.monthly_leads}</MetaTag>
@@ -1138,6 +1375,7 @@ function LeadRow({
                   </MetaTag>
                 ) : null}
                 <PendingActionChip lead={lead} />
+                <SmsStatusChip events={conversationEvents} />
               </div>
             ) : null}
           </div>
@@ -1165,9 +1403,10 @@ function LeadRow({
                 <span className="text-[var(--ink)]/30">—</span>
               )}
             </p>
-            {lead.next_action_at || lead.outcome === "callback" ? (
-              <div className="mt-1">
+            {hasPendingAction || hasInboundReplyWaiting ? (
+              <div className="mt-1 flex flex-wrap items-center gap-1.5">
                 <PendingActionChip lead={lead} />
+                <SmsStatusChip events={conversationEvents} />
               </div>
             ) : null}
           </div>
@@ -1232,6 +1471,8 @@ function LeadRow({
           updateNotes={updateNotes}
           slotsLine={slotsLine}
           identity={identity}
+          conversationEvents={conversationEvents}
+          onSent={onSent}
         />
       ) : null}
     </li>
@@ -1248,10 +1489,12 @@ function DetailPanel({
   updateNotes,
   slotsLine,
   identity,
+  conversationEvents,
+  onSent,
 }: {
   lead: Lead;
   hasRung: boolean;
-  setCallStatus: (id: string, s: CallStatus) => Promise<void>;
+  setCallStatus: (id: string, s: CallStatus, smsBody?: string) => Promise<void>;
   setOutcome: (
     id: string,
     o: Outcome,
@@ -1260,6 +1503,8 @@ function DetailPanel({
   updateNotes: (id: string, v: string) => void;
   slotsLine: string;
   identity: Identity;
+  conversationEvents: ConversationEvent[];
+  onSent: (leadId: string, body: string) => void;
 }) {
   // Resolved — terminal state, shown only in "Vis alle".
   // `callback`, `follow_up`, and `interested`-with-nudge stay editable in Aktive.
@@ -1305,6 +1550,7 @@ function DetailPanel({
               {lead.notes}
             </p>
           ) : null}
+          <ConversationTimeline events={conversationEvents} />
           {lead.outcome === "booked" ? (
             <button
               type="button"
@@ -1321,9 +1567,7 @@ function DetailPanel({
 
   const canSms =
     !!lead.phone && lead.phone.replace(/\D/g, "").length >= 8;
-  const smsHref = canSms
-    ? `sms:${lead.phone}?&body=${encodeURIComponent(buildSmsBody(lead.name, identity, slotsLine))}`
-    : "#";
+  const smsBody = buildSmsBody(lead.name, identity, slotsLine);
   const hasEmail = !!lead.email && lead.email.includes("@");
   const hasDialled = hasRung || lead.call_status !== null;
   const showOutcomeSection = lead.call_status === "answered";
@@ -1375,7 +1619,7 @@ function DetailPanel({
                     />
                     {lead.call_status === "answered"
                       ? "Svarede på opkaldet"
-                      : "Intet svar · SMS afsendt"}
+                      : "Intet svar"}
                   </p>
                   <button
                     type="button"
@@ -1398,13 +1642,14 @@ function DetailPanel({
                   Svarede
                 </GhostButton>
                 {canSms ? (
-                  <GhostAnchor
-                    href={smsHref}
-                    onClick={() => void setCallStatus(lead.id, "no_answer")}
+                  <GhostButton
+                    onClick={() =>
+                      void setCallStatus(lead.id, "no_answer", smsBody)
+                    }
                     active={lead.call_status === "no_answer"}
                   >
                     Intet svar · SMS
-                  </GhostAnchor>
+                  </GhostButton>
                 ) : (
                   <GhostButton
                     onClick={() => void setCallStatus(lead.id, "no_answer")}
@@ -1417,6 +1662,11 @@ function DetailPanel({
             </>
           )}
         </div>
+
+        <ConversationTimeline events={conversationEvents} />
+        {canSms && (
+          <AiSmsButton lead={lead} onSent={onSent} />
+        )}
 
         {/* Step 2 — outcome + notes (only after Svarede; no_answer just queues retry) */}
         {showOutcomeSection ? (
@@ -1484,6 +1734,129 @@ function DetailPanel({
       </div>
     </div>
   );
+}
+
+function AiSmsButton({
+  lead,
+  onSent,
+}: {
+  lead: Lead;
+  onSent: (leadId: string, body: string) => void;
+}) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleClick() {
+    if (loading) return;
+    setError(null);
+    setLoading(true);
+    try {
+      const res = await fetch("/api/sms-draft", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ leadId: lead.id }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        draft?: string;
+        error?: string;
+      };
+      if (!res.ok || !data.draft) {
+        throw new Error(data.error || `AI draft failed (${res.status})`);
+      }
+      const phoneClean = (lead.phone ?? "").replace(/[^\d+]/g, "");
+      if (!phoneClean) {
+        throw new Error("lead phone missing");
+      }
+      const link = document.createElement("a");
+      link.href = `sms:${phoneClean}&body=${encodeURIComponent(data.draft)}`;
+      link.rel = "noopener";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      onSent(lead.id, data.draft);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "AI draft fejlede");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-2 border-t border-[var(--ink)]/[0.10] pt-5">
+      <div className="flex items-center justify-between gap-3">
+        <p className="tabular text-[10px] uppercase tracking-[0.28em] text-[var(--ink)]/45">
+          Skriv SMS
+        </p>
+        <span className="tabular text-[10px] uppercase tracking-[0.18em] text-[var(--ink)]/30">
+          AI-udkast → Messages
+        </span>
+      </div>
+      <GhostButton onClick={() => void handleClick()} disabled={loading}>
+        {loading ? "Skriver udkast…" : "Skriv AI-svar"}
+      </GhostButton>
+      {error && (
+        <p className="text-[12px] text-[var(--clay)]">{error}</p>
+      )}
+    </div>
+  );
+}
+
+function ConversationTimeline({ events }: { events: ConversationEvent[] }) {
+  if (events.length === 0) return null;
+  return (
+    <section className="ledger-detail flex flex-col gap-3 border-t border-[var(--ink)]/[0.10] pt-5">
+      <div className="flex items-baseline justify-between gap-3">
+        <p className="tabular text-[10px] uppercase tracking-[0.28em] text-[var(--ink)]/45">
+          Samtale
+        </p>
+        <span className="tabular text-[10px] uppercase tracking-[0.18em] text-[var(--ink)]/30">
+          {events.length} hændelser
+        </span>
+      </div>
+      <ol className="flex flex-col gap-2">
+        {events.slice(0, 8).map((event) => (
+          <li
+            key={event.id}
+            className="rounded-sm border border-[var(--ink)]/10 bg-[var(--sand)]/55 px-3 py-3"
+          >
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className="tabular text-[10px] uppercase tracking-[0.2em] text-[var(--clay)]">
+                  {conversationLabel(event)}
+                </span>
+                {event.sender ? (
+                  <span className="truncate text-[11px] text-[var(--ink)]/40">
+                    {event.sender}
+                  </span>
+                ) : null}
+              </div>
+              <span className="tabular text-[10px] text-[var(--ink)]/35">
+                {formatLeadTime(event.occurred_at)}
+              </span>
+            </div>
+            {event.subject ? (
+              <p className="mt-2 text-[12px] font-medium text-[var(--ink)]/70">
+                {event.subject}
+              </p>
+            ) : null}
+            <p className="mt-1 whitespace-pre-wrap text-[12px] leading-relaxed text-[var(--ink)]/70">
+              {event.body}
+            </p>
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
+function conversationLabel(event: ConversationEvent) {
+  const direction =
+    event.direction === "inbound"
+      ? "ind"
+      : event.direction === "outbound"
+        ? "ud"
+        : "note";
+  return `${event.channel} · ${direction}`;
 }
 
 /* ─── primitives ─────────────────────────────────────────────────────── */
@@ -1623,6 +1996,25 @@ function PendingQuickButton({
   );
 }
 
+// Row chip that lights up when there's an inbound SMS reply newer than any
+// outbound SMS. Operator sees "ball is in your court" at a glance instead of
+// drilling into every lead's conversation timeline. Renders null otherwise.
+function SmsStatusChip({ events }: { events: ConversationEvent[] }) {
+  // events are sorted occurred_at desc by loadConversationEvents — first match
+  // for channel==='sms' is the most recent SMS in the thread.
+  const latestSms = events.find((e) => e.channel === "sms");
+  if (!latestSms || latestSms.direction !== "inbound") return null;
+  return (
+    <span className="tabular inline-flex items-center gap-1.5 rounded-full border border-[var(--clay)]/40 bg-[var(--clay)]/[0.10] px-2 py-0.5 text-[10px] text-[var(--clay)]">
+      <span
+        aria-hidden
+        className="inline-block h-1.5 w-1.5 rounded-full bg-[var(--clay)]"
+      />
+      Svar venter • {formatRelative(latestSms.occurred_at)}
+    </span>
+  );
+}
+
 function PendingActionChip({ lead }: { lead: Lead }) {
   if (lead.outcome === "callback" && lead.callback_at) {
     return (
@@ -1682,7 +2074,7 @@ function PendingActionChip({ lead }: { lead: Lead }) {
     lead.next_action_at &&
     lead.next_action_type === "retry"
   ) {
-    const attempt = lead.retry_count + 1;
+    const attempt = Math.min(lead.retry_count + 1, 4);
     return (
       <span className="tabular inline-flex items-center gap-1.5 rounded-full border border-[var(--clay)]/30 bg-[var(--clay)]/[0.06] px-2 py-0.5 text-[10px] text-[var(--clay)]">
         <span
@@ -1730,16 +2122,19 @@ function GhostButton({
   children,
   onClick,
   active,
+  disabled,
 }: {
   children: ReactNode;
   onClick: () => void;
   active?: boolean;
+  disabled?: boolean;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`focus-cream group relative overflow-hidden rounded-sm border px-4 py-3 text-[11px] uppercase tracking-[0.18em] transition ${
+      disabled={disabled}
+      className={`focus-cream group relative overflow-hidden rounded-sm border px-4 py-3 text-[11px] uppercase tracking-[0.18em] transition disabled:cursor-not-allowed disabled:opacity-50 ${
         active
           ? "border-[var(--clay)]/60 bg-[var(--clay)]/[0.08] text-[var(--ink)]"
           : "border-[var(--ink)]/12 text-[var(--ink)]/70 hover:border-[var(--ink)]/30 hover:text-[var(--ink)]"
@@ -1747,32 +2142,6 @@ function GhostButton({
     >
       {children}
     </button>
-  );
-}
-
-function GhostAnchor({
-  children,
-  href,
-  onClick,
-  active,
-}: {
-  children: ReactNode;
-  href: string;
-  onClick: () => void;
-  active?: boolean;
-}) {
-  return (
-    <a
-      href={href}
-      onClick={onClick}
-      className={`focus-cream group relative overflow-hidden rounded-sm border px-4 py-3 text-center text-[11px] uppercase tracking-[0.18em] transition ${
-        active
-          ? "border-[var(--clay)]/60 bg-[var(--clay)]/[0.08] text-[var(--ink)]"
-          : "border-[var(--ink)]/12 text-[var(--ink)]/70 hover:border-[var(--ink)]/30 hover:text-[var(--ink)]"
-      }`}
-    >
-      {children}
-    </a>
   );
 }
 
@@ -1941,6 +2310,7 @@ function SegmentedToggle({
       {(
         [
           { key: "active", label: "Aktive" },
+          { key: "waiting", label: "Venter" },
           { key: "meetings", label: "Møder" },
           { key: "customers", label: "Kunder" },
           { key: "all", label: "Alle" },
@@ -2269,9 +2639,18 @@ function buildVCard(lead: Lead) {
       .join("\n"),
   );
 
+  // iOS Contacts (and most CardDAV clients) populate first/last name from the
+  // structured N: field — FN: alone makes the firstname disappear and the row
+  // ends up filed by company. Only emit N when lead.name is set; fall back to
+  // FN-only otherwise.
+  const structuredName = lead.name ? splitName(lead.name) : null;
+
   return [
     "BEGIN:VCARD",
     "VERSION:3.0",
+    structuredName
+      ? `N:${escapeVCard(structuredName.last)};${escapeVCard(structuredName.first)};;;`
+      : null,
     `FN:${escapeVCard(displayName)}`,
     company ? `ORG:${escapeVCard(company)}` : null,
     phone ? `TEL;TYPE=CELL:${escapeVCard(phone)}` : null,
@@ -2282,6 +2661,15 @@ function buildVCard(lead: Lead) {
   ]
     .filter(Boolean)
     .join("\r\n");
+}
+
+function splitName(raw: string): { first: string; last: string } | null {
+  // "Morten Toft / Charlotte Steen Henriksen" -> use first half before the slash
+  const primary = raw.split(/\s*\/\s*/)[0]?.trim() ?? "";
+  const tokens = normalizeTextForVCard(primary).split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return null;
+  if (tokens.length === 1) return { first: tokens[0]!, last: "" };
+  return { first: tokens[0]!, last: tokens.slice(1).join(" ") };
 }
 
 function normalizeTextForVCard(value: string) {

@@ -4,9 +4,20 @@
 // in the svix-signature header.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.103.3";
-import { normalizeWebsiteUrl } from "../_shared/text.ts";
+import { normalizeWebsiteUrl, firstNameForGreeting } from "../_shared/text.ts";
 import { CARTERCO_WORKSPACE_ID, ODAGROUP_WORKSPACE_ID } from "../_shared/workspaces.ts";
 import { draftFirstMessage } from "../_shared/draft-first-message.ts";
+import { fireReferralTitleSearch } from "../_shared/referral-search.ts";
+import { matchTresyvClient } from "../_shared/tresyv-clients.ts";
+import {
+  assignFirstDmVariant,
+  renderTresyvBody,
+  TRESYV_V1_LONG,
+  TRESYV_V2_SHORT,
+  type FirstDmVariant,
+} from "../_shared/tresyv-arm-templates.ts";
+
+const TRESYV_WORKSPACE_ID = "2740ba1f-d5d5-4008-bf43-b45367c73134";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -122,17 +133,21 @@ Deno.serve(async (request) => {
       .maybeSingle();
     const cold = existing?.status === "invited";
 
-    // Referral detection: if this LinkedIn URL was invited via a reply_referral
+    // Referral detection: if this LinkedIn URL was invited via either a
+    // reply_referral (named referral — prospect typed the name) or a
+    // reply_referral_search (title-only referral — SendPilot found the URL)
     // alt_contact, capture the chain back to the referrer's pipeline. We stamp
     // referred_from_pipeline_lead_id so (a) sendspark-webhook picks the
-    // referral-aware follow-up template instead of the cold opener, and (b)
-    // the UI can show "Henvist af X". We do NOT inherit the referrer's video —
-    // a fresh render preserves engagement tracking (events keyed on
-    // contactEmail) and gets Morten's actual name in the voice-over.
+    // referral-aware follow-up template instead of the cold opener, (b)
+    // draft_first_message can open with the referral context for AI-DM
+    // workspaces, and (c) the UI can show "Henvist af X". We do NOT inherit
+    // the referrer's video — a fresh render preserves engagement tracking
+    // (events keyed on contactEmail) and gets Morten's actual name in the
+    // voice-over.
     const { data: refAlt } = await supabase
       .from("outreach_alt_contacts")
       .select("pipeline_lead_id")
-      .eq("source", "reply_referral")
+      .in("source", ["reply_referral", "reply_referral_search"])
       .eq("linkedin_url", linkedinUrl)
       .maybeSingle();
     const referredFrom = refAlt?.pipeline_lead_id ?? null;
@@ -257,6 +272,73 @@ Deno.serve(async (request) => {
       return json({ ok: false, error: "missing_website" });
     }
 
+    // Tresyv customer blocklist: never pitch an existing Tresyv customer.
+    // Match the lead's company against the Tresyv client library (word-
+    // boundary, case-insensitive). On match, auto-reject and stop. Same
+    // trust-break logic as the workspace-separation guards — sending to a
+    // current customer is the brand-equivalent of sending from the wrong
+    // account.
+    if (workspaceId === TRESYV_WORKSPACE_ID) {
+      const matched = matchTresyvClient(lead.company);
+      if (matched) {
+        await supabase.from("outreach_pipeline").upsert({
+          sendpilot_lead_id: leadId,
+          linkedin_url: linkedinUrl,
+          contact_email: lead.contact_email,
+          is_cold: true,
+          status: "rejected",
+          accepted_at: now,
+          workspace_id: workspaceId,
+          campaign_id: campaignId || null,
+          sendpilot_sender_id: senderId || null,
+          decided_at: now,
+          decided_by: "auto:tresyv_client_blocklist",
+          error: `existing Tresyv client (${matched}) — blocked from outreach`,
+        }, { onConflict: "sendpilot_lead_id" });
+        return json({ ok: true, recorded: "blocked_tresyv_client", matched });
+      }
+    }
+
+    // Tresyv 3-arm A/B: assign variant at accept time (locked by trigger).
+    // v1_long / v2_short skip SendSpark — write rendered_message inline and
+    // jump straight to pending_approval. v3_video keeps the existing flow.
+    // CarterCo + OdaGroup accepts get no variant (null), behave as before.
+    let variant: FirstDmVariant | null = null;
+    let renderedMessage: string | null = null;
+    if (workspaceId === TRESYV_WORKSPACE_ID) {
+      variant = assignFirstDmVariant();
+      if (variant === "v1_long" || variant === "v2_short") {
+        const fn = firstNameForGreeting(lead.first_name);
+        const ws = normalizeWebsiteUrl(lead.website);
+        const tpl = variant === "v1_long" ? TRESYV_V1_LONG : TRESYV_V2_SHORT;
+        renderedMessage = renderTresyvBody(tpl, fn, ws);
+      }
+    }
+
+    if (variant === "v1_long" || variant === "v2_short") {
+      // Text arm: ready for approval immediately. No render gate, no
+      // SendSpark credits burned. Operator opens INBOX → "Godkend videoer"
+      // (which also surfaces text-arm pending_approval rows) and approves.
+      await supabase.from("outreach_pipeline").upsert({
+        sendpilot_lead_id: leadId,
+        linkedin_url: linkedinUrl,
+        contact_email: lead.contact_email,
+        is_cold: true,
+        status: "pending_approval",
+        accepted_at: now,
+        queued_at: now,
+        rendered_at: now,
+        rendered_message: renderedMessage,
+        first_dm_variant: variant,
+        workspace_id: workspaceId,
+        campaign_id: campaignId || null,
+        sendpilot_sender_id: senderId || null,
+        referred_from_pipeline_lead_id: referredFrom,
+      }, { onConflict: "sendpilot_lead_id" });
+      scheduleScoutPhones("pipeline", leadId);
+      return json({ ok: true, recorded: "accepted_text_arm_pending_approval", variant, referred_from: referredFrom });
+    }
+
     await supabase.from("outreach_pipeline").upsert({
       sendpilot_lead_id: leadId,
       linkedin_url: linkedinUrl,
@@ -268,10 +350,11 @@ Deno.serve(async (request) => {
       campaign_id: campaignId || null,
       sendpilot_sender_id: senderId || null,
       referred_from_pipeline_lead_id: referredFrom,
+      first_dm_variant: variant, // null for non-Tresyv, "v3_video" for Tresyv video arm
     }, { onConflict: "sendpilot_lead_id" });
 
     scheduleScoutPhones("pipeline", leadId);
-    return json({ ok: true, recorded: "accepted_pending_pre_render", cold: true, referred_from: referredFrom });
+    return json({ ok: true, recorded: "accepted_pending_pre_render", cold: true, referred_from: referredFrom, variant });
   }
 
   if (isReplyReceived) {
@@ -361,11 +444,16 @@ async function classifyReplyAsync(
       };
       const now = new Date().toISOString();
       const isReferral = j.intent === "referral";
+      // Declines/OOO don't need a response — auto-handle inline so they fall
+      // out of the Svar tab immediately. Anything else stays unhandled until
+      // the user explicitly marks it.
+      const autoHandle = j.intent === "decline" || j.intent === "ooo";
       await supabase.from("outreach_replies").update({
         intent: j.intent,
         confidence: j.confidence,
         reasoning: j.reasoning,
         classified_at: now,
+        handled: autoHandle ? true : undefined,
         referral_target_name:    isReferral ? (j.referralTarget?.name ?? null) : null,
         referral_target_title:   isReferral ? (j.referralTarget?.title ?? null) : null,
         referral_target_company: isReferral ? (j.referralTarget?.company ?? null) : null,
@@ -381,12 +469,12 @@ async function classifyReplyAsync(
       // `reply_referral` outreach_alt_contacts row with the name Claude
       // extracted (linkedin_url=null). The UI surfaces this as a hint — the
       // user looks up Bjarne manually (LinkedIn search, mutual contacts,
-      // company page) and pastes the URL before clicking invite. We do not
-      // auto-fire a SendPilot lead-database search here on purpose: the
-      // search returns broad title-filtered leaders at the company, which
-      // is noise when we already know the specific name. We only spawn the
-      // hint row when Claude extracted a name — "talk to someone else" with
-      // no name still needs manual follow-up.
+      // company page) and pastes the URL before clicking invite.
+      //
+      // Title-only path ("kontakt vores COO" — no name): fire a SendPilot
+      // lead-database search filtered by that title at the same company. The
+      // existing poll-alt-searches cron picks it up and surfaces candidates
+      // as referral / invite_pending rows in vw_action_queue.
       // Draftable intents trigger an automatic suggested-reply generation.
       // Decline/ooo/other don't get auto-drafts — they rarely need a reply.
       // Referral has its own alt-contact flow (handled below), so we skip
@@ -440,6 +528,8 @@ async function classifyReplyAsync(
           source: "reply_referral",
           surfaced_at: now,
         });
+      } else if (isReferral && j.referralTarget?.title) {
+        await fireReferralTitleSearch(supabase, leadId, j.referralTarget.title);
       }
   } catch (e) {
     console.error("classifyReplyAsync error", e);
@@ -538,6 +628,7 @@ async function promoteFromInbox(
       title: i.title,
       country: i.country,
       vertical: (i as Record<string, string | null>).vertical ?? null,
+      website: i.website ?? null,
       contact_email: contactEmail,
       slug,
       workspace_id: wsId,

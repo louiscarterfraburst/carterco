@@ -167,7 +167,15 @@ Return JSON only. No preamble, no code fences.
   - English: *"If it's relevant, happy to show a 15-min demo focused on concrete use cases."*
 - **Banned:** emoji, exclamation marks, "Hope you're well", "I noticed you're", "Just wanted to reach out", "synergi", "leverage", "best in class", "value-add", "drive value", "circle back", "quick question".
 - **No signature.** SendPilot appends it.
-- **No links** in the first message — the longer pitch + URL goes in a follow-up step.
+- **One link allowed in the first message** — the Jarvis booklet, anchored
+  *after* the CTA as a single secondary line. Never bare-pasted on its own
+  line at the top, never before the CTA, never as the primary ask. The demo
+  offer remains the primary CTA; the booklet is the self-serve path for
+  buyers who prefer to read before booking.
+  - Danish: *"Eller læs den korte version her: https://jarvis-ignite-narrative.lovable.app"*
+  - English: *"Or read the short version here: https://jarvis-ignite-narrative.lovable.app"*
+  - (TODO: migrate to a custom OdaGroup-owned domain — e.g. jarvis.odagroup.com
+    301 → lovable.app — for branding. Edit this brief and re-sync when DNS is live.)
 
 ---
 
@@ -188,7 +196,7 @@ Input:
 Acceptable output:
 \`\`\`json
 {
-  "message": "Hej Lars,\n\nMSL-debriefs er stadig overraskende manuelle hos de fleste — værdifulde scientific signaler ender ofte i fritekst-noter eller bliver helt tabt mellem felt og brand-team, og compliance-kravene gør det ikke nemmere at strukturere undervejs.\n\nJarvis er et AI-native lag oven på jeres eksisterende systemer, som håndterer hands-free MSL-debriefing og automatisk strukturerer medical insights med transparens og audit-trail bygget ind. Bruges i dag hos en global pharma-virksomhed i Europa og Asien.\n\nHvis det giver mening, viser jeg gerne en kort demo (15 min) med fokus på konkrete use cases.",
+  "message": "Hej Lars,\n\nMSL-debriefs er stadig overraskende manuelle hos de fleste — værdifulde scientific signaler ender ofte i fritekst-noter eller bliver helt tabt mellem felt og brand-team, og compliance-kravene gør det ikke nemmere at strukturere undervejs.\n\nJarvis er et AI-native lag oven på jeres eksisterende systemer, som håndterer hands-free MSL-debriefing og automatisk strukturerer medical insights med transparens og audit-trail bygget ind. Bruges i dag hos en global pharma-virksomhed i Europa og Asien.\n\nHvis det giver mening, viser jeg gerne en kort demo (15 min) med fokus på konkrete use cases.\n\nEller læs den korte version her: https://jarvis-ignite-narrative.lovable.app",
   "strategy": "medical_affairs",
   "language": "da",
   "rationale": "MSL Excellence Lead → medical_affairs; DK → Danish"
@@ -205,7 +213,7 @@ Input:
 Acceptable output:
 \`\`\`json
 {
-  "message": "Hi Priya,\n\nMost of the AI work landing on innovation desks in pharma right now is either generic horizontal copilots that ignore field workflows, or pilots that look great in a deck but never make it past a single affiliate. Neither moves the needle on what reps and MSLs actually do day-to-day.\n\nJarvis is a pharma-native AI layer running in production today — meeting prep, hands-free debriefs, HCP intelligence — sitting on top of existing CRM rather than competing with it. Already operating across Europe and Asia at one of the global tier-1s.\n\nIf it's relevant, happy to show a 15-min demo focused on concrete use cases.",
+  "message": "Hi Priya,\n\nMost of the AI work landing on innovation desks in pharma right now is either generic horizontal copilots that ignore field workflows, or pilots that look great in a deck but never make it past a single affiliate. Neither moves the needle on what reps and MSLs actually do day-to-day.\n\nJarvis is a pharma-native AI layer running in production today — meeting prep, hands-free debriefs, HCP intelligence — sitting on top of existing CRM rather than competing with it. Already operating across Europe and Asia at one of the global tier-1s.\n\nIf it's relevant, happy to show a 15-min demo focused on concrete use cases.\n\nOr read the short version here: https://jarvis-ignite-narrative.lovable.app",
   "strategy": "ai_innovation",
   "language": "en",
   "rationale": "Digital Innovation Director → ai_innovation; UK → English"
@@ -453,7 +461,7 @@ export async function draftFirstMessage(
 
   const { data: pipe } = await admin
     .from("outreach_pipeline")
-    .select("sendpilot_lead_id, contact_email, workspace_id, status")
+    .select("sendpilot_lead_id, contact_email, workspace_id, status, referred_from_pipeline_lead_id")
     .eq("sendpilot_lead_id", leadId)
     .maybeSingle();
   if (!pipe) return { error: "pipeline row not found" };
@@ -477,6 +485,45 @@ export async function draftFirstMessage(
     .maybeSingle();
   const ownerFirst = (playbook as { owner_first_name?: string })?.owner_first_name ?? "";
 
+  // Referral context: if the prospect was referred by another lead's reply,
+  // pull the referrer's name + the specific reply that triggered the referral.
+  // We inject this into the prompt so the opener acknowledges the chain
+  // naturally ("Thomas Eilersen i jeres team pegede mig din retning…")
+  // rather than going cold-strategy. The brief's strategy choice still
+  // applies for the body's substance — only the opener shifts.
+  const referredFromLeadId = (pipe as { referred_from_pipeline_lead_id?: string }).referred_from_pipeline_lead_id;
+  let referral: { firstName: string; lastName: string; replyText: string } | null = null;
+  if (referredFromLeadId) {
+    const { data: refPipe } = await admin
+      .from("outreach_pipeline")
+      .select("contact_email")
+      .eq("sendpilot_lead_id", referredFromLeadId)
+      .maybeSingle();
+    if ((refPipe as { contact_email?: string } | null)?.contact_email) {
+      const { data: refLead } = await admin
+        .from("outreach_leads")
+        .select("first_name, last_name")
+        .eq("contact_email", (refPipe as { contact_email: string }).contact_email)
+        .maybeSingle();
+      const { data: refReply } = await admin
+        .from("outreach_replies")
+        .select("message")
+        .eq("sendpilot_lead_id", referredFromLeadId)
+        .eq("direction", "inbound")
+        .eq("intent", "referral")
+        .order("received_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (refLead) {
+        referral = {
+          firstName: ((refLead as { first_name?: string }).first_name ?? "").split(/\s+/)[0] ?? "",
+          lastName:  (refLead as { last_name?: string }).last_name ?? "",
+          replyText: ((refReply as { message?: string } | null)?.message ?? "").trim().slice(0, 400),
+        };
+      }
+    }
+  }
+
   const leadJson = {
     firstName: (lead as { first_name?: string }).first_name ?? "",
     lastName:  (lead as { last_name?: string }).last_name ?? "",
@@ -487,7 +534,7 @@ export async function draftFirstMessage(
     linkedinUrl: (lead as { linkedin_url?: string }).linkedin_url ?? "",
   };
 
-  const systemPrompt = [
+  const systemPromptLines = [
     `You are drafting a first LinkedIn DM on behalf of ${ownerFirst || "the sender"} immediately after a connection request was accepted.`,
     "",
     "Follow the brief below to the letter. Pick ONE strategy based on the prospect's title, write in the chosen language, and return ONLY a JSON object — no preamble, no code fences, no extra keys.",
@@ -495,7 +542,31 @@ export async function draftFirstMessage(
     "=== AGENT BRIEF ===",
     brief.trim(),
     "=== END BRIEF ===",
-  ].join("\n");
+  ];
+
+  if (referral) {
+    // Referral chain override — sits between the brief and the lead so the
+    // model knows to weave the referrer into the opener while still using
+    // the brief's strategy/voice for substance.
+    systemPromptLines.push(
+      "",
+      "=== REFERRAL CONTEXT (overrides cold opener) ===",
+      `This lead came in via a referral: a colleague at the same company replied to our cold outreach pointing us here.`,
+      `Referrer first name: ${referral.firstName}`,
+      `Referrer last name:  ${referral.lastName}`,
+      `Referrer's actual reply text (verbatim):`,
+      `"${referral.replyText}"`,
+      "",
+      "Rules for this referral path:",
+      `- Open by naming ${referral.firstName} as the referrer — natural, not "${referral.firstName} sagde du var den rette" stiffness. Match the warmth level of the reply text: warm reply = warm opener, curt reply = matter-of-fact opener.`,
+      `- DO NOT open with the cold-strategy opener (no ad observation, no "I saw your title" pain hook). The referral itself IS the personalization.`,
+      `- Keep the rest of the message faithful to the brief's strategy, voice, length, language rules, and CTA preferences. The substance still picks one strategy from the brief; only the opener changes.`,
+      `- Strategy in the JSON envelope: still pick from the brief's allowed strategies based on the prospect's title. The referral changes the OPENING, not the strategy choice.`,
+      "=== END REFERRAL CONTEXT ===",
+    );
+  }
+
+  const systemPrompt = systemPromptLines.join("\n");
 
   const userPrompt = [
     "Draft the first message for this lead. Output the JSON envelope only.",

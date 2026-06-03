@@ -9,27 +9,7 @@ import {
   type QuizInputs,
   type ResponseTime,
   type SalesCycle,
-  ALL_CHANNELS,
-  CHANNEL_LABELS,
-  CHANNEL_LABELS_EN,
-  FOLLOWUP_QUALITY_LABELS,
-  FOLLOWUP_QUALITY_LABELS_EN,
-  FOLLOWUP_QUALITY_OPTIONS,
-  LEAD_ORIGIN_LABELS,
-  LEAD_ORIGIN_LABELS_EN,
-  LEAD_ORIGIN_OPTIONS,
-  OUTBOUND_QUALITY_LABELS,
-  OUTBOUND_QUALITY_LABELS_EN,
-  OUTBOUND_QUALITY_OPTIONS,
-  RESPONSE_TIME_LABELS,
-  RESPONSE_TIME_LABELS_EN,
-  SALES_CYCLE_LABELS,
-  SALES_CYCLE_LABELS_EN,
-  SALES_CYCLE_OPTIONS,
   computeLoss,
-  formatKr,
-  formatRange,
-  formatRangeEN,
 } from "@/lib/quiz-calc";
 
 type WebsiteAnalysis = {
@@ -56,16 +36,9 @@ type Props = {
 
 type StepLabelKey =
   | "url"
-  | "leads"
-  | "deal"
-  | "close"
-  | "cycle"
-  | "origin"
-  | "channels"
-  | "outbound-quality"
-  | "speed"
-  | "followup-quality"
+  | "volume"
   | "contact"
+  | "path"
   | "result";
 
 type CopyT = {
@@ -76,55 +49,46 @@ type CopyT = {
   back: string;
   unknownError: string;
   stepLabels: Record<StepLabelKey, string>;
-  urlQuestion: string;
+  urlQuestionBefore: string;
+  urlQuestionAccent: string;
+  urlQuestionAfter: string;
   urlHint: string;
   urlPlaceholder: string;
-  leadsQuestion: string;
-  leadsHint: string;
-  leadsSuffix: string;
-  dealQuestion: string;
-  dealHint: string;
-  dealSuffix: string;
-  closeQuestion: string;
-  cycleQuestion: string;
-  originQuestion: string;
-  speedQuestion: string;
-  channelsQuestion: string;
-  outboundQuestion: string;
-  followupQuestion: string;
+  // Volume step (combined leads + deal value)
+  volumeQuestion: string;
+  volumeHint: string;
+  volumeLeadsLabel: string;
+  volumeLeadsSuffix: string;
+  volumeDealLabel: string;
+  volumeDealSuffix: string;
+  // Contact step
   contactQuestion: string;
   contactNamePlaceholder: string;
   contactEmailPlaceholder: string;
   contactPhonePlaceholder: string;
   contactSubmit: string;
   contactSending: string;
-  contactNote: string;
-  resultEyebrow: string;
-  resultPeriod: string;
+  // Path step
+  pathQuestion: string;
+  pathHint: string;
+  pathLoomLabel: string;
+  pathLoomDescription: string;
+  pathMeetingLabel: string;
+  pathMeetingDescription: string;
+  // AI prose (shown on Loom result when analysis succeeded)
   aiLoading: string;
-  aiRead: string;
-  aiUses: string;
-  aiMissing: string;
-  breakdownTitle: string;
-  machineOutbound: string;
-  machineSpeed: string;
-  machineFollowup: string;
-  outboundTemplated: string;
-  outboundNone: string;
-  outboundMissing: (labels: string) => string;
-  outboundFull: string;
-  speedBody: string;
-  speedLink: string;
-  followupManual: string;
-  followupPartial: string;
-  followupBenchmark: (pct: number) => string;
+  aiUsesPhrase: string;
+  // Loom result page
+  heroBefore: string;
+  heroAccent: string;
+  heroAfter: string;
   cta: string;
   ctaNote: string;
 };
 
 const COPY: Record<Locale, CopyT> = {
   da: {
-    result: "Resultat",
+    result: "Næste skridt",
     step: "Trin",
     close: "Luk",
     next: "Næste →",
@@ -132,65 +96,44 @@ const COPY: Record<Locale, CopyT> = {
     unknownError: "Ukendt fejl",
     stepLabels: {
       url: "Hjemmeside",
-      leads: "Leads",
-      deal: "Aftaleværdi",
-      close: "Lukkerate",
-      cycle: "Salgs-cyklus",
-      origin: "Inbound/outbound",
-      channels: "Kanaler",
-      "outbound-quality": "Outbound",
-      speed: "Hastighed",
-      "followup-quality": "Opfølgning",
+      volume: "Tal",
       contact: "Kontakt",
-      result: "Resultat",
+      path: "Format",
+      result: "Næste skridt",
     },
-    urlQuestion: "Din hjemmeside?",
-    urlHint: "Du får et tal for hvor meget du taber",
+    urlQuestionBefore: "",
+    urlQuestionAccent: "Jeres",
+    urlQuestionAfter: " hjemmeside?",
+    urlHint: "Bruges i jeres audit.",
     urlPlaceholder: "dinvirksomhed.dk",
-    leadsQuestion: "Leads om måneden?",
-    leadsHint: "Formular, opkald, DM.",
-    leadsSuffix: "leads",
-    dealQuestion: "Hvad er en kunde værd?",
-    dealHint: "Gennemsnit i kr · årsomsætning hvis abonnement.",
-    dealSuffix: "kr",
-    closeQuestion: "Hvor mange % af dine leads lukker?",
-    cycleQuestion: "Hvor lang tid tager en typisk handel?",
-    originQuestion: "Hvor kommer jeres leads typisk fra?",
-    speedQuestion: "Hvor hurtigt ringer I tilbage?",
-    channelsQuestion: "Hvor får du leads fra?",
-    outboundQuestion: "Hvor personlig er jeres outbound?",
-    followupQuestion: "Hvad sker der med leads der ikke køber nu?",
+    volumeQuestion: "To hurtige tal.",
+    volumeHint: "Hjælper mig vurdere om jeg er den rette.",
+    volumeLeadsLabel: "Leads om måneden",
+    volumeLeadsSuffix: "leads",
+    volumeDealLabel: "Aftaleværdi",
+    volumeDealSuffix: "kr",
     contactQuestion: "Et sidste skridt",
     contactNamePlaceholder: "Navn",
     contactEmailPlaceholder: "Email",
     contactPhonePlaceholder: "Telefon",
-    contactSubmit: "Vis mit resultat →",
+    contactSubmit: "Næste →",
     contactSending: "Sender…",
-    contactNote: "Jeg ringer dig op inden for 24t med en 15-min gennemgang af dine huller.",
-    resultEyebrow: "Du taber omkring",
-    resultPeriod: "om måneden, baseret på dine tal. Spændet afspejler at lukkerate og volumen er estimater.",
+    pathQuestion: "Hvordan vil du gå frem?",
+    pathHint: "Vælg den vej der passer jer bedst.",
+    pathLoomLabel: "Lyn-audit",
+    pathLoomDescription: "Send view-only CRM-adgang. I får et 10-min Loom inden for 48 timer. Ingen møde.",
+    pathMeetingLabel: "Snak først",
+    pathMeetingDescription: "30 minutter denne uge. Vi tager det sammen.",
     aiLoading: "Analyserer din side…",
-    aiRead: "Læst af AI",
-    aiUses: "Bruger:",
-    aiMissing: "Mangler:",
-    breakdownTitle: "Tre maskiner, tre lækager",
-    machineOutbound: "Outbound",
-    machineSpeed: "Hastighed",
-    machineFollowup: "Opfølgning",
-    outboundTemplated: "Mass-templates rammer ikke beslutningstagere",
-    outboundNone: "Ingen outbound, ingen nye samtaler",
-    outboundMissing: (labels: string) => `Mangler ${labels}`,
-    outboundFull: "Tæt på fuld dækning — kun lille spild her",
-    speedBody: "21× lavere kvalitet over 5 min,",
-    speedLink: "iflg. MIT-studiet",
-    followupManual: "Leads der ikke køber nu, glemmes",
-    followupPartial: "Halvautomatisk pleje, deals tabes i støjen",
-    followupBenchmark: (pct: number) => `Lukkerate ${pct}%, B2B-benchmark 25%`,
-    cta: "Få en 30-min GTM-snak →",
-    ctaNote: "30 min · uforpligtende",
+    aiUsesPhrase: "I bruger",
+    heroBefore: "Et 10-min",
+    heroAccent: "Loom",
+    heroAfter: " inden for 48 timer.",
+    cta: "Send view-only CRM-adgang og få jeres 10-min Loom →",
+    ctaNote: "Ingen møde nødvendigt",
   },
   en: {
-    result: "Result",
+    result: "Next step",
     step: "Step",
     close: "Close",
     next: "Next →",
@@ -198,107 +141,62 @@ const COPY: Record<Locale, CopyT> = {
     unknownError: "Unknown error",
     stepLabels: {
       url: "Website",
-      leads: "Leads",
-      deal: "Deal value",
-      close: "Close rate",
-      cycle: "Sales cycle",
-      origin: "Inbound/outbound",
-      channels: "Channels",
-      "outbound-quality": "Outbound",
-      speed: "Speed",
-      "followup-quality": "Follow-up",
+      volume: "Numbers",
       contact: "Contact",
-      result: "Result",
+      path: "Format",
+      result: "Next step",
     },
-    urlQuestion: "Your website?",
-    urlHint: "You'll get a number for how much you're losing",
+    urlQuestionBefore: "Your ",
+    urlQuestionAccent: "website",
+    urlQuestionAfter: "?",
+    urlHint: "Used in your audit.",
     urlPlaceholder: "yourcompany.com",
-    leadsQuestion: "Leads per month?",
-    leadsHint: "Form, call, DM.",
-    leadsSuffix: "leads",
-    dealQuestion: "What's a customer worth?",
-    dealHint: "Average in kr · annual revenue if subscription.",
-    dealSuffix: "kr",
-    closeQuestion: "What % of your leads close?",
-    cycleQuestion: "How long does a typical deal take?",
-    originQuestion: "Where do your leads typically come from?",
-    speedQuestion: "How quickly do you call back?",
-    channelsQuestion: "Where do you get leads from?",
-    outboundQuestion: "How personal is your outbound?",
-    followupQuestion: "What happens to leads who don't buy now?",
+    volumeQuestion: "Two quick numbers.",
+    volumeHint: "Helps me decide if I'm the right fit.",
+    volumeLeadsLabel: "Leads per month",
+    volumeLeadsSuffix: "leads",
+    volumeDealLabel: "Deal value",
+    volumeDealSuffix: "kr",
     contactQuestion: "One last step",
     contactNamePlaceholder: "Name",
     contactEmailPlaceholder: "Email",
     contactPhonePlaceholder: "Phone",
-    contactSubmit: "Show my result →",
+    contactSubmit: "Next →",
     contactSending: "Sending…",
-    contactNote: "I'll call you within 24h with a 15-min walkthrough of your gaps.",
-    resultEyebrow: "You're losing around",
-    resultPeriod: "per month, based on your numbers. The range reflects that close rate and volume are estimates.",
+    pathQuestion: "How do you want to proceed?",
+    pathHint: "Pick the path that works best for you.",
+    pathLoomLabel: "Quick audit",
+    pathLoomDescription: "Send view-only CRM access. Get a 10-min Loom within 48h. No meeting.",
+    pathMeetingLabel: "Talk first",
+    pathMeetingDescription: "30 minutes this week. We walk through it together.",
     aiLoading: "Analyzing your site…",
-    aiRead: "Read by AI",
-    aiUses: "Uses:",
-    aiMissing: "Missing:",
-    breakdownTitle: "Three machines, three leaks",
-    machineOutbound: "Outbound",
-    machineSpeed: "Speed",
-    machineFollowup: "Follow-up",
-    outboundTemplated: "Mass templates don't reach decision-makers",
-    outboundNone: "No outbound, no new conversations",
-    outboundMissing: (labels: string) => `Missing ${labels}`,
-    outboundFull: "Close to full coverage — only small leak here",
-    speedBody: "21× lower quality over 5 min,",
-    speedLink: "per the MIT study",
-    followupManual: "Leads who don't buy now get forgotten",
-    followupPartial: "Semi-automated nurture, deals lost in the noise",
-    followupBenchmark: (pct: number) => `Close rate ${pct}%, B2B benchmark 25%`,
-    cta: "Book a 30-min GTM call →",
-    ctaNote: "30 min · no commitment",
+    aiUsesPhrase: "You use",
+    heroBefore: "A 10-min",
+    heroAccent: "Loom",
+    heroAfter: " in 48 hours.",
+    cta: "Send view-only CRM access and get your 10-min Loom →",
+    ctaNote: "No meeting required",
   },
 };
 
-const LABELS = {
-  da: {
-    response: RESPONSE_TIME_LABELS,
-    outbound: OUTBOUND_QUALITY_LABELS,
-    followup: FOLLOWUP_QUALITY_LABELS,
-    cycle: SALES_CYCLE_LABELS,
-    origin: LEAD_ORIGIN_LABELS,
-    channel: CHANNEL_LABELS,
-    range: formatRange,
-  },
-  en: {
-    response: RESPONSE_TIME_LABELS_EN,
-    outbound: OUTBOUND_QUALITY_LABELS_EN,
-    followup: FOLLOWUP_QUALITY_LABELS_EN,
-    cycle: SALES_CYCLE_LABELS_EN,
-    origin: LEAD_ORIGIN_LABELS_EN,
-    channel: CHANNEL_LABELS_EN,
-    range: formatRangeEN,
-  },
-} as const;
+// Calendly booking URL — mirrors src/app/page.tsx:76. If this ever moves
+// behind workspace.calendly_url in settings, both files need to update.
+const CALENDLY_URL = "https://calendly.com/louis-carterco/30min";
 
-// Step order maps to the three machines: leads/deal/close = baseline inputs,
-// then outbound questions (channels, outbound-quality), then hastighed (speed),
-// then opfølgning (followup-quality), then contact + result.
+// Lean intake flow (5 screens, 2026-05-21 redesign):
+//   url → volume (leads + deal value) → contact → path (Loom or meeting) → result
+// Earlier diagnostic questions (close/cycle/channels/outbound/speed/followup)
+// were cut after the office-hours session — Louis asks them in the meeting
+// or reads them from CRM data when the prospect shares access.
 const STEP_KEYS = [
   "url",
-  "leads",
-  "deal",
-  "close",
-  "cycle",
-  "origin",
-  "channels",
-  "outbound-quality",
-  "speed",
-  "followup-quality",
+  "volume",
   "contact",
+  "path",
   "result",
 ] as const;
 
 type StepKey = (typeof STEP_KEYS)[number];
-
-const RESPONSE_OPTIONS: ResponseTime[] = ["lt5m", "5to30m", "30mto1h", "gt1h"];
 
 function isUrlValid(raw: string): boolean {
   if (!raw.trim()) return false;
@@ -318,25 +216,25 @@ function normalizeUrl(raw: string): string {
 
 export function LeadQuiz({ open, onClose, onConvert, locale = "da" }: Props) {
   const t = COPY[locale];
-  const labels = LABELS[locale];
-  const fmtRange = labels.range;
   const [stepIndex, setStepIndex] = useState(0);
   const [url, setUrl] = useState("");
   const [monthlyLeads, setMonthlyLeads] = useState("50");
   const [dealValue, setDealValue] = useState("25000");
-  const [closeRate, setCloseRate] = useState("15"); // 0..100
-  const [responseTime, setResponseTime] = useState<ResponseTime>("30mto1h");
-  const [channels, setChannels] = useState<Channel[]>(["linkedin"]);
-  const [outboundQuality, setOutboundQuality] =
-    useState<OutboundQuality>("light");
-  const [followupQuality, setFollowupQuality] =
-    useState<FollowupQuality>("manual");
-  const [salesCycle, setSalesCycle] = useState<SalesCycle>("2to8w");
-  const [leadOriginMix, setLeadOriginMix] = useState<LeadOriginMix>("mix");
+  // Diagnostic questions removed from UI (close/cycle/channels/outbound/speed/
+  // followup/origin). Defaults kept so computeLoss continues to populate
+  // DB columns; Louis reads the real values from CRM or asks in the meeting.
+  const closeRate = "15";
+  const responseTime: ResponseTime = "30mto1h";
+  const channels: Channel[] = ["linkedin"];
+  const outboundQuality: OutboundQuality = "light";
+  const followupQuality: FollowupQuality = "manual";
+  const salesCycle: SalesCycle = "2to8w";
+  const leadOriginMix: LeadOriginMix = "mix";
   const [analysis, setAnalysis] = useState<AnalysisState>({ status: "idle" });
   const [contactName, setContactName] = useState("");
   const [contactEmail, setContactEmail] = useState("");
   const [contactPhone, setContactPhone] = useState("");
+  const [path, setPath] = useState<"loom" | "meeting" | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -402,12 +300,6 @@ export function LeadQuiz({ open, onClose, onConvert, locale = "da" }: Props) {
     setStepIndex((i) => Math.max(0, i - 1));
   }
 
-  function toggleChannel(c: Channel) {
-    setChannels((prev) =>
-      prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c],
-    );
-  }
-
   // Kick off AI analysis when URL step is submitted (fire-and-forget; result waits if needed)
   async function startAnalysis(rawUrl: string) {
     const url = normalizeUrl(rawUrl);
@@ -442,8 +334,13 @@ export function LeadQuiz({ open, onClose, onConvert, locale = "da" }: Props) {
     next();
   }
 
-  async function submitContact() {
+  // Submission happens at the path step (when user picks Loom or meeting).
+  // Loom path → advance to the in-modal result. Meeting path → redirect
+  // to Calendly with the visitor's info prefilled (a1 = company stays
+  // blank since the lean intake doesn't ask for it).
+  async function submitWithPath(chosenPath: "loom" | "meeting") {
     if (submitting) return;
+    setPath(chosenPath);
     setSubmitError(null);
     setSubmitting(true);
     try {
@@ -455,6 +352,7 @@ export function LeadQuiz({ open, onClose, onConvert, locale = "da" }: Props) {
           email: contactEmail.trim(),
           phone: contactPhone.trim() || undefined,
           url: url.trim() || undefined,
+          path: chosenPath,
           monthlyLeads: inputs.monthlyLeads,
           dealValue: inputs.dealValue,
           closeRate: inputs.closeRate,
@@ -475,6 +373,17 @@ export function LeadQuiz({ open, onClose, onConvert, locale = "da" }: Props) {
         setSubmitError(data.error || `HTTP ${res.status}`);
         return;
       }
+      if (chosenPath === "meeting") {
+        const params = new URLSearchParams({
+          name: contactName.trim(),
+          email: contactEmail.trim(),
+          a2: contactPhone.trim(),
+          utm_source: "carterco.dk",
+          utm_medium: "lead_quiz",
+        });
+        window.location.href = `${CALENDLY_URL}?${params.toString()}`;
+        return;
+      }
       next();
     } catch (e) {
       setSubmitError(e instanceof Error ? e.message : t.unknownError);
@@ -492,13 +401,28 @@ export function LeadQuiz({ open, onClose, onConvert, locale = "da" }: Props) {
         className="absolute inset-0 bg-black/80 backdrop-blur-md"
       />
       <div className="relative z-10 flex max-h-[92vh] w-[calc(100%-2rem)] max-w-2xl flex-col overflow-hidden rounded-2xl border border-[var(--cream)]/10 bg-[#14110d] text-[var(--cream)] shadow-[0_40px_120px_rgba(0,0,0,0.6)]">
-        {/* Header */}
-        <div className="flex items-center justify-between px-8 pt-6">
-          <span className="font-mono text-[10px] font-bold uppercase tracking-[0.3em] text-[var(--cream)]/55">
-            {isResultStep
-              ? t.result
-              : `${t.step} ${stepIndex + 1}/${totalInputSteps} · ${t.stepLabels[currentStepKey]}`}
-          </span>
+        {/* Header — editorial chapter marker. Big serif italic numeral
+            ("01" through "10") + mono caption replaces the wizard-style
+            "TRIN N/M · LABEL" pattern. On the result step, we drop the
+            numeral and just show the result eyebrow. */}
+        <div className="flex items-baseline justify-between px-8 pt-6">
+          {isResultStep ? (
+            <span className="font-mono text-[10px] font-bold uppercase tracking-[0.3em] text-[var(--cream)]/55">
+              {t.result}
+            </span>
+          ) : (
+            <div className="flex items-baseline gap-3">
+              <span className="font-display text-3xl italic leading-none text-[var(--cream)]/25 sm:text-[2.25rem]">
+                {String(stepIndex + 1).padStart(2, "0")}
+              </span>
+              <span className="font-mono text-[10px] uppercase tracking-[0.3em] text-[var(--cream)]/30">
+                / {totalInputSteps}
+              </span>
+              <span className="ml-1 font-mono text-[10px] font-bold uppercase tracking-[0.3em] text-[var(--cream)]/55">
+                · {t.stepLabels[currentStepKey]}
+              </span>
+            </div>
+          )}
           <button
             type="button"
             aria-label={t.close}
@@ -518,15 +442,8 @@ export function LeadQuiz({ open, onClose, onConvert, locale = "da" }: Props) {
           </button>
         </div>
 
-        {/* Progress bar */}
-        <div className="mt-4 px-8">
-          <div className="h-1 overflow-hidden rounded-full bg-[var(--cream)]/10">
-            <div
-              className="h-full bg-gradient-to-r from-[#ffb86b] via-[#ff6b2c] to-[#c93c0a] transition-all duration-500 ease-out"
-              style={{ width: `${progress}%` }}
-            />
-          </div>
-        </div>
+        {/* Progress bar removed 2026-05-21 — the editorial chapter
+            marker ("01 / 10") signals progress without wizard chrome. */}
 
         {/* Body */}
         <div
@@ -541,116 +458,14 @@ export function LeadQuiz({ open, onClose, onConvert, locale = "da" }: Props) {
               t={t}
             />
           )}
-          {currentStepKey === "leads" && (
-            <NumberStep
-              question={t.leadsQuestion}
-              hint={t.leadsHint}
-              value={monthlyLeads}
-              onChange={setMonthlyLeads}
+          {currentStepKey === "volume" && (
+            <VolumeStep
+              leadsValue={monthlyLeads}
+              dealValue={dealValue}
+              onLeadsChange={setMonthlyLeads}
+              onDealChange={setDealValue}
               onSubmit={next}
-              suffix={t.leadsSuffix}
-              nextLabel={t.next}
-            />
-          )}
-          {currentStepKey === "deal" && (
-            <NumberStep
-              question={t.dealQuestion}
-              hint={t.dealHint}
-              value={dealValue}
-              onChange={setDealValue}
-              onSubmit={next}
-              suffix={t.dealSuffix}
-              nextLabel={t.next}
-            />
-          )}
-          {currentStepKey === "close" && (
-            <SliderStep
-              question={t.closeQuestion}
-              nextLabel={t.next}
-              value={closeRate}
-              onChange={setCloseRate}
-              onSubmit={next}
-              min={0}
-              max={100}
-              suffix="%"
-            />
-          )}
-          {currentStepKey === "cycle" && (
-            <ChoiceStep
-              question={t.cycleQuestion}
-              value={salesCycle}
-              onChange={(v) => setSalesCycle(v as SalesCycle)}
-              options={SALES_CYCLE_OPTIONS.map((v) => ({
-                value: v,
-                label: labels.cycle[v],
-              }))}
-              onSubmit={next}
-              nextLabel={t.next}
-            />
-          )}
-          {currentStepKey === "origin" && (
-            <ChoiceStep
-              question={t.originQuestion}
-              value={leadOriginMix}
-              onChange={(v) => setLeadOriginMix(v as LeadOriginMix)}
-              options={LEAD_ORIGIN_OPTIONS.map((v) => ({
-                value: v,
-                label: labels.origin[v],
-              }))}
-              onSubmit={next}
-              nextLabel={t.next}
-            />
-          )}
-          {currentStepKey === "speed" && (
-            <ChoiceStep
-              question={t.speedQuestion}
-              value={responseTime}
-              onChange={(v) => setResponseTime(v as ResponseTime)}
-              options={RESPONSE_OPTIONS.map((v) => ({
-                value: v,
-                label: labels.response[v],
-              }))}
-              onSubmit={next}
-              nextLabel={t.next}
-            />
-          )}
-          {currentStepKey === "channels" && (
-            <MultiChoiceStep
-              question={t.channelsQuestion}
-              values={channels}
-              onToggle={toggleChannel}
-              options={ALL_CHANNELS.map((c) => ({
-                value: c,
-                label: labels.channel[c],
-              }))}
-              onSubmit={next}
-              submitLabel={t.next}
-            />
-          )}
-          {currentStepKey === "outbound-quality" && (
-            <ChoiceStep
-              question={t.outboundQuestion}
-              value={outboundQuality}
-              onChange={(v) => setOutboundQuality(v as OutboundQuality)}
-              options={OUTBOUND_QUALITY_OPTIONS.map((v) => ({
-                value: v,
-                label: labels.outbound[v],
-              }))}
-              onSubmit={next}
-              nextLabel={t.next}
-            />
-          )}
-          {currentStepKey === "followup-quality" && (
-            <ChoiceStep
-              question={t.followupQuestion}
-              value={followupQuality}
-              onChange={(v) => setFollowupQuality(v as FollowupQuality)}
-              options={FOLLOWUP_QUALITY_OPTIONS.map((v) => ({
-                value: v,
-                label: labels.followup[v],
-              }))}
-              onSubmit={next}
-              nextLabel={t.next}
+              t={t}
             />
           )}
           {currentStepKey === "contact" && (
@@ -661,7 +476,13 @@ export function LeadQuiz({ open, onClose, onConvert, locale = "da" }: Props) {
               onNameChange={setContactName}
               onEmailChange={setContactEmail}
               onPhoneChange={setContactPhone}
-              onSubmit={submitContact}
+              onSubmit={next}
+              t={t}
+            />
+          )}
+          {currentStepKey === "path" && (
+            <PathStep
+              onChoose={submitWithPath}
               submitting={submitting}
               error={submitError}
               t={t}
@@ -669,16 +490,9 @@ export function LeadQuiz({ open, onClose, onConvert, locale = "da" }: Props) {
           )}
           {currentStepKey === "result" && (
             <ResultStep
-              result={result}
-              inputs={inputs}
               analysis={analysis}
-              onConvert={() => {
-                onClose();
-                onConvert();
-              }}
+              path={path}
               t={t}
-              channelLabels={labels.channel}
-              fmtRange={fmtRange}
             />
           )}
 
@@ -708,7 +522,7 @@ function StepShell({
   children,
   footer,
 }: {
-  question: string;
+  question: React.ReactNode;
   hint?: string;
   children: React.ReactNode;
   footer?: React.ReactNode;
@@ -716,7 +530,7 @@ function StepShell({
   return (
     <div className="flex flex-1 flex-col gap-7">
       <div>
-        <h2 className="font-display text-2xl leading-tight tracking-tight sm:text-3xl">
+        <h2 className="font-display text-3xl leading-[1.05] tracking-tight sm:text-[2.5rem]">
           {question}
         </h2>
         {hint && (
@@ -745,7 +559,7 @@ function PrimaryButton({
       type={type ?? "button"}
       onClick={onClick}
       disabled={disabled}
-      className="inline-flex items-center gap-3 self-start rounded-full bg-[var(--forest)] px-7 py-3.5 text-center text-[11px] font-bold uppercase leading-snug tracking-[0.18em] text-[#fff8ea] shadow-[0_18px_50px_-16px_rgba(25,70,58,0.5)] transition hover:-translate-y-0.5 hover:shadow-[0_24px_60px_-16px_rgba(25,70,58,0.6)] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:translate-y-0 sm:text-xs sm:tracking-[0.25em]"
+      className="inline-flex items-center gap-3 self-start rounded-full bg-[var(--cream)] px-9 py-4 text-center text-xs font-bold uppercase leading-snug tracking-[0.2em] text-[#14110d] shadow-[0_18px_50px_-16px_rgba(0,0,0,0.6)] transition hover:-translate-y-0.5 hover:bg-white hover:shadow-[0_24px_60px_-16px_rgba(0,0,0,0.7)] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:translate-y-0 sm:text-[13px] sm:tracking-[0.28em]"
     >
       {children}
     </button>
@@ -766,20 +580,24 @@ function UrlStep({
   const valid = isUrlValid(value);
   return (
     <StepShell
-      question={t.urlQuestion}
+      question={
+        <>
+          {t.urlQuestionBefore}
+          <em className="bg-gradient-to-b from-[#ffb86b] via-[#ff6b2c] to-[#c93c0a] bg-clip-text italic text-transparent">
+            {t.urlQuestionAccent}
+          </em>
+          {t.urlQuestionAfter}
+        </>
+      }
+      hint={t.urlHint}
       footer={
-        <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:gap-5">
-          <PrimaryButton
-            type="button"
-            onClick={onSubmit}
-            disabled={!valid}
-          >
-            {t.next}
-          </PrimaryButton>
-          <span className="text-[10px] font-bold uppercase tracking-[0.25em] text-[var(--cream)]/45">
-            {t.urlHint}
-          </span>
-        </div>
+        <PrimaryButton
+          type="button"
+          onClick={onSubmit}
+          disabled={!valid}
+        >
+          {t.next}
+        </PrimaryButton>
       }
     >
       <input
@@ -796,7 +614,7 @@ function UrlStep({
         placeholder={t.urlPlaceholder}
         autoComplete="url"
         inputMode="url"
-        className="w-full border-b border-[var(--cream)]/20 bg-transparent pb-3 font-display text-2xl text-[var(--cream)] placeholder:font-sans placeholder:text-base placeholder:text-[var(--cream)]/25 focus:border-[#ff6b2c] focus:outline-none sm:text-3xl"
+        className="w-full border-b border-[var(--cream)]/20 bg-transparent pb-3 font-display text-2xl text-[var(--cream)] placeholder:font-sans placeholder:text-base placeholder:text-[var(--cream)]/40 focus:border-[#ff6b2c] focus:outline-none sm:text-3xl"
       />
     </StepShell>
   );
@@ -853,155 +671,178 @@ function NumberStep({
   );
 }
 
-function SliderStep({
-  question,
-  hint,
-  value,
-  onChange,
-  onSubmit,
-  min,
-  max,
-  suffix,
-  nextLabel,
-}: {
-  question: string;
-  hint?: string;
-  value: string;
-  onChange: (v: string) => void;
-  onSubmit: () => void;
-  min: number;
-  max: number;
-  suffix: string;
-  nextLabel: string;
-}) {
-  return (
-    <StepShell
-      question={question}
-      hint={hint}
-      footer={<PrimaryButton onClick={onSubmit}>{nextLabel}</PrimaryButton>}
-    >
-      <div className="flex flex-col gap-5">
-        <div className="flex items-baseline gap-3">
-          <span className="font-display text-5xl text-[var(--cream)] sm:text-6xl">
-            {value}
-          </span>
-          <span className="font-mono text-[11px] font-bold uppercase tracking-[0.25em] text-[var(--cream)]/55">
-            {suffix}
-          </span>
-        </div>
-        <input
-          type="range"
-          min={min}
-          max={max}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className="w-full accent-[#ff6b2c]"
-        />
-      </div>
-    </StepShell>
-  );
-}
+// ─────────────────────────────────────────────────────────────────────
+// Volume step — leads + deal value on a single screen
+// ─────────────────────────────────────────────────────────────────────
 
-function ChoiceStep<T extends string>({
-  question,
-  value,
-  onChange,
-  options,
+function VolumeStep({
+  leadsValue,
+  dealValue,
+  onLeadsChange,
+  onDealChange,
   onSubmit,
-  nextLabel,
+  t,
 }: {
-  question: string;
-  value: T;
-  onChange: (v: T) => void;
-  options: { value: T; label: string }[];
+  leadsValue: string;
+  dealValue: string;
+  onLeadsChange: (v: string) => void;
+  onDealChange: (v: string) => void;
   onSubmit: () => void;
-  nextLabel: string;
+  t: CopyT;
 }) {
+  const valid = Number(leadsValue) > 0 && Number(dealValue) > 0;
   return (
     <StepShell
-      question={question}
-      footer={<PrimaryButton onClick={onSubmit}>{nextLabel}</PrimaryButton>}
-    >
-      <div className="flex flex-col gap-2">
-        {options.map((opt) => {
-          const active = value === opt.value;
-          return (
-            <button
-              key={opt.value}
-              type="button"
-              onClick={() => onChange(opt.value)}
-              className={`flex items-center justify-between rounded-xl border px-4 py-3 text-left text-[15px] transition ${
-                active
-                  ? "border-[#ff6b2c] bg-[#ff6b2c]/10 text-[var(--cream)]"
-                  : "border-[var(--cream)]/15 text-[var(--cream)]/75 hover:border-[var(--cream)]/35 hover:text-[var(--cream)]"
-              }`}
-            >
-              <span>{opt.label}</span>
-              {active && (
-                <span aria-hidden className="text-[#ff6b2c]">
-                  ✓
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </div>
-    </StepShell>
-  );
-}
-
-function MultiChoiceStep<T extends string>({
-  question,
-  hint,
-  values,
-  onToggle,
-  options,
-  onSubmit,
-  submitLabel,
-}: {
-  question: string;
-  hint?: string;
-  values: T[];
-  onToggle: (v: T) => void;
-  options: { value: T; label: string }[];
-  onSubmit: () => void;
-  submitLabel?: string;
-}) {
-  return (
-    <StepShell
-      question={question}
-      hint={hint}
+      question={t.volumeQuestion}
+      hint={t.volumeHint}
       footer={
-        <PrimaryButton onClick={onSubmit}>
-          {submitLabel ?? "Next →"}
+        <PrimaryButton onClick={onSubmit} disabled={!valid}>
+          {t.next}
         </PrimaryButton>
       }
     >
-      <div className="flex flex-wrap gap-2">
-        {options.map((opt) => {
-          const active = values.includes(opt.value);
-          return (
-            <button
-              key={opt.value}
-              type="button"
-              onClick={() => onToggle(opt.value)}
-              className={`rounded-full border px-4 py-2 text-[13px] transition ${
-                active
-                  ? "border-[#ff6b2c] bg-[#ff6b2c]/15 text-[var(--cream)]"
-                  : "border-[var(--cream)]/20 text-[var(--cream)]/75 hover:border-[var(--cream)]/40 hover:text-[var(--cream)]"
-              }`}
-            >
-              {opt.label}
-            </button>
-          );
-        })}
+      <div className="flex flex-col gap-7">
+        <div>
+          <label className="block font-mono text-[10px] font-bold uppercase tracking-[0.25em] text-[var(--cream)]/45">
+            {t.volumeLeadsLabel}
+          </label>
+          <div className="mt-2 flex items-baseline gap-3">
+            <input
+              autoFocus
+              type="text"
+              inputMode="numeric"
+              value={leadsValue}
+              onChange={(e) => onLeadsChange(e.target.value.replace(/[^\d]/g, ""))}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && valid) {
+                  e.preventDefault();
+                  onSubmit();
+                }
+              }}
+              className="w-full max-w-[10ch] border-b border-[var(--cream)]/20 bg-transparent pb-2 font-display text-3xl text-[var(--cream)] tabular-nums focus:border-[#ff6b2c] focus:outline-none sm:text-4xl"
+            />
+            <span className="font-mono text-[11px] font-bold uppercase tracking-[0.25em] text-[var(--cream)]/55">
+              {t.volumeLeadsSuffix}
+            </span>
+          </div>
+        </div>
+        <div>
+          <label className="block font-mono text-[10px] font-bold uppercase tracking-[0.25em] text-[var(--cream)]/45">
+            {t.volumeDealLabel}
+          </label>
+          <div className="mt-2 flex items-baseline gap-3">
+            <input
+              type="text"
+              inputMode="numeric"
+              value={dealValue}
+              onChange={(e) => onDealChange(e.target.value.replace(/[^\d]/g, ""))}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && valid) {
+                  e.preventDefault();
+                  onSubmit();
+                }
+              }}
+              className="w-full max-w-[12ch] border-b border-[var(--cream)]/20 bg-transparent pb-2 font-display text-3xl text-[var(--cream)] tabular-nums focus:border-[#ff6b2c] focus:outline-none sm:text-4xl"
+            />
+            <span className="font-mono text-[11px] font-bold uppercase tracking-[0.25em] text-[var(--cream)]/55">
+              {t.volumeDealSuffix}
+            </span>
+          </div>
+        </div>
       </div>
     </StepShell>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// Contact gate (before result)
+// Path step — Loom or meeting. Click submits the form + advances.
+// ─────────────────────────────────────────────────────────────────────
+
+function PathStep({
+  onChoose,
+  submitting,
+  error,
+  t,
+}: {
+  onChoose: (path: "loom" | "meeting") => void;
+  submitting: boolean;
+  error: string | null;
+  t: CopyT;
+}) {
+  return (
+    <StepShell question={t.pathQuestion} hint={t.pathHint}>
+      <div className="flex flex-col gap-3">
+        <PathCard
+          label={t.pathLoomLabel}
+          description={t.pathLoomDescription}
+          accent="orange"
+          disabled={submitting}
+          onClick={() => onChoose("loom")}
+        />
+        <PathCard
+          label={t.pathMeetingLabel}
+          description={t.pathMeetingDescription}
+          accent="cream"
+          disabled={submitting}
+          onClick={() => onChoose("meeting")}
+        />
+        {error && (
+          <p className="mt-2 text-[12px] text-[#ff6b2c]">{error}</p>
+        )}
+        {submitting && (
+          <p className="mt-2 font-mono text-[10px] uppercase tracking-[0.25em] text-[var(--cream)]/55">
+            {t.contactSending}
+          </p>
+        )}
+      </div>
+    </StepShell>
+  );
+}
+
+function PathCard({
+  label,
+  description,
+  accent,
+  disabled,
+  onClick,
+}: {
+  label: string;
+  description: string;
+  accent: "orange" | "cream";
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  const borderHover =
+    accent === "orange"
+      ? "hover:border-[#ff6b2c] hover:bg-[#ff6b2c]/[0.04]"
+      : "hover:border-[var(--cream)]/40 hover:bg-[var(--cream)]/[0.03]";
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={`group flex items-start gap-4 rounded-xl border border-[var(--cream)]/15 px-5 py-4 text-left transition disabled:cursor-not-allowed disabled:opacity-40 ${borderHover}`}
+    >
+      <div className="flex-1">
+        <div className="font-display text-xl leading-tight text-[var(--cream)] sm:text-2xl">
+          {label}
+        </div>
+        <p className="mt-1 text-[13px] leading-relaxed text-[var(--cream)]/65">
+          {description}
+        </p>
+      </div>
+      <span
+        aria-hidden
+        className="mt-1 text-lg text-[var(--cream)]/40 transition group-hover:translate-x-1 group-hover:text-[var(--cream)]"
+      >
+        →
+      </span>
+    </button>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Contact step — just collects data; no API call here
 // ─────────────────────────────────────────────────────────────────────
 
 const EMAIL_RE_CLIENT = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -1016,8 +857,6 @@ function ContactStep({
   onEmailChange,
   onPhoneChange,
   onSubmit,
-  submitting,
-  error,
   t,
 }: {
   name: string;
@@ -1027,8 +866,6 @@ function ContactStep({
   onEmailChange: (v: string) => void;
   onPhoneChange: (v: string) => void;
   onSubmit: () => void;
-  submitting: boolean;
-  error: string | null;
   t: CopyT;
 }) {
   const valid =
@@ -1039,18 +876,9 @@ function ContactStep({
     <StepShell
       question={t.contactQuestion}
       footer={
-        <div className="flex flex-col items-start gap-3">
-          <PrimaryButton
-            type="button"
-            onClick={onSubmit}
-            disabled={!valid || submitting}
-          >
-            {submitting ? t.contactSending : t.contactSubmit}
-          </PrimaryButton>
-          {error && (
-            <p className="text-[12px] text-[#ff6b2c]">{error}</p>
-          )}
-        </div>
+        <PrimaryButton type="button" onClick={onSubmit} disabled={!valid}>
+          {t.contactSubmit}
+        </PrimaryButton>
       }
     >
       <div className="flex flex-col gap-4">
@@ -1070,7 +898,7 @@ function ContactStep({
           value={email}
           onChange={(e) => onEmailChange(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter" && valid && !submitting) {
+            if (e.key === "Enter" && valid) {
               e.preventDefault();
               onSubmit();
             }
@@ -1085,7 +913,7 @@ function ContactStep({
           value={phone}
           onChange={(e) => onPhoneChange(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter" && valid && !submitting) {
+            if (e.key === "Enter" && valid) {
               e.preventDefault();
               onSubmit();
             }
@@ -1093,9 +921,6 @@ function ContactStep({
           placeholder={t.contactPhonePlaceholder}
           className="w-full border-b border-[var(--cream)]/20 bg-transparent pb-2 text-[18px] text-[var(--cream)] placeholder:text-[var(--cream)]/25 focus:border-[#ff6b2c] focus:outline-none"
         />
-        <p className="text-[12px] leading-relaxed text-[var(--cream)]/55">
-          {t.contactNote}
-        </p>
       </div>
     </StepShell>
   );
@@ -1105,182 +930,61 @@ function ContactStep({
 // Result
 // ─────────────────────────────────────────────────────────────────────
 
+// Result step renders only for the Loom path. Meeting path redirects
+// to Calendly from submitWithPath() before this step is reached.
 function ResultStep({
-  result,
-  inputs,
   analysis,
-  onConvert,
   t,
-  channelLabels,
-  fmtRange,
 }: {
-  result: ReturnType<typeof computeLoss>;
-  inputs: QuizInputs;
   analysis: AnalysisState;
-  onConvert: () => void;
+  path: "loom" | "meeting" | null;
   t: CopyT;
-  channelLabels: Record<Channel, string>;
-  fmtRange: (n: number) => string;
 }) {
-  const missingLabels = result.missingChannels.map((c) => channelLabels[c]);
-
+  const aiReady = analysis.status === "ready" ? analysis.data : null;
   return (
-    <div className="flex flex-col gap-7">
-      <div>
-        <p className="font-mono text-[10px] font-bold uppercase tracking-[0.3em] text-[#ff6b2c]/85">
-          {t.resultEyebrow}
-        </p>
-        <p className="mt-1 font-display text-[1.75rem] leading-[1.05] tracking-tight text-[var(--cream)] tabular-nums sm:text-[3.5rem]">
-          <span className="bg-gradient-to-b from-[#ffb86b] via-[#ff6b2c] to-[#c93c0a] bg-clip-text italic text-transparent">
-            {fmtRange(result.totalLoss)}
-          </span>
-        </p>
-        <p className="mt-2 text-[13px] text-[var(--cream)]/55">
-          {t.resultPeriod}
-        </p>
-      </div>
+    <div className="flex flex-col gap-8">
+      <h2 className="font-display text-[1.75rem] leading-[1.1] tracking-tight text-[var(--cream)] sm:text-[2.5rem]">
+        {t.heroBefore}{" "}
+        <em className="bg-gradient-to-b from-[#ffb86b] via-[#ff6b2c] to-[#c93c0a] bg-clip-text italic text-transparent">
+          {t.heroAccent}
+        </em>
+        {t.heroAfter}
+      </h2>
 
-      {/* AI section */}
       {analysis.status === "loading" && (
-        <div className="rounded-xl border border-[var(--cream)]/12 bg-[var(--cream)]/[0.03] px-5 py-4 text-[13px] text-[var(--cream)]/65">
+        <p className="text-[14px] leading-[1.65] text-[var(--cream)]/55">
           {t.aiLoading}
-        </div>
-      )}
-      {analysis.status === "ready" && (
-        <div className="rounded-xl border border-[var(--cream)]/12 bg-[var(--cream)]/[0.03] px-5 py-4">
-          <p className="font-mono text-[9px] font-bold uppercase tracking-[0.3em] text-[var(--cream)]/55">
-            {t.aiRead}
-          </p>
-          <p className="mt-2 text-[14px] leading-relaxed text-[var(--cream)]/85">
-            {analysis.data.notes || analysis.data.icp}
-          </p>
-          {analysis.data.currentChannels.length > 0 && (
-            <p className="mt-3 text-[12px] text-[var(--cream)]/65">
-              <span className="font-bold uppercase tracking-[0.2em] text-[var(--cream)]/45">
-                {t.aiUses}
-              </span>{" "}
-              {analysis.data.currentChannels.join(", ")}
-            </p>
-          )}
-          {analysis.data.missingChannels.length > 0 && (
-            <p className="mt-1 text-[12px] text-[var(--cream)]/65">
-              <span className="font-bold uppercase tracking-[0.2em] text-[var(--cream)]/45">
-                {t.aiMissing}
-              </span>{" "}
-              {analysis.data.missingChannels.join(", ")}
-            </p>
-          )}
-        </div>
-      )}
-
-      {/* Loss breakdown — three machine-labeled rows, each anchored to one
-          of the three GTM machines on the site. Replaces the previous
-          speed-centric "Hvor det går galt" framing. */}
-      <div className="border-t border-[var(--cream)]/10 pt-6">
-        <p className="font-mono text-[10px] font-bold uppercase tracking-[0.3em] text-[var(--cream)]/55">
-          {t.breakdownTitle}
         </p>
-        <ul className="mt-5 flex flex-col gap-5 text-[14px] leading-relaxed">
-          {/* OUTBOUND */}
-          <li className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:gap-4">
-            <div className="flex items-baseline gap-3 sm:min-w-[14rem]">
-              <span className="text-[9px] font-bold uppercase tracking-[0.3em] text-[var(--clay)]">
-                {t.machineOutbound}
+      )}
+      {aiReady && (
+        <p className="text-[14px] leading-[1.65] text-[var(--cream)]/75">
+          {aiReady.notes || aiReady.icp}
+          {aiReady.currentChannels.length > 0 && (
+            <>
+              {" "}
+              {t.aiUsesPhrase}{" "}
+              <span className="text-[var(--cream)]">
+                {aiReady.currentChannels.join(", ")}
               </span>
-              <span className="font-display text-base font-semibold tabular text-[#ff6b2c]">
-                {fmtRange(result.outboundLoss)}
-              </span>
-            </div>
-            <span className="flex-1 text-[var(--cream)]/72">
-              {inputs.outboundQuality === "templated"
-                ? t.outboundTemplated
-                : inputs.outboundQuality === "none"
-                ? t.outboundNone
-                : result.missingChannels.length > 0
-                ? t.outboundMissing(missingLabels.join(", "))
-                : t.outboundFull}
               .
-            </span>
-          </li>
+            </>
+          )}
+        </p>
+      )}
 
-          {/* HASTIGHED */}
-          <li className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:gap-4">
-            <div className="flex items-baseline gap-3 sm:min-w-[14rem]">
-              <span className="text-[9px] font-bold uppercase tracking-[0.3em] text-[#ff6b2c]">
-                {t.machineSpeed}
-              </span>
-              <span className="font-display text-base font-semibold tabular text-[#ff6b2c]">
-                {fmtRange(result.hastighedLoss)}
-              </span>
-            </div>
-            <span className="flex-1 text-[var(--cream)]/72">
-              {t.speedBody}{" "}
-              <a
-                href="https://25649.fs1.hubspotusercontent-na2.net/hub/25649/file-13535879-pdf/docs/mit_study.pdf"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline decoration-[#ff6b2c]/50 decoration-2 underline-offset-2 hover:decoration-[#ff6b2c]"
-              >
-                {t.speedLink}
-              </a>
-              .
-            </span>
-          </li>
-
-          {/* OPFØLGNING */}
-          <li className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:gap-4">
-            <div className="flex items-baseline gap-3 sm:min-w-[14rem]">
-              <span className="text-[9px] font-bold uppercase tracking-[0.3em] text-[var(--forest)]">
-                {t.machineFollowup}
-              </span>
-              <span className="font-display text-base font-semibold tabular text-[#ff6b2c]">
-                {fmtRange(result.opfølgningLoss)}
-              </span>
-            </div>
-            <span className="flex-1 text-[var(--cream)]/72">
-              {inputs.followupQuality === "manual" || inputs.followupQuality === "none"
-                ? t.followupManual
-                : inputs.followupQuality === "partial"
-                ? t.followupPartial
-                : t.followupBenchmark(Math.round(inputs.closeRate * 100))}
-              .
-            </span>
-          </li>
-        </ul>
-      </div>
-
-      {/* CTA — system-level, not speed-leak-flavored */}
-      <div className="flex flex-col items-start gap-3 border-t border-[var(--cream)]/10 pt-6 sm:flex-row sm:items-center">
-        <PrimaryButton onClick={onConvert}>
-          {t.cta}
-        </PrimaryButton>
-        <span className="text-[11px] uppercase tracking-[0.2em] text-[var(--cream)]/40">
-          {t.ctaNote}
-        </span>
+      <div className="flex flex-col items-start border-t border-[var(--cream)]/10 pt-7">
+        <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:gap-5">
+          <a
+            href="mailto:louis@carterco.dk?subject=Loom-audit%20%E2%80%94%20%2010-min%20gennemgang%20af%20lead-flow&body=Hej%20Louis%2C%0A%0AJeg%20vil%20gerne%20have%20et%2010-min%20Loom-audit%20af%20vores%20lead-flow.%0A%0AHvordan%20deler%20jeg%20view-only%20CRM-adgang%3F"
+            className="inline-flex items-center gap-3 self-start rounded-full bg-[var(--forest)] px-7 py-3.5 text-center text-[11px] font-bold uppercase leading-snug tracking-[0.18em] text-[#fff8ea] shadow-[0_18px_50px_-16px_rgba(25,70,58,0.5)] transition hover:-translate-y-0.5 hover:shadow-[0_24px_60px_-16px_rgba(25,70,58,0.6)] sm:text-xs sm:tracking-[0.25em]"
+          >
+            {t.cta}
+          </a>
+          <span className="text-[11px] uppercase tracking-[0.2em] text-[var(--cream)]/40">
+            {t.ctaNote}
+          </span>
+        </div>
       </div>
     </div>
   );
-}
-
-// ─────────────────────────────────────────────────────────────────────
-// Helpers
-// ─────────────────────────────────────────────────────────────────────
-
-function useCountUp(target: number, durationMs = 900): number {
-  const [value, setValue] = useState(0);
-  useEffect(() => {
-    let raf = 0;
-    const start = performance.now();
-    const from = 0;
-    const tick = (now: number) => {
-      const elapsed = Math.min(1, (now - start) / durationMs);
-      // ease-out cubic
-      const eased = 1 - Math.pow(1 - elapsed, 3);
-      setValue(from + (target - from) * eased);
-      if (elapsed < 1) raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [target, durationMs]);
-  return value;
 }

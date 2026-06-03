@@ -16,3 +16,22 @@ export function workspaceLabel(id: string | null | undefined): string {
   if (!id) return "?";
   return WORKSPACE_LABELS[id] ?? id.slice(0, 8);
 }
+
+// Looks up the canonical (active) SendPilot sender for a workspace via the
+// workspace_senders table. ALL send paths (outreach-approve, invite-alt-
+// contact, outreach-engagement-tick) call this and use the result as the
+// source of truth — never trust the pipeline row's sendpilot_sender_id
+// blindly, since a stale or wrongly-stamped value could cause a message
+// to go from the wrong LinkedIn account.
+//
+// Returns { senderId, mismatch? } so callers can decide how loud to log.
+// deno-lint-ignore no-explicit-any
+export async function canonicalSenderFor(supabase: any, workspaceId: string | null | undefined): Promise<string | null> {
+  if (!workspaceId) return null;
+  const { data, error } = await supabase.rpc("canonical_sender_for", { p_workspace_id: workspaceId });
+  if (error) {
+    console.error("canonical_sender_for rpc failed", workspaceId, error);
+    return null;
+  }
+  return typeof data === "string" ? data : null;
+}

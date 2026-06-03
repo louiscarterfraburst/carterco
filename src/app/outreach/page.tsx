@@ -133,6 +133,9 @@ type PipelineRow = {
   message_strategy_rationale: string | null;
   message_model: string | null;
   message_language: "da" | "en" | null;
+  // Tresyv 3-arm A/B. v1_long / v2_short are text-only (no SendSpark render),
+  // v3_video uses the existing video flow. Null for non-Tresyv workspaces.
+  first_dm_variant: "v1_long" | "v2_short" | "v3_video" | null;
   lead?: LeadEnrich;
 };
 
@@ -1631,8 +1634,14 @@ function PendingTab(props: {
 
                   <div className="flex flex-1 flex-wrap gap-4">
                     {/* video preview / thumbnail — only for video-render clients.
-                        AI-drafted clients (OdaGroup) have no video and skip this block. */}
-                    {r.message_strategy ? null : (
+                        AI-drafted clients (OdaGroup, message_strategy != null)
+                        skip this block. Tresyv text arms (first_dm_variant =
+                        v1_long / v2_short) also skip — they're text-only DMs
+                        with no video, so the empty "Video mangler" placeholder
+                        was wasted real estate squeezing the body. */}
+                    {(r.message_strategy
+                      || r.first_dm_variant === "v1_long"
+                      || r.first_dm_variant === "v2_short") ? null : (
                     <div className="w-full sm:w-[280px] shrink-0">
                       {r.embed_link ? (
                         isPlaying ? (
@@ -3308,8 +3317,8 @@ function InboxTab(props: {
     <div className="space-y-12">
       {pendingRows.length > 0 ? (
         <InboxSection
-          label="Godkend videoer"
-          hint="Rendered videoer afventer godkendelse — godkend for at sende beskeden."
+          label="Godkend & send"
+          hint="Beskeder klar til godkendelse — både rendered videoer og tekst-DMs. Godkend for at sende."
           count={pendingRows.length}
         >
           <PendingTab

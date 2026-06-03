@@ -32,7 +32,26 @@ type PipelineRow = {
   workspace_id: string;
   contact_email: string;
   alt_search_id: string;
+  alt_search_kind: string | null;
 };
+
+// Mirror of TITLE_BLOCKLIST / splitTitles in _shared/referral-search.ts.
+// Duplicated here to avoid an import cycle in the poll path. Used to decide
+// which inserted candidates qualify for auto-invite.
+const TITLE_SPLIT_RE = /\s*(?:,|\/|\bor\b|\beller\b|\bog\b|\band\b|&)\s*/i;
+function splitReferralTitles(raw: string | null | undefined): string[] {
+  if (!raw) return [];
+  return raw.split(TITLE_SPLIT_RE).map((t) => t.trim()).filter((t) => t.length > 1);
+}
+// Loose contains: does an alt's job_title look like a target title?
+// Both strings are lowercased; we accept either direction of substring match
+// so 'COO' matches 'Chief Operating Officer' and vice versa.
+function titleMatches(altTitle: string | null | undefined, target: string): boolean {
+  const a = (altTitle ?? "").toLowerCase().trim();
+  const t = target.toLowerCase().trim();
+  if (!a || !t) return false;
+  return a.includes(t) || t.includes(a);
+}
 
 type SignalRow = {
   id: string;
@@ -73,7 +92,7 @@ Deno.serve(async (request) => {
   // scoping happens upstream.
   const { data: rows, error } = await supabase
     .from("outreach_pipeline")
-    .select("sendpilot_lead_id, workspace_id, contact_email, alt_search_id")
+    .select("sendpilot_lead_id, workspace_id, contact_email, alt_search_id, alt_search_kind")
     .eq("alt_search_status", "pending")
     .not("alt_search_id", "is", null)
     .limit(50);
@@ -238,6 +257,31 @@ async function pollOne(row: PipelineRow): Promise<Record<string, unknown>> {
     .maybeSingle();
   const origCompany = ((origLead?.company as string | undefined) ?? "").toLowerCase().trim();
 
+  // Referral-driven searches (fireReferralTitleSearch) tag candidates as
+  // reply_referral_search so invite-alt-contact uses the referral connect
+  // note and the action queue priorities them above generic alts.
+  const isReferralSearch = row.alt_search_kind === "referral_title";
+  const source = isReferralSearch ? "reply_referral_search" : "sendpilot";
+
+  // For referral searches, pull the trigger reply so we can match candidate
+  // titles against what the prospect actually named ("kontakt vores COO").
+  // Confidence ≥ 0.9 gates auto-invite — anything fuzzier stays manual.
+  let referralTargets: string[] = [];
+  let referralConfidence = 0;
+  if (isReferralSearch) {
+    const { data: trigger } = await supabase
+      .from("outreach_replies")
+      .select("referral_target_title, confidence, received_at")
+      .eq("sendpilot_lead_id", row.sendpilot_lead_id)
+      .eq("intent", "referral")
+      .order("received_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    referralTargets = splitReferralTitles(trigger?.referral_target_title);
+    referralConfidence = Number(trigger?.confidence ?? 0);
+  }
+
+  const insertedIds: Array<{ id: string; title: string | null }> = [];
   let inserted = 0;
   for (const l of leads) {
     const linkedinUrl = (l.linkedin_url ?? "").trim();
@@ -252,7 +296,7 @@ async function pollOne(row: PipelineRow): Promise<Record<string, unknown>> {
       continue;
     }
 
-    const { error: insErr } = await supabase.from("outreach_alt_contacts").insert({
+    const { data: ins, error: insErr } = await supabase.from("outreach_alt_contacts").insert({
       workspace_id: row.workspace_id,
       pipeline_lead_id: row.sendpilot_lead_id,
       name: fullName,
@@ -261,14 +305,32 @@ async function pollOne(row: PipelineRow): Promise<Record<string, unknown>> {
       seniority: l.seniority ?? null,
       employees: l.employees ?? null,
       company: l.company ?? null,
-      source: "sendpilot",
+      source,
       sendpilot_lead_db_id: l.id ?? null,
-    });
+    }).select("id").maybeSingle();
     if (insErr && !`${insErr.message}`.includes("duplicate key")) {
       console.error("alt_contact insert error", insErr);
       continue;
     }
-    if (!insErr) inserted++;
+    if (!insErr) {
+      inserted++;
+      if (ins?.id) insertedIds.push({ id: ins.id, title: l.job_title ?? null });
+    }
+  }
+
+  // Confidence-gated auto-invite: only fires for referral_title searches with
+  // classifier confidence ≥ 0.9. We invite up to 2 candidates whose titles
+  // match one of the roles the prospect named. Anything ambiguous stays in
+  // the action queue for manual review.
+  let autoInvited = 0;
+  if (isReferralSearch && referralConfidence >= 0.9 && referralTargets.length > 0) {
+    const matches = insertedIds.filter((cand) =>
+      referralTargets.some((t) => titleMatches(cand.title, t))
+    ).slice(0, 2);
+    for (const m of matches) {
+      const ok = await autoInvite(m.id);
+      if (ok) autoInvited++;
+    }
   }
 
   const finalStatus = inserted > 0 ? "completed" : "empty";
@@ -277,15 +339,55 @@ async function pollOne(row: PipelineRow): Promise<Record<string, unknown>> {
     .eq("sendpilot_lead_id", row.sendpilot_lead_id);
 
   if (inserted > 0) {
-    await pushAltsReady(row, origLead?.company as string | null | undefined, inserted);
+    await pushAltsReady(row, origLead?.company as string | null | undefined, inserted, autoInvited);
   }
 
   return {
     lead: row.sendpilot_lead_id,
     action: finalStatus,
     inserted,
+    auto_invited: autoInvited,
     returned: leads.length,
   };
+}
+
+// Calls invite-alt-contact with the service-role bearer. invite-alt-contact
+// detects service-role and runs without user JWT (auto-fire path). Stamps
+// auto_invited_at on the alt_contact regardless of the SendPilot response so
+// we have an audit trail even on partial failures.
+//
+// Connect note: never included. Bare connects perform better and don't
+// telegraph "outreach" to the recipient. The referrer's name lives in the
+// post-accept first DM where there's room to do it right.
+async function autoInvite(altContactId: string): Promise<boolean> {
+  const url = `${Deno.env.get("SUPABASE_URL") ?? ""}/functions/v1/invite-alt-contact`;
+  const serviceRole = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${serviceRole}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ altContactId, autoInvoked: true }),
+    });
+    const ok = res.status === 200 || res.status === 201;
+    await supabase.from("outreach_alt_contacts").update({
+      auto_invited_at: new Date().toISOString(),
+      auto_invite_reason: ok ? "title_match" : `failed_http_${res.status}`,
+    }).eq("id", altContactId);
+    if (!ok) {
+      console.error("auto-invite non-2xx", altContactId, res.status, await res.text());
+    }
+    return ok;
+  } catch (e) {
+    console.error("auto-invite error", altContactId, e);
+    await supabase.from("outreach_alt_contacts").update({
+      auto_invited_at: new Date().toISOString(),
+      auto_invite_reason: "fetch_error",
+    }).eq("id", altContactId);
+    return false;
+  }
 }
 
 // Cheap fuzzy company-name match. SendPilot may return "Opiniosec" when we
@@ -302,7 +404,7 @@ function companiesMatch(a: string, b: string): boolean {
   return aa.includes(bb) || bb.includes(aa);
 }
 
-async function pushAltsReady(row: PipelineRow, company: string | null | undefined, count: number) {
+async function pushAltsReady(row: PipelineRow, company: string | null | undefined, count: number, autoInvited = 0) {
   if (!Deno.env.get("VAPID_PUBLIC_KEY") || !Deno.env.get("VAPID_PRIVATE_KEY")) return;
   const { data: subs } = await supabase
     .from("push_subscriptions")
@@ -310,11 +412,13 @@ async function pushAltsReady(row: PipelineRow, company: string | null | undefine
     .eq("workspace_id", row.workspace_id);
   if (!subs || subs.length === 0) return;
 
-  const payload = JSON.stringify({
-    title: `${workspaceLabel(row.workspace_id)} /outreach · ${count} alternative${count === 1 ? "" : "r"} fundet`,
-    body: company ? `Nye kontaktforslag hos ${company}` : "Nye kontaktforslag fundet",
-    url: "/outreach",
-  });
+  const title = autoInvited > 0
+    ? `${workspaceLabel(row.workspace_id)} /outreach · auto-inviteret ${autoInvited} fra henvisning`
+    : `${workspaceLabel(row.workspace_id)} /outreach · ${count} alternative${count === 1 ? "" : "r"} fundet`;
+  const body = autoInvited > 0 && company
+    ? `Henvisnings-invite sendt hos ${company}`
+    : company ? `Nye kontaktforslag hos ${company}` : "Nye kontaktforslag fundet";
+  const payload = JSON.stringify({ title, body, url: "/outreach" });
 
   const results = await Promise.allSettled(
     (subs as PushSubscriptionRow[]).map((sub) =>

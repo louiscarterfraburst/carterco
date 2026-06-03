@@ -1,21 +1,37 @@
 import { NextRequest, NextResponse } from "next/server";
 
-// Combined proxy for two unrelated jobs:
+// Combined proxy for three unrelated jobs:
 //
 // 1. Basic-auth gate on /test-leads (admin-only debug page)
 // 2. Locale auto-routing on / and /en
+// 3. Password gate on /outreach-bikenor (admin approve page for the bikenor pilot)
 //
-// The matcher covers all three path patterns; the function dispatches.
+// The matcher covers all path patterns; the function dispatches.
 
 export const config = {
-  matcher: ["/", "/en", "/test-leads/:path*"],
+  matcher: [
+    "/",
+    "/en",
+    "/test-leads/:path*",
+    "/outreach-bikenor/:path*",
+    "/api/outreach-bikenor/:path*",
+  ],
 };
 
 const LOCALE_COOKIE = "locale";
 const LOCALE_COOKIE_MAX_AGE = 60 * 60 * 24 * 365; // 1 year
 
+const BIKENOR_COOKIE = "bk_approval";
+
 export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
+
+  if (
+    pathname.startsWith("/outreach-bikenor") ||
+    pathname.startsWith("/api/outreach-bikenor")
+  ) {
+    return bikenorGate(req);
+  }
 
   if (pathname.startsWith("/test-leads")) {
     return basicAuthGate(req);
@@ -102,3 +118,65 @@ function withLocaleCookie(res: NextResponse, locale: "da" | "en"): NextResponse 
   });
   return res;
 }
+
+// ─── /outreach-bikenor password gate ───────────────────────────────
+//
+// Admin-only approve page for the bikenor pilot. Set BIKENOR_APPROVAL_PASSWORD
+// in env. If unset: prod blocks (503), dev passes through.
+
+function bikenorGate(req: NextRequest) {
+  const expected = process.env.BIKENOR_APPROVAL_PASSWORD;
+  const url = req.nextUrl;
+
+  if (!expected) {
+    if (process.env.NODE_ENV === "production") {
+      return new NextResponse(
+        "BIKENOR_APPROVAL_PASSWORD not set in this environment",
+        { status: 503 },
+      );
+    }
+    return NextResponse.next();
+  }
+
+  if (url.pathname === "/outreach-bikenor/login" && req.method === "POST") {
+    return NextResponse.next();
+  }
+
+  const cookie = req.cookies.get(BIKENOR_COOKIE)?.value;
+  if (cookie && safeEqual(cookie, bikenorHash(expected))) {
+    return NextResponse.next();
+  }
+
+  if (url.pathname === "/outreach-bikenor/login") {
+    return NextResponse.next();
+  }
+
+  const loginUrl = url.clone();
+  loginUrl.pathname = "/outreach-bikenor/login";
+  loginUrl.searchParams.set("next", url.pathname + url.search);
+  return NextResponse.redirect(loginUrl);
+}
+
+// Cheap derived value (not cryptographic) — keeps the raw password out of
+// cookies in plaintext. Fine for an admin-only page Louis controls.
+function bikenorHash(s: string): string {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) {
+    h = (h << 5) - h + s.charCodeAt(i);
+    h |= 0;
+  }
+  return `v1.${Math.abs(h).toString(36)}.${s.length}`;
+}
+
+function safeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+export {
+  bikenorHash,
+  BIKENOR_COOKIE,
+};
+export const BIKENOR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7;

@@ -56,3 +56,9 @@ __pycache__/
 # private client documents (proposals, DPAs, agent briefs, raw data)
 # the repo is public; client-confidential material stays out
 clients/
+
+# Bikenor dev-branch credentials
+clients/bikenor/.env.*.local
+
+# Codex CLI session state (per-invocation, not source)
+.context/

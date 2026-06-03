@@ -58,6 +58,8 @@ type PipelineRow = {
   sendpilot_lead_id: string;
   linkedin_url: string | null;
   contact_email: string | null;
+  phone_direct: string | null;
+  phone_office: string | null;
   status: string;
   outcome: Outcome | null;
   invited_at: string | null;
@@ -110,7 +112,7 @@ Deno.serve(async (request) => {
 async function syncOne(pipelineLeadId: string): Promise<Record<string, unknown> & { ok: boolean }> {
   const { data: pipe, error: pipeErr } = await supabase
     .from("outreach_pipeline")
-    .select("sendpilot_lead_id, linkedin_url, contact_email, status, outcome, invited_at, sent_at, last_reply_at, workspace_id")
+    .select("sendpilot_lead_id, linkedin_url, contact_email, phone_direct, phone_office, status, outcome, invited_at, sent_at, last_reply_at, workspace_id")
     .eq("sendpilot_lead_id", pipelineLeadId)
     .maybeSingle();
   if (pipeErr || !pipe) return { ok: false, error: "pipeline row not found", details: pipeErr?.message };
@@ -121,11 +123,7 @@ async function syncOne(pipelineLeadId: string): Promise<Record<string, unknown> 
   if (row.workspace_id !== CARTERCO_WORKSPACE_ID) {
     return { ok: true, skipped: "non-carterco workspace", pipelineLeadId, workspaceId: row.workspace_id };
   }
-  const email = row.contact_email?.toLowerCase().trim() ?? "";
-  if (!email) {
-    // Without an email we have no Attio identifier — skip but don't error
-    return { ok: true, skipped: "no contact_email", pipelineLeadId };
-  }
+  const rawEmail = row.contact_email?.toLowerCase().trim() ?? "";
 
   const { data: lead } = await supabase
     .from("outreach_leads")
@@ -135,8 +133,28 @@ async function syncOne(pipelineLeadId: string): Promise<Record<string, unknown> 
     .maybeSingle();
   const leadRow = (lead ?? null) as LeadRow | null;
 
+  // Distinguish a real prospect email from our SendPilot routing alias. The
+  // carterco+li-<slug>@carterco.dk alias is our reply-routing infra, not the
+  // prospect's identity — using it as an Attio People email creates orphan
+  // Person records when the lead is later replaced by a real-email enrichment.
+  // Same for the @example.invalid placeholder used for un-enriched leads.
+  const isRealEmail = !!rawEmail
+    && !rawEmail.endsWith("@example.invalid")
+    && !(rawEmail.startsWith("carterco+") && rawEmail.endsWith("@carterco.dk"));
+  const realEmail = isRealEmail ? rawEmail : "";
+  const phoneValues = attioPhoneValues(row.phone_direct, row.phone_office);
+  const personIdentityEmail = realEmail || (phoneValues.length > 0 ? rawEmail : "");
+
   const domain = normalizeDomain(leadRow?.website ?? null);
   const companyName = leadRow?.company?.trim() ?? domain ?? null;
+
+  // Need at least a company OR a person identity. We still avoid synthetic
+  // CarterCo reply aliases by default, but allow them when we have a phone:
+  // older SendPilot-imported people in Attio were keyed that way, and this
+  // lets us enrich those existing records with useful contact data.
+  if (!domain && !personIdentityEmail) {
+    return { ok: true, skipped: "no usable person identity and no company domain", pipelineLeadId };
+  }
 
   // 1. Upsert Company by domain (only if we have one)
   let companyRecordId: string | null = null;
@@ -149,31 +167,36 @@ async function syncOne(pipelineLeadId: string): Promise<Record<string, unknown> 
     companyRecordId = companyRes.recordId;
   }
 
-  // 2. Upsert Person by email
-  const personValues: Record<string, unknown> = {
-    email_addresses: [{ email_address: email }],
-  };
-  if (leadRow?.first_name || leadRow?.last_name) {
-    personValues.name = [{
-      first_name: leadRow.first_name ?? "",
-      last_name: leadRow.last_name ?? "",
-      full_name: [leadRow.first_name, leadRow.last_name].filter(Boolean).join(" "),
-    }];
+  // 2. Upsert Person by email. Prefer the real prospect email; for phone-only
+  // legacy leads, use the existing routing alias so we update the Attio record
+  // that was already created from the old sync.
+  let personRecordId: string | null = null;
+  if (personIdentityEmail) {
+    const personValues: Record<string, unknown> = {
+      email_addresses: [{ email_address: personIdentityEmail }],
+    };
+    if (phoneValues.length > 0) personValues.phone_numbers = phoneValues;
+    if (leadRow?.first_name || leadRow?.last_name) {
+      personValues.name = [{
+        first_name: leadRow.first_name ?? "",
+        last_name: leadRow.last_name ?? "",
+        full_name: [leadRow.first_name, leadRow.last_name].filter(Boolean).join(" "),
+      }];
+    }
+    if (leadRow?.title) personValues.job_title = leadRow.title;
+    if (row.linkedin_url) personValues.linkedin = row.linkedin_url;
+    if (companyRecordId) {
+      personValues.company = [{ target_object: "companies", target_record_id: companyRecordId }];
+    }
+    const personRes = await attioAssert("people", "email_addresses", personValues);
+    if (!personRes.ok) return { ok: false, stage: "person_upsert", error: personRes.error, details: personRes.details };
+    personRecordId = personRes.recordId;
   }
-  if (leadRow?.title) personValues.job_title = leadRow.title;
-  if (row.linkedin_url) personValues.linkedin = row.linkedin_url;
-  if (companyRecordId) {
-    personValues.company = [{ target_object: "companies", target_record_id: companyRecordId }];
-  }
-
-  const personRes = await attioAssert("people", "email_addresses", personValues);
-  if (!personRes.ok) return { ok: false, stage: "person_upsert", error: personRes.error, details: personRes.details };
-  const personRecordId = personRes.recordId;
 
   // 3. Upsert Deal by supabase_pipeline_id (sendpilot_lead_id)
   const stageId = mapStage(row);
   const dealName = [
-    [leadRow?.first_name, leadRow?.last_name].filter(Boolean).join(" ").trim() || email,
+    [leadRow?.first_name, leadRow?.last_name].filter(Boolean).join(" ").trim() || (realEmail || rawEmail),
     companyName,
   ].filter(Boolean).join(" — ");
 
@@ -182,8 +205,10 @@ async function syncOne(pipelineLeadId: string): Promise<Record<string, unknown> 
     supabase_pipeline_id: pipelineLeadId,
     stage: [{ status: stageId }],
     owner: [{ referenced_actor_type: "workspace-member", referenced_actor_id: ATTIO_DEFAULT_OWNER_MEMBER_ID }],
-    associated_people: [{ target_object: "people", target_record_id: personRecordId }],
   };
+  if (personRecordId) {
+    dealValues.associated_people = [{ target_object: "people", target_record_id: personRecordId }];
+  }
   if (companyRecordId) {
     dealValues.associated_company = [{ target_object: "companies", target_record_id: companyRecordId }];
   }
@@ -230,6 +255,35 @@ function normalizeDomain(raw: string | null): string | null {
     const cleaned = raw.replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0].toLowerCase().trim();
     return cleaned || null;
   }
+}
+
+function attioPhoneValues(...phones: (string | null | undefined)[]): string[] {
+  const normalized = phones
+    .map((phone) => normalizePhone(phone ?? null))
+    .filter((phone): phone is string => !!phone);
+  return [...new Set(normalized)];
+}
+
+function normalizePhone(raw: string | null): string | null {
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+
+  let digits = trimmed.replace(/[^\d+]/g, "");
+  if (digits.startsWith("00")) digits = `+${digits.slice(2)}`;
+  if (!digits.startsWith("+")) {
+    const justDigits = digits.replace(/\D/g, "");
+    if (justDigits.length === 8) digits = `+45${justDigits}`;
+    else return null;
+  }
+
+  const e164 = `+${digits.replace(/\D/g, "")}`;
+  const digitCount = e164.length - 1;
+  if (digitCount < 10 || digitCount > 15) return null;
+  // NANP area codes cannot start with 0 or 1. Attio/libphonenumber rejects
+  // these even if they look E.164-ish, so filter before sending.
+  if (/^\+1[01]/.test(e164)) return null;
+  return e164;
 }
 
 // Attio's "assert" pattern: PUT with matching_attribute query param. Creates
