@@ -202,6 +202,32 @@ export default function LeadsPage() {
       next.add(leadId);
       return next;
     });
+    void logCallClick(leadId);
+  }
+
+  // Receptionist clicked "Ring" → log who/which-lead/when so we can attribute
+  // calls per agent (the agent overview). Mirrors logOutboundSms: optimistically
+  // appends the event into local state so the contact timeline updates without
+  // a refetch. The server route stamps sender = the authenticated user's email.
+  async function logCallClick(leadId: string) {
+    try {
+      const res = await fetch("/api/call-clicked", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ leadId }),
+      });
+      if (!res.ok) {
+        console.warn("call-clicked log failed:", await res.text().catch(() => ""));
+        return;
+      }
+      const data = (await res.json()) as { event: ConversationEvent };
+      setConversationEvents((curr) => ({
+        ...curr,
+        [leadId]: [data.event, ...(curr[leadId] ?? [])],
+      }));
+    } catch (e) {
+      console.warn("call-clicked log threw:", e);
+    }
   }
 
   // Operator clicked an SMS button → log outbound event so the chip flips
