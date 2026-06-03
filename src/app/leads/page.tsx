@@ -161,6 +161,9 @@ export default function LeadsPage() {
     return workspaces.find((w) => w.id === selectedWorkspaceId) ?? workspace ?? workspaces[0];
   }, [selectedWorkspaceId, workspace, workspaces]);
   const activeWorkspaceId = activeWorkspace?.id ?? "";
+  // SMS handoff (AI-svar / iMessage / SMS chips) is CarterCo-specific; gate it
+  // behind the workspace capability flag so client panels (Soho, …) stay clean.
+  const smsEnabled = activeWorkspace?.sms_enabled ?? false;
   function chooseWorkspace(id: string) {
     setSelectedWorkspaceId(id);
     if (typeof window !== "undefined") {
@@ -171,6 +174,9 @@ export default function LeadsPage() {
   const [conversationEvents, setConversationEvents] = useState<
     Record<string, ConversationEvent[]>
   >({});
+  // email → first name, per active workspace. Used to show "Rosa" instead of the
+  // email handle on the call chip + note authors. Falls back to the local-part.
+  const [memberNames, setMemberNames] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [notifications, setNotifications] =
     useState<NotificationStatus>("Ikke aktiv");
@@ -443,6 +449,28 @@ export default function LeadsPage() {
     void refreshNotificationStatus();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, activeWorkspaceId]);
+
+  // Load the workspace roster (email → first name) so call/note attribution
+  // shows real names. workspace_members is readable by members via RLS.
+  useEffect(() => {
+    if (!user || !activeWorkspaceId) return;
+    let cancelled = false;
+    void supabase
+      .from("workspace_members")
+      .select("user_email, display_name")
+      .eq("workspace_id", activeWorkspaceId)
+      .then(({ data }) => {
+        if (cancelled) return;
+        const map: Record<string, string> = {};
+        for (const m of data ?? []) {
+          if (m.user_email && m.display_name) map[m.user_email] = m.display_name;
+        }
+        setMemberNames(map);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user, activeWorkspaceId, supabase]);
 
   // Live updates. Subscribe to leads + conversation events for the active
   // workspace; any insert/update (a new lead lands, someone logs a call, someone
@@ -1185,34 +1213,28 @@ export default function LeadsPage() {
         </div>
       </section>
 
-      {/* Notification status */}
-      <section className="mx-auto mb-5 w-full max-w-[1400px] px-4 sm:px-8 lg:px-12">
-        <div className="grid gap-3 border border-[var(--ink)]/[0.10] bg-[var(--ink)]/[0.025] p-4 sm:grid-cols-[1fr_auto] sm:items-center">
-          <div className="min-w-0">
-            <p className="tabular text-[10px] uppercase tracking-[0.26em] text-[var(--ink)]/35">
-              Push-notifikationer
-            </p>
-            <div className="mt-2 flex min-w-0 flex-wrap items-center gap-2">
-              <span
-                className={`h-2.5 w-2.5 rounded-full ${
-                  notifications === "Aktiv"
-                    ? "bg-[var(--forest)]"
-                    : notifications === "Blokeret"
-                      ? "bg-[var(--clay)]"
-                      : "bg-[var(--ink)]/25"
-                }`}
-                aria-hidden
-              />
-              <p className="font-display text-2xl italic leading-none text-[var(--ink)]">
-                {notificationTitle(notifications)}
-              </p>
-            </div>
-            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-[var(--ink)]/55">
-              {notificationHelp(notifications)}
-            </p>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2 sm:flex sm:justify-end">
+      {/* Notification status — slim bar (was a full card; compacted) */}
+      <section className="mx-auto mb-4 w-full max-w-[1400px] px-4 sm:px-8 lg:px-12">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-[var(--ink)]/[0.08] pb-3">
+          <span
+            className={`h-2 w-2 shrink-0 rounded-full ${
+              notifications === "Aktiv"
+                ? "bg-[var(--forest)]"
+                : notifications === "Blokeret"
+                  ? "bg-[var(--clay)]"
+                  : "bg-[var(--ink)]/25"
+            }`}
+            aria-hidden
+          />
+          <span className="tabular text-[10px] uppercase tracking-[0.2em] text-[var(--ink)]/40">
+            Push
+          </span>
+          <span className="min-w-0 text-[12px] text-[var(--ink)]/55">
+            {notifications === "Aktiv"
+              ? "Aktiv på denne enhed"
+              : notificationHelp(notifications)}
+          </span>
+          <div className="ml-auto flex shrink-0 gap-2">
             <button
               type="button"
               onClick={() => void enableNotifications()}
@@ -1220,18 +1242,20 @@ export default function LeadsPage() {
                 notifications === "Beder om adgang" ||
                 notifications === "Gemmer"
               }
-              className="focus-cream rounded-sm border border-[var(--ink)]/15 px-4 py-3 text-[10px] uppercase tracking-[0.16em] text-[var(--ink)]/70 transition hover:border-[var(--ink)]/30 hover:text-[var(--ink)] disabled:cursor-wait disabled:opacity-45"
+              className="focus-cream tabular rounded-sm border border-[var(--ink)]/15 px-3 py-1.5 text-[10px] uppercase tracking-[0.16em] text-[var(--ink)]/65 transition hover:border-[var(--ink)]/35 hover:text-[var(--ink)] disabled:cursor-wait disabled:opacity-45"
             >
               {notifications === "Aktiv" ? "Tjek igen" : "Slå til"}
             </button>
-            <button
-              type="button"
-              onClick={() => void sendTestNotification()}
-              disabled={notifications !== "Aktiv" || testingNotification}
-              className="focus-cream rounded-sm border border-[var(--ink)]/15 px-4 py-3 text-[10px] uppercase tracking-[0.16em] text-[var(--ink)]/70 transition hover:border-[var(--ink)]/30 hover:text-[var(--ink)] disabled:cursor-not-allowed disabled:opacity-35"
-            >
-              {testingNotification ? "Sender" : "Send test"}
-            </button>
+            {notifications === "Aktiv" ? (
+              <button
+                type="button"
+                onClick={() => void sendTestNotification()}
+                disabled={testingNotification}
+                className="focus-cream tabular rounded-sm border border-[var(--ink)]/15 px-3 py-1.5 text-[10px] uppercase tracking-[0.16em] text-[var(--ink)]/65 transition hover:border-[var(--ink)]/35 hover:text-[var(--ink)] disabled:opacity-35"
+              >
+                {testingNotification ? "Sender" : "Send test"}
+              </button>
+            ) : null}
           </div>
         </div>
       </section>
@@ -1299,6 +1323,8 @@ export default function LeadsPage() {
                 conversationEvents={conversationEvents[lead.id] ?? []}
                 onSent={logOutboundSms}
                 onNote={logNote}
+                names={memberNames}
+                smsEnabled={smsEnabled}
               />
             ))}
           </ol>
@@ -1333,6 +1359,8 @@ function LeadRow({
   conversationEvents,
   onSent,
   onNote,
+  names,
+  smsEnabled,
 }: {
   lead: Lead;
   index: number;
@@ -1352,6 +1380,8 @@ function LeadRow({
   conversationEvents: ConversationEvent[];
   onSent: (leadId: string, body: string) => void;
   onNote: (leadId: string, body: string) => void;
+  names: Record<string, string>;
+  smsEnabled: boolean;
 }) {
   const urgent =
     !!lead.response_time && URGENCY[lead.response_time] === "urgent";
@@ -1445,8 +1475,8 @@ function LeadRow({
                   </MetaTag>
                 ) : null}
                 <PendingActionChip lead={lead} />
-                <CallSummaryChip events={conversationEvents} />
-                <SmsStatusChip events={conversationEvents} />
+                <CallSummaryChip events={conversationEvents} names={names} />
+                {smsEnabled ? <SmsStatusChip events={conversationEvents} /> : null}
               </div>
             ) : null}
           </div>
@@ -1477,8 +1507,8 @@ function LeadRow({
             {hasPendingAction || hasInboundReplyWaiting || hasCalls ? (
               <div className="mt-1 flex flex-wrap items-center gap-1.5">
                 <PendingActionChip lead={lead} />
-                <CallSummaryChip events={conversationEvents} />
-                <SmsStatusChip events={conversationEvents} />
+                <CallSummaryChip events={conversationEvents} names={names} />
+                {smsEnabled ? <SmsStatusChip events={conversationEvents} /> : null}
               </div>
             ) : null}
           </div>
@@ -1546,6 +1576,8 @@ function LeadRow({
           conversationEvents={conversationEvents}
           onSent={onSent}
           onNote={onNote}
+          names={names}
+          smsEnabled={smsEnabled}
         />
       ) : null}
     </li>
@@ -1565,6 +1597,8 @@ function DetailPanel({
   conversationEvents,
   onSent,
   onNote,
+  names,
+  smsEnabled,
 }: {
   lead: Lead;
   hasRung: boolean;
@@ -1580,6 +1614,8 @@ function DetailPanel({
   conversationEvents: ConversationEvent[];
   onSent: (leadId: string, body: string) => void;
   onNote: (leadId: string, body: string) => void;
+  names: Record<string, string>;
+  smsEnabled: boolean;
 }) {
   // Resolved — terminal state, shown only in "Vis alle".
   // `callback`, `follow_up`, and `interested`-with-nudge stay editable in Aktive.
@@ -1625,7 +1661,7 @@ function DetailPanel({
               {lead.notes}
             </p>
           ) : null}
-          <ConversationTimeline events={conversationEvents} />
+          <ConversationTimeline events={conversationEvents} names={names} />
           <NoteComposer leadId={lead.id} onNote={onNote} />
           {lead.outcome === "booked" ? (
             <button
@@ -1641,8 +1677,10 @@ function DetailPanel({
     );
   }
 
+  // SMS handoff is CarterCo-only (smsEnabled). When off, the "Intet svar · SMS"
+  // variant and the AI-svar button both drop out — client panels stay call-first.
   const canSms =
-    !!lead.phone && lead.phone.replace(/\D/g, "").length >= 8;
+    smsEnabled && !!lead.phone && lead.phone.replace(/\D/g, "").length >= 8;
   const smsBody = buildSmsBody(lead.name, identity, slotsLine);
   const hasEmail = !!lead.email && lead.email.includes("@");
   const hasDialled = hasRung || lead.call_status !== null;
@@ -1739,7 +1777,7 @@ function DetailPanel({
           )}
         </div>
 
-        <ConversationTimeline events={conversationEvents} />
+        <ConversationTimeline events={conversationEvents} names={names} />
         <NoteComposer leadId={lead.id} onNote={onNote} />
         {canSms && (
           <AiSmsButton lead={lead} onSent={onSent} />
@@ -1921,7 +1959,13 @@ function NoteComposer({
   );
 }
 
-function ConversationTimeline({ events }: { events: ConversationEvent[] }) {
+function ConversationTimeline({
+  events,
+  names,
+}: {
+  events: ConversationEvent[];
+  names: Record<string, string>;
+}) {
   if (events.length === 0) return null;
   return (
     <section className="ledger-detail flex flex-col gap-3 border-t border-[var(--ink)]/[0.10] pt-5">
@@ -1946,7 +1990,7 @@ function ConversationTimeline({ events }: { events: ConversationEvent[] }) {
                 </span>
                 {event.sender ? (
                   <span className="truncate text-[11px] text-[var(--ink)]/40">
-                    {event.sender}
+                    {names[event.sender] ?? event.sender.split("@")[0]}
                   </span>
                 ) : null}
               </div>
@@ -2122,12 +2166,23 @@ function PendingQuickButton({
 // Anti-spam call glance. events arrive newest-first; show the most recent
 // caller(s) + time so a second receptionist sees a lead was just worked. Sender
 // is an email (e.g. rlj@soho.dk) — we show the local-part as a short handle.
-function CallSummaryChip({ events }: { events: ConversationEvent[] }) {
+function CallSummaryChip({
+  events,
+  names,
+}: {
+  events: ConversationEvent[];
+  names: Record<string, string>;
+}) {
   const calls = events.filter((e) => e.channel === "phone");
   if (calls.length === 0) return null;
   const recent = calls.slice(0, 2);
   const label = recent
-    .map((c) => `${(c.sender ?? "?").split("@")[0]} ${formatClockTime(c.occurred_at)}`)
+    .map((c) => {
+      const who = c.sender
+        ? names[c.sender] ?? c.sender.split("@")[0]
+        : "?";
+      return `${who} ${formatClockTime(c.occurred_at)}`;
+    })
     .join(" · ");
   const extra = calls.length - recent.length;
   return (
@@ -2884,25 +2939,6 @@ function formatBlocksLine(
   if (parts.length === 1) return parts[0];
   if (parts.length === 2) return `${parts[0]} og ${parts[1]}`;
   return `${parts.slice(0, -1).join(", ")} og ${parts[parts.length - 1]}`;
-}
-
-function notificationTitle(status: NotificationStatus) {
-  switch (status) {
-    case "Aktiv":
-      return "Aktiv på denne enhed";
-    case "Beder om adgang":
-      return "Venter på tilladelse";
-    case "Gemmer":
-      return "Gemmer enheden";
-    case "Installer appen":
-      return "Åbn som Home Screen app";
-    case "Blokeret":
-      return "Blokeret i iOS";
-    case "Ikke understøttet":
-      return "Ikke understøttet";
-    default:
-      return "Ikke slået til";
-  }
 }
 
 function notificationHelp(status: NotificationStatus) {

@@ -1,7 +1,7 @@
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 import { useEffect, useState } from "react";
 
-export type Workspace = { id: string; name: string };
+export type Workspace = { id: string; name: string; sms_enabled?: boolean };
 
 // Returns the workspaces the authenticated user is a member of. RLS filters the
 // query to only workspaces where the current JWT email is a member.
@@ -20,13 +20,17 @@ export function useWorkspace(
 
     void supabase
       .from("workspaces")
-      .select("id, name")
+      .select("id, name, sms_enabled")
       .order("name", { ascending: true })
       .then(({ data }) => {
         if (cancelled) return;
         setState({
           userId: user.id,
-          workspaces: (data ?? []).map((w) => ({ id: w.id, name: w.name })),
+          workspaces: (data ?? []).map((w) => ({
+            id: w.id,
+            name: w.name,
+            sms_enabled: w.sms_enabled ?? false,
+          })),
         });
       });
     return () => {
