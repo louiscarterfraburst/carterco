@@ -195,6 +195,7 @@ export default function LeadsPage() {
   const notesTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(
     new Map(),
   );
+  const reloadTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function markRung(leadId: string) {
     setHasRungIds((curr) => {
@@ -227,6 +228,32 @@ export default function LeadsPage() {
       }));
     } catch (e) {
       console.warn("call-clicked log threw:", e);
+    }
+  }
+
+  // Operator added a note → persist an attributed note event (sender = author)
+  // and optimistically append it to the lead's timeline. Realtime broadcasts it
+  // to everyone else's open panel.
+  async function logNote(leadId: string, body: string) {
+    const trimmed = body.trim();
+    if (!trimmed) return;
+    try {
+      const res = await fetch("/api/note-added", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ leadId, body: trimmed }),
+      });
+      if (!res.ok) {
+        console.warn("note-added failed:", await res.text().catch(() => ""));
+        return;
+      }
+      const data = (await res.json()) as { event: ConversationEvent };
+      setConversationEvents((curr) => ({
+        ...curr,
+        [leadId]: [data.event, ...(curr[leadId] ?? [])],
+      }));
+    } catch (e) {
+      console.warn("note-added threw:", e);
     }
   }
 
@@ -414,6 +441,42 @@ export default function LeadsPage() {
     if (!user || !activeWorkspaceId) return;
     void loadLeads();
     void refreshNotificationStatus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, activeWorkspaceId]);
+
+  // Live updates. Subscribe to leads + conversation events for the active
+  // workspace; any insert/update (a new lead lands, someone logs a call, someone
+  // adds a note) triggers a debounced reload so every open panel stays current
+  // without a manual refresh. Mirrors the /outreach realtime pattern
+  // (outreach/page.tsx). Reload (not surgical apply) reconciles cleanly with the
+  // optimistic appends in logCallClick/logOutboundSms/logNote.
+  useEffect(() => {
+    if (!user || !activeWorkspaceId) return;
+    const filter = `workspace_id=eq.${activeWorkspaceId}`;
+    const scheduleReload = () => {
+      if (reloadTimer.current) clearTimeout(reloadTimer.current);
+      reloadTimer.current = setTimeout(() => {
+        reloadTimer.current = null;
+        void loadLeads();
+      }, 400);
+    };
+    const ch = supabase
+      .channel(`leads-live-${activeWorkspaceId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "leads", filter },
+        scheduleReload,
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "lead_conversation_events", filter },
+        scheduleReload,
+      )
+      .subscribe();
+    return () => {
+      if (reloadTimer.current) clearTimeout(reloadTimer.current);
+      void supabase.removeChannel(ch);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, activeWorkspaceId]);
 
@@ -1235,6 +1298,7 @@ export default function LeadsPage() {
                 identity={identity}
                 conversationEvents={conversationEvents[lead.id] ?? []}
                 onSent={logOutboundSms}
+                onNote={logNote}
               />
             ))}
           </ol>
@@ -1268,6 +1332,7 @@ function LeadRow({
   identity,
   conversationEvents,
   onSent,
+  onNote,
 }: {
   lead: Lead;
   index: number;
@@ -1286,6 +1351,7 @@ function LeadRow({
   identity: Identity;
   conversationEvents: ConversationEvent[];
   onSent: (leadId: string, body: string) => void;
+  onNote: (leadId: string, body: string) => void;
 }) {
   const urgent =
     !!lead.response_time && URGENCY[lead.response_time] === "urgent";
@@ -1307,6 +1373,9 @@ function LeadRow({
   const hasInboundReplyWaiting = latestSmsEvent?.direction === "inbound";
   const hasPendingAction =
     Boolean(lead.next_action_at) || lead.outcome === "callback";
+  // Anti-spam glance: has anyone already called this lead? Surfaced as a row chip
+  // so a second receptionist sees it before dialing.
+  const hasCalls = conversationEvents.some((e) => e.channel === "phone");
 
   return (
     <li
@@ -1362,7 +1431,8 @@ function LeadRow({
             {lead.monthly_leads ||
             lead.response_time ||
             lead.next_action_at ||
-            hasInboundReplyWaiting ? (
+            hasInboundReplyWaiting ||
+            hasCalls ? (
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 {lead.monthly_leads ? (
                   <MetaTag>{lead.monthly_leads}</MetaTag>
@@ -1375,6 +1445,7 @@ function LeadRow({
                   </MetaTag>
                 ) : null}
                 <PendingActionChip lead={lead} />
+                <CallSummaryChip events={conversationEvents} />
                 <SmsStatusChip events={conversationEvents} />
               </div>
             ) : null}
@@ -1403,9 +1474,10 @@ function LeadRow({
                 <span className="text-[var(--ink)]/30">—</span>
               )}
             </p>
-            {hasPendingAction || hasInboundReplyWaiting ? (
+            {hasPendingAction || hasInboundReplyWaiting || hasCalls ? (
               <div className="mt-1 flex flex-wrap items-center gap-1.5">
                 <PendingActionChip lead={lead} />
+                <CallSummaryChip events={conversationEvents} />
                 <SmsStatusChip events={conversationEvents} />
               </div>
             ) : null}
@@ -1473,6 +1545,7 @@ function LeadRow({
           identity={identity}
           conversationEvents={conversationEvents}
           onSent={onSent}
+          onNote={onNote}
         />
       ) : null}
     </li>
@@ -1491,6 +1564,7 @@ function DetailPanel({
   identity,
   conversationEvents,
   onSent,
+  onNote,
 }: {
   lead: Lead;
   hasRung: boolean;
@@ -1505,6 +1579,7 @@ function DetailPanel({
   identity: Identity;
   conversationEvents: ConversationEvent[];
   onSent: (leadId: string, body: string) => void;
+  onNote: (leadId: string, body: string) => void;
 }) {
   // Resolved — terminal state, shown only in "Vis alle".
   // `callback`, `follow_up`, and `interested`-with-nudge stay editable in Aktive.
@@ -1551,6 +1626,7 @@ function DetailPanel({
             </p>
           ) : null}
           <ConversationTimeline events={conversationEvents} />
+          <NoteComposer leadId={lead.id} onNote={onNote} />
           {lead.outcome === "booked" ? (
             <button
               type="button"
@@ -1664,6 +1740,7 @@ function DetailPanel({
         </div>
 
         <ConversationTimeline events={conversationEvents} />
+        <NoteComposer leadId={lead.id} onNote={onNote} />
         {canSms && (
           <AiSmsButton lead={lead} onSent={onSent} />
         )}
@@ -1797,6 +1874,49 @@ function AiSmsButton({
       {error && (
         <p className="text-[12px] text-[var(--clay)]">{error}</p>
       )}
+    </div>
+  );
+}
+
+// Attributed note composer. Writes a note event (sender = author) that shows in
+// the timeline and broadcasts live to everyone via realtime. ⌘/Ctrl+Enter sends.
+function NoteComposer({
+  leadId,
+  onNote,
+}: {
+  leadId: string;
+  onNote: (leadId: string, body: string) => void;
+}) {
+  const [value, setValue] = useState("");
+  const submit = () => {
+    const v = value.trim();
+    if (!v) return;
+    onNote(leadId, v);
+    setValue("");
+  };
+  return (
+    <div className="flex items-start gap-2">
+      <textarea
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => {
+          if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+            e.preventDefault();
+            submit();
+          }
+        }}
+        rows={2}
+        placeholder="Tilføj en note…"
+        className="focus-cream min-h-0 flex-1 resize-y rounded-sm border border-[var(--ink)]/15 bg-transparent px-3 py-2 text-[13px] leading-relaxed text-[var(--ink)] outline-none placeholder:text-[var(--ink)]/35 focus:border-[var(--ink)]/35"
+      />
+      <button
+        type="button"
+        onClick={submit}
+        disabled={!value.trim()}
+        className="focus-cream tabular shrink-0 rounded-sm border border-[var(--ink)]/15 px-3 py-2 text-[10px] uppercase tracking-[0.18em] text-[var(--ink)]/65 transition hover:border-[var(--ink)]/35 hover:text-[var(--ink)] disabled:opacity-40"
+      >
+        Note
+      </button>
     </div>
   );
 }
@@ -1999,6 +2119,40 @@ function PendingQuickButton({
 // Row chip that lights up when there's an inbound SMS reply newer than any
 // outbound SMS. Operator sees "ball is in your court" at a glance instead of
 // drilling into every lead's conversation timeline. Renders null otherwise.
+// Anti-spam call glance. events arrive newest-first; show the most recent
+// caller(s) + time so a second receptionist sees a lead was just worked. Sender
+// is an email (e.g. rlj@soho.dk) — we show the local-part as a short handle.
+function CallSummaryChip({ events }: { events: ConversationEvent[] }) {
+  const calls = events.filter((e) => e.channel === "phone");
+  if (calls.length === 0) return null;
+  const recent = calls.slice(0, 2);
+  const label = recent
+    .map((c) => `${(c.sender ?? "?").split("@")[0]} ${formatClockTime(c.occurred_at)}`)
+    .join(" · ");
+  const extra = calls.length - recent.length;
+  return (
+    <span
+      className="tabular inline-flex items-center gap-1 rounded-full bg-[var(--forest)]/[0.08] px-2.5 py-0.5 text-[10px] tracking-[0.04em] text-[var(--forest)] ring-1 ring-inset ring-[var(--forest)]/20"
+      title={`${calls.length} opkald`}
+    >
+      <span aria-hidden>📞</span>
+      {label}
+      {extra > 0 ? ` · +${extra}` : ""}
+    </span>
+  );
+}
+
+function formatClockTime(value: string) {
+  try {
+    return new Date(value).toLocaleTimeString("da-DK", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return "";
+  }
+}
+
 function SmsStatusChip({ events }: { events: ConversationEvent[] }) {
   // events are sorted occurred_at desc by loadConversationEvents — first match
   // for channel==='sms' is the most recent SMS in the thread.
