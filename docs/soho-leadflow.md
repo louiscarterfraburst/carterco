@@ -223,20 +223,20 @@ the same copy + delay — that's the flatness being fixed.
 
 | Touch | Day | Call | If no answer → follow-up |
 |---|---|---|---|
-| 1 | 0 | call on enquiry (fast) | **Msg 1** "vi prøvede at fange dig" + book-link |
-| 2 | 1–2 | call | **Msg 2** gentle nudge, other channel, + book-link |
-| — | after | — | **Go quiet. NO close, NO breakup.** Lead stays open + eligible for §8 reactivation |
+| 1 | 0 | call on enquiry (fast) | **ONE message** (first-name personalized) + Nexudus book-link |
+| — | after | — | **Go quiet. NO close, NO breakup.** Lead stays open + eligible for §8 reactivation. Receptionist may *manually* nudge a promising lead — not a baked-in second chase. |
 
-It's **operator-fired** — the receptionist decides per lead whether to send the
-next touch. The ladder is a suggestion, not an autoblast.
+Deliberately **one follow-up only** (Louis 2026-06-03): lowest-pressure, very DK,
+and the self-serve link is already in it. It's **operator-fired**, so a second
+touch is the receptionist's judgement, not automation.
 
 Branches: answered+booked → confirmation + reminder (no-show defense);
 answered+interested-not-booked → §8 positive-never-booked queue; only an explicit
 **"ikke interesseret"** closes the lead — a non-responder is never closed.
 
-Copy (DK, one-way, book-link not reply):
-1. `Hej {{navn}}, vi prøvede at fange dig ang. mødelokale hos Soho. Book en tid her: {{link}} — eller ring til os på {{nummer}}.`
-2. `Hej {{navn}}, her er linket til at booke mødelokale igen: {{link}}. Sig endelig til hvis du har spørgsmål 🙂`
+Copy (DK, one-way, **first-name** `{{fornavn}}` = first token of name, fallback
+to plain "Hej," if missing; book-link = Nexudus URL, not a reply thread):
+- `Hej {{fornavn}}, vi prøvede at fange dig ang. mødelokale hos Soho. Book en tid her: {{nexudus_link}} — eller ring til os på {{nummer}}.`
 
 **Channels (per Louis 2026-06-03):**
 - **SMS → Telavox** (`POST /v1/extensions/users/me/sms`) or a Telavox deeplink —
@@ -248,10 +248,12 @@ Copy (DK, one-way, book-link not reply):
   only gates *automated* server email (booking confirmations/reminders).
 
 **Build status:**
-- Buildable now: the **email-draft cadence** — Soho-correct templates
-  (per-workspace booking link + signoff, not Louis/CarterCo), attempt-aware copy,
-  optional AI-email draft. Needs **Soho's booking link** + a per-workspace
-  branding field (booking_url/signoff on `workspaces` or member identity).
+- Buildable now: the **one-touch email-draft** follow-up — Soho-correct template
+  (per-workspace booking link + signoff, not Louis/CarterCo), first-name
+  personalization. Needs **Soho's Nexudus booking link** (Louis getting later) +
+  a per-workspace branding field (booking_url/signoff on `workspaces`).
+  Soho runs on **Nexudus** — likely the source of availability/bookings too;
+  worth a later integration conversation.
 - Blocked on Telavox seat token: SMS (via Telavox), dial.
 - Blocked on sender domain: automated confirmations/reminders.
 
