@@ -64,7 +64,7 @@ type ConversationEvent = {
   source: string;
 };
 
-type View = "active" | "waiting" | "meetings" | "customers" | "all";
+type View = "active" | "in_progress" | "waiting" | "meetings" | "customers" | "all";
 
 type NotificationStatus =
   | "Ikke aktiv"
@@ -164,14 +164,7 @@ export default function LeadsPage() {
   // SMS handoff (AI-svar / iMessage / SMS chips) is CarterCo-specific; gate it
   // behind the workspace capability flag so client panels (Soho, …) stay clean.
   const smsEnabled = activeWorkspace?.sms_enabled ?? false;
-  // Per-workspace email branding. When booking_url is set, the "Skriv mail" draft
-  // uses the client's follow-up template (their booking link + signoff) instead of
-  // the CarterCo identity template.
-  const branding: Branding = {
-    bookingUrl: activeWorkspace?.booking_url ?? null,
-    signoff: activeWorkspace?.signoff ?? null,
-    companyName: activeWorkspace?.name ?? null,
-  };
+  const outcomePreset = activeWorkspace?.outcome_preset ?? "standard";
   function chooseWorkspace(id: string) {
     setSelectedWorkspaceId(id);
     if (typeof window !== "undefined") {
@@ -185,6 +178,15 @@ export default function LeadsPage() {
   // email → first name, per active workspace. Used to show "Rosa" instead of the
   // email handle on the call chip + note authors. Falls back to the local-part.
   const [memberNames, setMemberNames] = useState<Record<string, string>>({});
+  // Per-workspace email branding. When booking_url is set, "Skriv mail" uses the
+  // client's follow-up template (their booking link + signoff), signed by the
+  // logged-in receptionist (signerName), instead of the CarterCo identity template.
+  const branding: Branding = {
+    bookingUrl: activeWorkspace?.booking_url ?? null,
+    signoff: activeWorkspace?.signoff ?? null,
+    companyName: activeWorkspace?.name ?? null,
+    signerName: (user?.email ? memberNames[user.email] : null) ?? null,
+  };
   const [loading, setLoading] = useState(true);
   const [notifications, setNotifications] =
     useState<NotificationStatus>("Ikke aktiv");
@@ -319,6 +321,20 @@ export default function LeadsPage() {
     return set;
   }, [conversationEvents]);
 
+  // Leads dialled at least once (a Ring-click logged a phone event, or a
+  // call_status was marked). Used to move a lead out of the fresh "Aktive" queue
+  // into "I gang" the moment anyone calls it — so the other receptionists don't
+  // pile onto a lead that's already being worked.
+  const dialledLeadIds = useMemo(() => {
+    const set = new Set<string>();
+    for (const [leadId, events] of Object.entries(conversationEvents)) {
+      if (events.some((e) => e.channel === "phone")) set.add(leadId);
+    }
+    return set;
+  }, [conversationEvents]);
+  const isDialled = (l: Lead) =>
+    l.call_status !== null || dialledLeadIds.has(l.id);
+
   const isActiveLead = (l: Lead) => {
     const eligible =
       !l.outcome ||
@@ -355,13 +371,25 @@ export default function LeadsPage() {
 
   const visibleLeads = useMemo(() => {
     if (view === "active") {
-      // Reply-waiting leads bubble to the top so they're not buried under
-      // 20+ stale rows. Within each group, preserve the existing order.
-      return leads.filter(isActiveLead).sort((a, b) => {
-        const aWaiting = leadsWithInboundReply.has(a.id) ? 1 : 0;
-        const bWaiting = leadsWithInboundReply.has(b.id) ? 1 : 0;
-        return bWaiting - aWaiting;
-      });
+      // Fresh queue: actionable AND not yet dialled. Reply-waiting leads bubble
+      // to the top. Dialled leads move to "I gang" so nobody double-dials.
+      return leads
+        .filter((l) => isActiveLead(l) && !isDialled(l))
+        .sort((a, b) => {
+          const aWaiting = leadsWithInboundReply.has(a.id) ? 1 : 0;
+          const bWaiting = leadsWithInboundReply.has(b.id) ? 1 : 0;
+          return bWaiting - aWaiting;
+        });
+    }
+    if (view === "in_progress") {
+      // Actionable AND already dialled — being worked.
+      return leads
+        .filter((l) => isActiveLead(l) && isDialled(l))
+        .sort((a, b) => {
+          const aWaiting = leadsWithInboundReply.has(a.id) ? 1 : 0;
+          const bWaiting = leadsWithInboundReply.has(b.id) ? 1 : 0;
+          return bWaiting - aWaiting;
+        });
     }
     if (view === "waiting") {
       return leads
@@ -389,7 +417,8 @@ export default function LeadsPage() {
       return withMeeting;
     }
     return leads;
-  }, [leads, view]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [leads, view, dialledLeadIds, leadsWithInboundReply]);
 
   const pendingOutcomeLeads = useMemo(
     () => leads.filter((l) => l.call_status === "answered" && !l.outcome),
@@ -397,14 +426,17 @@ export default function LeadsPage() {
   );
 
   const stats = useMemo(() => {
-    const active = leads.filter(isActiveLead).length;
+    const actionable = leads.filter(isActiveLead);
+    const active = actionable.filter((l) => !isDialled(l)).length;
+    const inProgress = actionable.filter((l) => isDialled(l)).length;
     const waiting = leads.filter(isWaitingLead).length;
     const customers = leads.filter((l) => l.outcome === "customer").length;
     const pending = pendingOutcomeLeads.length;
     const total = leads.length;
     const latest = leads[0]?.created_at ?? null;
-    return { active, waiting, customers, pending, total, latest };
-  }, [leads, pendingOutcomeLeads]);
+    return { active, inProgress, waiting, customers, pending, total, latest };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [leads, pendingOutcomeLeads, dialledLeadIds]);
 
   useEffect(() => {
     let mounted = true;
@@ -758,55 +790,47 @@ export default function LeadsPage() {
       payload.retry_count = 0;
       payload.last_action_fired_at = null;
     } else if (outcome === "interested" && !currentLead?.meeting_at) {
-      // Said yes but hasn't booked — queue a +2d nudge so they don't rot.
-      interestedAt = clampToBusinessHours(
-        new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
-      );
-      payload.callback_at = null;
-      payload.next_action_at = interestedAt;
-      payload.next_action_type = "retry";
-      payload.retry_count = 0;
-      payload.last_action_fired_at = null;
+      // Said yes / "delt link" but hasn't booked — queue a nudge so they don't rot.
+      if (outcomePreset === "meeting_room") {
+        // 1·1·2 resurface ladder: nudge at day 1, 2, 4 (gaps 1·1·2), then quiet.
+        // Never closes — Nexudus auto-marks Booket whenever they eventually book.
+        const newCount = (currentLead?.retry_count ?? 0) + 1;
+        const gapDays =
+          newCount === 1 ? 1 : newCount === 2 ? 1 : newCount === 3 ? 2 : null;
+        payload.callback_at = null;
+        payload.retry_count = newCount;
+        payload.last_action_fired_at = null;
+        if (gapDays === null) {
+          payload.next_action_at = null;
+          payload.next_action_type = null;
+        } else {
+          interestedAt = clampToBusinessHours(
+            new Date(Date.now() + gapDays * 24 * 60 * 60 * 1000).toISOString(),
+          );
+          payload.next_action_at = interestedAt;
+          payload.next_action_type = "retry";
+        }
+      } else {
+        interestedAt = clampToBusinessHours(
+          new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
+        );
+        payload.callback_at = null;
+        payload.next_action_at = interestedAt;
+        payload.next_action_type = "retry";
+        payload.retry_count = 0;
+        payload.last_action_fired_at = null;
+      }
     } else {
       payload.callback_at = null;
       payload.next_action_at = null;
       payload.next_action_type = null;
     }
 
-    const schedulesAction =
-      outcome === "callback" ||
-      outcome === "follow_up" ||
-      (outcome === "interested" && !!interestedAt);
-
+    // Optimistic update mirrors the exact payload, so all paths (incl. the
+    // meeting_room 1·1·2 retry_count) stay consistent with the DB write.
     setLeads((current) =>
       current.map((lead) =>
-        lead.id === leadId
-          ? {
-              ...lead,
-              outcome,
-              outcome_at: outcomeAt,
-              callback_at: outcome === "callback" ? clampedCallback : null,
-              next_action_at:
-                outcome === "callback"
-                  ? clampedCallback
-                  : outcome === "follow_up"
-                    ? followUpAt
-                    : outcome === "interested"
-                      ? interestedAt
-                      : null,
-              next_action_type:
-                outcome === "callback"
-                  ? "callback"
-                  : outcome === "follow_up" ||
-                    (outcome === "interested" && !!interestedAt)
-                    ? "retry"
-                    : null,
-              retry_count: schedulesAction ? 0 : lead.retry_count,
-              last_action_fired_at: schedulesAction
-                ? null
-                : lead.last_action_fired_at,
-            }
-          : lead,
+        lead.id === leadId ? { ...lead, ...(payload as Partial<Lead>) } : lead,
       ),
     );
 
@@ -1303,7 +1327,9 @@ export default function LeadsPage() {
           <div className="border-b border-[var(--ink)]/[0.08] py-16 text-center">
             <p className="font-display text-2xl italic text-[var(--ink)]/40">
               {view === "active"
-                ? "Ingen aktive leads."
+                ? "Ingen nye leads."
+                : view === "in_progress"
+                  ? "Ingen leads i gang."
                 : view === "waiting"
                   ? "Ingen ventende opfølgninger."
                 : "Ingen leads endnu."}
@@ -1334,6 +1360,7 @@ export default function LeadsPage() {
                 names={memberNames}
                 smsEnabled={smsEnabled}
                 branding={branding}
+                preset={outcomePreset}
               />
             ))}
           </ol>
@@ -1371,6 +1398,7 @@ function LeadRow({
   names,
   smsEnabled,
   branding,
+  preset,
 }: {
   lead: Lead;
   index: number;
@@ -1393,6 +1421,7 @@ function LeadRow({
   names: Record<string, string>;
   smsEnabled: boolean;
   branding: Branding;
+  preset: string;
 }) {
   const urgent =
     !!lead.response_time && URGENCY[lead.response_time] === "urgent";
@@ -1590,6 +1619,7 @@ function LeadRow({
           names={names}
           smsEnabled={smsEnabled}
           branding={branding}
+          preset={preset}
         />
       ) : null}
     </li>
@@ -1612,6 +1642,7 @@ function DetailPanel({
   names,
   smsEnabled,
   branding,
+  preset,
 }: {
   lead: Lead;
   hasRung: boolean;
@@ -1630,6 +1661,7 @@ function DetailPanel({
   names: Record<string, string>;
   smsEnabled: boolean;
   branding: Branding;
+  preset: string;
 }) {
   // Resolved — terminal state, shown only in "Vis alle".
   // `callback`, `follow_up`, and `interested`-with-nudge stay editable in Aktive.
@@ -1805,50 +1837,89 @@ function DetailPanel({
                 Resultat
               </p>
               <div className="grid grid-cols-2 gap-2">
-                <OutcomeButton
-                  outcome="customer"
-                  selected={lead.outcome === "customer"}
-                  onClick={() => void setOutcome(lead.id, "customer")}
-                  fullWidth
-                />
-                {(
-                  [
-                    "booked",
-                    "interested",
-                    "follow_up",
-                    "not_interested",
-                  ] as const
-                ).map((key) => (
-                  <OutcomeButton
-                    key={key}
-                    outcome={key}
-                    selected={lead.outcome === key}
-                    onClick={() => void setOutcome(lead.id, key)}
-                    subtitle={
-                      (key === "follow_up" &&
-                        lead.outcome === "follow_up" &&
-                        lead.next_action_at) ||
-                      (key === "interested" &&
-                        lead.outcome === "interested" &&
-                        lead.next_action_at)
-                        ? `Nudge ${formatMeetingTime(lead.next_action_at!)}`
-                        : undefined
-                    }
-                  />
-                ))}
-                <CallbackOutcomeButton
-                  selected={lead.outcome === "callback"}
-                  callbackAt={lead.callback_at}
-                  onPick={(isoTime) =>
-                    void setOutcome(lead.id, "callback", isoTime)
-                  }
-                  onClear={() => void setOutcome(lead.id, null)}
-                />
-                <OutcomeButton
-                  outcome="unqualified"
-                  selected={lead.outcome === "unqualified"}
-                  onClick={() => void setOutcome(lead.id, "unqualified")}
-                />
+                {preset === "meeting_room" ? (
+                  <>
+                    <OutcomeButton
+                      outcome="booked"
+                      label="Booket"
+                      selected={lead.outcome === "booked"}
+                      onClick={() => void setOutcome(lead.id, "booked")}
+                      fullWidth
+                    />
+                    <OutcomeButton
+                      outcome="interested"
+                      label="Delt link – vil kigge"
+                      selected={lead.outcome === "interested"}
+                      onClick={() => void setOutcome(lead.id, "interested")}
+                      subtitle={
+                        lead.outcome === "interested" && lead.next_action_at
+                          ? `Følg op ${formatMeetingTime(lead.next_action_at)}`
+                          : undefined
+                      }
+                    />
+                    <OutcomeButton
+                      outcome="not_interested"
+                      label="Ikke relevant"
+                      selected={lead.outcome === "not_interested"}
+                      onClick={() => void setOutcome(lead.id, "not_interested")}
+                    />
+                    <CallbackOutcomeButton
+                      selected={lead.outcome === "callback"}
+                      callbackAt={lead.callback_at}
+                      onPick={(isoTime) =>
+                        void setOutcome(lead.id, "callback", isoTime)
+                      }
+                      onClear={() => void setOutcome(lead.id, null)}
+                    />
+                  </>
+                ) : (
+                  <>
+                    <OutcomeButton
+                      outcome="customer"
+                      selected={lead.outcome === "customer"}
+                      onClick={() => void setOutcome(lead.id, "customer")}
+                      fullWidth
+                    />
+                    {(
+                      [
+                        "booked",
+                        "interested",
+                        "follow_up",
+                        "not_interested",
+                      ] as const
+                    ).map((key) => (
+                      <OutcomeButton
+                        key={key}
+                        outcome={key}
+                        selected={lead.outcome === key}
+                        onClick={() => void setOutcome(lead.id, key)}
+                        subtitle={
+                          (key === "follow_up" &&
+                            lead.outcome === "follow_up" &&
+                            lead.next_action_at) ||
+                          (key === "interested" &&
+                            lead.outcome === "interested" &&
+                            lead.next_action_at)
+                            ? `Nudge ${formatMeetingTime(lead.next_action_at!)}`
+                            : undefined
+                        }
+                      />
+                    ))}
+                    <CallbackOutcomeButton
+                      selected={lead.outcome === "callback"}
+                      callbackAt={lead.callback_at}
+                      onPick={(isoTime) =>
+                        void setOutcome(lead.id, "callback", isoTime)
+                      }
+                      onClear={() => void setOutcome(lead.id, null)}
+                    />
+                    <OutcomeButton
+                      outcome="unqualified"
+                      selected={lead.outcome === "unqualified"}
+                      onClick={() => void setOutcome(lead.id, "unqualified")}
+                    />
+                  </>
+                )}
               </div>
             </div>
             <textarea
@@ -2189,24 +2260,15 @@ function CallSummaryChip({
 }) {
   const calls = events.filter((e) => e.channel === "phone");
   if (calls.length === 0) return null;
-  const recent = calls.slice(0, 2);
-  const label = recent
-    .map((c) => {
-      const who = c.sender
-        ? names[c.sender] ?? c.sender.split("@")[0]
-        : "?";
-      return `${who} ${formatClockTime(c.occurred_at)}`;
-    })
-    .join(" · ");
-  const extra = calls.length - recent.length;
+  const last = calls[0]; // events are newest-first
+  const who = last.sender ? names[last.sender] ?? last.sender.split("@")[0] : "?";
   return (
     <span
       className="tabular inline-flex items-center gap-1 rounded-full bg-[var(--forest)]/[0.08] px-2.5 py-0.5 text-[10px] tracking-[0.04em] text-[var(--forest)] ring-1 ring-inset ring-[var(--forest)]/20"
-      title={`${calls.length} opkald`}
+      title={`${calls.length} opkald — sidst ${who} ${formatClockTime(last.occurred_at)}`}
     >
       <span aria-hidden>📞</span>
-      {label}
-      {extra > 0 ? ` · +${extra}` : ""}
+      {calls.length} opkald · sidst {who} {formatClockTime(last.occurred_at)}
     </span>
   );
 }
@@ -2374,12 +2436,14 @@ function OutcomeButton({
   onClick,
   fullWidth,
   subtitle,
+  label,
 }: {
   outcome: Exclude<Outcome, null>;
   selected: boolean;
   onClick: () => void;
   fullWidth?: boolean;
   subtitle?: string;
+  label?: string;
 }) {
   const tone = OUTCOME_TONE[outcome];
   return (
@@ -2395,7 +2459,7 @@ function OutcomeButton({
       }`}
     >
       <span className="flex flex-col items-start">
-        <span>{OUTCOME_LABELS[outcome]}</span>
+        <span>{label ?? OUTCOME_LABELS[outcome]}</span>
         {selected && subtitle ? (
           <span className="tabular mt-0.5 text-[9px] text-[var(--ink)]/55 normal-case tracking-normal">
             {subtitle}
@@ -2533,6 +2597,7 @@ function SegmentedToggle({
       {(
         [
           { key: "active", label: "Aktive" },
+          { key: "in_progress", label: "I gang" },
           { key: "waiting", label: "Venter" },
           { key: "meetings", label: "Møder" },
           { key: "customers", label: "Kunder" },
@@ -2805,6 +2870,7 @@ type Branding = {
   bookingUrl: string | null;
   signoff: string | null;
   companyName: string | null;
+  signerName: string | null;
 };
 
 function buildSmsBody(name: string | null, identity: Identity, slotsLine?: string) {
@@ -2822,15 +2888,17 @@ function buildEmailDraft(
   // booking link. Low-pressure, first-name, their booking link + signoff.
   if (branding?.bookingUrl) {
     const company = branding.companyName ?? "os";
-    const sign = branding.signoff ?? company;
-    const subject = `Mødelokale hos ${company}`;
+    const me = branding.signerName;
+    const sign = me ? `${me}, ${company}` : branding.signoff ?? company;
+    const intro = me ? `Det er ${me} fra ${company}` : `Det er ${company}`;
+    const subject = `Hej ${firstName(name)} – mødelokale hos ${company}`;
     const body = `Hej ${firstName(name)},
 
-Vi prøvede at fange dig efter din henvendelse om mødelokale hos ${company}. Du kan booke en tid her: ${branding.bookingUrl}
+${intro} — jeg prøvede lige at ringe efter din henvendelse om mødelokale. Beklager jeg ikke fangede dig!
 
-Du er også velkommen til at svare på denne mail, hvis du har spørgsmål.
+Du kan booke en tid direkte her: ${branding.bookingUrl} — eller skriv/ring til mig, så finder vi et tidspunkt sammen.
 
-Mvh
+De bedste hilsner
 ${sign}`;
     return { subject, body };
   }

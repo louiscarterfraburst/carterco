@@ -7,6 +7,7 @@ export type Workspace = {
   sms_enabled?: boolean;
   booking_url?: string | null;
   signoff?: string | null;
+  outcome_preset?: string | null;
 };
 
 // Returns the workspaces the authenticated user is a member of. RLS filters the
@@ -26,7 +27,7 @@ export function useWorkspace(
 
     void supabase
       .from("workspaces")
-      .select("id, name, sms_enabled, booking_url, signoff")
+      .select("id, name, sms_enabled, booking_url, signoff, outcome_preset")
       .order("name", { ascending: true })
       .then(({ data }) => {
         if (cancelled) return;
@@ -38,6 +39,7 @@ export function useWorkspace(
             sms_enabled: w.sms_enabled ?? false,
             booking_url: w.booking_url ?? null,
             signoff: w.signoff ?? null,
+            outcome_preset: w.outcome_preset ?? "standard",
           })),
         });
       });
