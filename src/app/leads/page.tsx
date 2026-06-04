@@ -1783,21 +1783,24 @@ function DetailPanel({
               <p className="text-[12px] text-[var(--ink)]/55">
                 Tryk på telefonikonet for at starte opkaldet — så kan du markere resultatet bagefter.
               </p>
-              <button
-                type="button"
-                onClick={() => {
-                  if (
-                    window.confirm(
-                      `Fjern ${lead.name ?? "dette lead"} fra listen? Det kan ikke fortrydes.`,
-                    )
-                  ) {
-                    void removeLead(lead.id);
-                  }
-                }}
-                className="mt-1 text-[10px] uppercase tracking-[0.2em] text-[var(--ink)]/40 underline-offset-4 transition hover:text-[var(--clay)] hover:underline"
-              >
-                Fjern lead
-              </button>
+              <div className="mt-1 flex w-full flex-col items-center gap-3 border-t border-[var(--clay)]/15 pt-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        `Fjern ${lead.name ?? "dette lead"} fra listen? Det kan ikke fortrydes.`,
+                      )
+                    ) {
+                      void removeLead(lead.id);
+                    }
+                  }}
+                  className="focus-cream group inline-flex items-center gap-2.5 rounded-sm border border-[var(--clay)]/40 bg-[var(--cream)] px-5 py-3 text-[11px] uppercase tracking-[0.18em] text-[var(--clay)] transition hover:border-[var(--clay)] hover:bg-[var(--clay)] hover:text-[var(--cream)] active:bg-[#b5482f]"
+                >
+                  <TrashIcon />
+                  Fjern lead
+                </button>
+              </div>
             </div>
           ) : (
             <>
@@ -2871,6 +2874,20 @@ function MailIcon() {
     <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
       <path
         d="M2 4h10v6H2V4zM2 4l5 3.5L12 4"
+        stroke="currentColor"
+        strokeWidth="1.1"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function TrashIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+      <path
+        d="M2.5 3.75h9M5.5 3.75V2.5h3v1.25M3.75 3.75l.5 7a1 1 0 001 .9h3.5a1 1 0 001-.9l.5-7M6 6v3.25M8 6v3.25"
         stroke="currentColor"
         strokeWidth="1.1"
         strokeLinecap="round"
