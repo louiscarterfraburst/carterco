@@ -64,7 +64,7 @@ type ConversationEvent = {
   source: string;
 };
 
-type View = "active" | "waiting" | "meetings" | "customers" | "all";
+type View = "active" | "in_progress" | "waiting" | "meetings" | "customers" | "all";
 
 type NotificationStatus =
   | "Ikke aktiv"
@@ -152,11 +152,41 @@ export default function LeadsPage() {
   const [user, setUser] = useState<User | null>(null);
   const [email, setEmail] = useState("");
   const [token, setToken] = useState("");
-  const { workspace, loading: workspaceLoading } = useWorkspace(supabase, user);
+  const { workspace, workspaces, loading: workspaceLoading } = useWorkspace(supabase, user);
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string>(() =>
+    typeof window === "undefined" ? "" : window.localStorage.getItem("leads_workspace_id") ?? "",
+  );
+  const activeWorkspace = useMemo(() => {
+    if (!workspaces.length) return null;
+    return workspaces.find((w) => w.id === selectedWorkspaceId) ?? workspace ?? workspaces[0];
+  }, [selectedWorkspaceId, workspace, workspaces]);
+  const activeWorkspaceId = activeWorkspace?.id ?? "";
+  // SMS handoff (AI-svar / iMessage / SMS chips) is CarterCo-specific; gate it
+  // behind the workspace capability flag so client panels (Soho, …) stay clean.
+  const smsEnabled = activeWorkspace?.sms_enabled ?? false;
+  const outcomePreset = activeWorkspace?.outcome_preset ?? "standard";
+  function chooseWorkspace(id: string) {
+    setSelectedWorkspaceId(id);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("leads_workspace_id", id);
+    }
+  }
   const [leads, setLeads] = useState<Lead[]>([]);
   const [conversationEvents, setConversationEvents] = useState<
     Record<string, ConversationEvent[]>
   >({});
+  // email → first name, per active workspace. Used to show "Rosa" instead of the
+  // email handle on the call chip + note authors. Falls back to the local-part.
+  const [memberNames, setMemberNames] = useState<Record<string, string>>({});
+  // Per-workspace email branding. When booking_url is set, "Skriv mail" uses the
+  // client's follow-up template (their booking link + signoff), signed by the
+  // logged-in receptionist (signerName), instead of the CarterCo identity template.
+  const branding: Branding = {
+    bookingUrl: activeWorkspace?.booking_url ?? null,
+    signoff: activeWorkspace?.signoff ?? null,
+    companyName: activeWorkspace?.name ?? null,
+    signerName: (user?.email ? memberNames[user.email] : null) ?? null,
+  };
   const [loading, setLoading] = useState(true);
   const [notifications, setNotifications] =
     useState<NotificationStatus>("Ikke aktiv");
@@ -181,6 +211,7 @@ export default function LeadsPage() {
   const notesTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(
     new Map(),
   );
+  const reloadTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function markRung(leadId: string) {
     setHasRungIds((curr) => {
@@ -188,6 +219,58 @@ export default function LeadsPage() {
       next.add(leadId);
       return next;
     });
+    void logCallClick(leadId);
+  }
+
+  // Receptionist clicked "Ring" → log who/which-lead/when so we can attribute
+  // calls per agent (the agent overview). Mirrors logOutboundSms: optimistically
+  // appends the event into local state so the contact timeline updates without
+  // a refetch. The server route stamps sender = the authenticated user's email.
+  async function logCallClick(leadId: string) {
+    try {
+      const res = await fetch("/api/call-clicked", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ leadId }),
+      });
+      if (!res.ok) {
+        console.warn("call-clicked log failed:", await res.text().catch(() => ""));
+        return;
+      }
+      const data = (await res.json()) as { event: ConversationEvent };
+      setConversationEvents((curr) => ({
+        ...curr,
+        [leadId]: [data.event, ...(curr[leadId] ?? [])],
+      }));
+    } catch (e) {
+      console.warn("call-clicked log threw:", e);
+    }
+  }
+
+  // Operator added a note → persist an attributed note event (sender = author)
+  // and optimistically append it to the lead's timeline. Realtime broadcasts it
+  // to everyone else's open panel.
+  async function logNote(leadId: string, body: string) {
+    const trimmed = body.trim();
+    if (!trimmed) return;
+    try {
+      const res = await fetch("/api/note-added", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ leadId, body: trimmed }),
+      });
+      if (!res.ok) {
+        console.warn("note-added failed:", await res.text().catch(() => ""));
+        return;
+      }
+      const data = (await res.json()) as { event: ConversationEvent };
+      setConversationEvents((curr) => ({
+        ...curr,
+        [leadId]: [data.event, ...(curr[leadId] ?? [])],
+      }));
+    } catch (e) {
+      console.warn("note-added threw:", e);
+    }
   }
 
   // Operator clicked an SMS button → log outbound event so the chip flips
@@ -238,6 +321,20 @@ export default function LeadsPage() {
     return set;
   }, [conversationEvents]);
 
+  // Leads dialled at least once (a Ring-click logged a phone event, or a
+  // call_status was marked). Used to move a lead out of the fresh "Aktive" queue
+  // into "I gang" the moment anyone calls it — so the other receptionists don't
+  // pile onto a lead that's already being worked.
+  const dialledLeadIds = useMemo(() => {
+    const set = new Set<string>();
+    for (const [leadId, events] of Object.entries(conversationEvents)) {
+      if (events.some((e) => e.channel === "phone")) set.add(leadId);
+    }
+    return set;
+  }, [conversationEvents]);
+  const isDialled = (l: Lead) =>
+    l.call_status !== null || dialledLeadIds.has(l.id);
+
   const isActiveLead = (l: Lead) => {
     const eligible =
       !l.outcome ||
@@ -274,13 +371,25 @@ export default function LeadsPage() {
 
   const visibleLeads = useMemo(() => {
     if (view === "active") {
-      // Reply-waiting leads bubble to the top so they're not buried under
-      // 20+ stale rows. Within each group, preserve the existing order.
-      return leads.filter(isActiveLead).sort((a, b) => {
-        const aWaiting = leadsWithInboundReply.has(a.id) ? 1 : 0;
-        const bWaiting = leadsWithInboundReply.has(b.id) ? 1 : 0;
-        return bWaiting - aWaiting;
-      });
+      // Fresh queue: actionable AND not yet dialled. Reply-waiting leads bubble
+      // to the top. Dialled leads move to "I gang" so nobody double-dials.
+      return leads
+        .filter((l) => isActiveLead(l) && !isDialled(l))
+        .sort((a, b) => {
+          const aWaiting = leadsWithInboundReply.has(a.id) ? 1 : 0;
+          const bWaiting = leadsWithInboundReply.has(b.id) ? 1 : 0;
+          return bWaiting - aWaiting;
+        });
+    }
+    if (view === "in_progress") {
+      // Actionable AND already dialled — being worked.
+      return leads
+        .filter((l) => isActiveLead(l) && isDialled(l))
+        .sort((a, b) => {
+          const aWaiting = leadsWithInboundReply.has(a.id) ? 1 : 0;
+          const bWaiting = leadsWithInboundReply.has(b.id) ? 1 : 0;
+          return bWaiting - aWaiting;
+        });
     }
     if (view === "waiting") {
       return leads
@@ -308,7 +417,8 @@ export default function LeadsPage() {
       return withMeeting;
     }
     return leads;
-  }, [leads, view]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [leads, view, dialledLeadIds, leadsWithInboundReply]);
 
   const pendingOutcomeLeads = useMemo(
     () => leads.filter((l) => l.call_status === "answered" && !l.outcome),
@@ -316,14 +426,17 @@ export default function LeadsPage() {
   );
 
   const stats = useMemo(() => {
-    const active = leads.filter(isActiveLead).length;
+    const actionable = leads.filter(isActiveLead);
+    const active = actionable.filter((l) => !isDialled(l)).length;
+    const inProgress = actionable.filter((l) => isDialled(l)).length;
     const waiting = leads.filter(isWaitingLead).length;
     const customers = leads.filter((l) => l.outcome === "customer").length;
     const pending = pendingOutcomeLeads.length;
     const total = leads.length;
     const latest = leads[0]?.created_at ?? null;
-    return { active, waiting, customers, pending, total, latest };
-  }, [leads, pendingOutcomeLeads]);
+    return { active, inProgress, waiting, customers, pending, total, latest };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [leads, pendingOutcomeLeads, dialledLeadIds]);
 
   useEffect(() => {
     let mounted = true;
@@ -371,19 +484,79 @@ export default function LeadsPage() {
   }, [user, supabase]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || !activeWorkspaceId) return;
     void loadLeads();
     void refreshNotificationStatus();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
+  }, [user, activeWorkspaceId]);
+
+  // Load the workspace roster (email → first name) so call/note attribution
+  // shows real names. workspace_members is readable by members via RLS.
+  useEffect(() => {
+    if (!user || !activeWorkspaceId) return;
+    let cancelled = false;
+    void supabase
+      .from("workspace_members")
+      .select("user_email, display_name")
+      .eq("workspace_id", activeWorkspaceId)
+      .then(({ data }) => {
+        if (cancelled) return;
+        const map: Record<string, string> = {};
+        for (const m of data ?? []) {
+          if (m.user_email && m.display_name) map[m.user_email] = m.display_name;
+        }
+        setMemberNames(map);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user, activeWorkspaceId, supabase]);
+
+  // Live updates. Subscribe to leads + conversation events for the active
+  // workspace; any insert/update (a new lead lands, someone logs a call, someone
+  // adds a note) triggers a debounced reload so every open panel stays current
+  // without a manual refresh. Mirrors the /outreach realtime pattern
+  // (outreach/page.tsx). Reload (not surgical apply) reconciles cleanly with the
+  // optimistic appends in logCallClick/logOutboundSms/logNote.
+  useEffect(() => {
+    if (!user || !activeWorkspaceId) return;
+    const filter = `workspace_id=eq.${activeWorkspaceId}`;
+    const scheduleReload = () => {
+      if (reloadTimer.current) clearTimeout(reloadTimer.current);
+      reloadTimer.current = setTimeout(() => {
+        reloadTimer.current = null;
+        void loadLeads();
+      }, 400);
+    };
+    const ch = supabase
+      .channel(`leads-live-${activeWorkspaceId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "leads", filter },
+        scheduleReload,
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "lead_conversation_events", filter },
+        scheduleReload,
+      )
+      .subscribe();
+    return () => {
+      if (reloadTimer.current) clearTimeout(reloadTimer.current);
+      void supabase.removeChannel(ch);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, activeWorkspaceId]);
 
   async function loadLeads() {
     setError(null);
+    if (!activeWorkspaceId) return;
     const { data, error } = await supabase
       .from("leads")
       .select(
         "id, created_at, name, company, email, phone, monthly_leads, response_time, call_status, call_status_at, outcome, outcome_at, notes, is_draft, draft_updated_at, meeting_at, callback_at, next_action_at, next_action_type, retry_count, last_action_fired_at",
       )
+      .eq("workspace_id", activeWorkspaceId)
       .order("created_at", { ascending: false })
       .limit(50);
 
@@ -617,55 +790,47 @@ export default function LeadsPage() {
       payload.retry_count = 0;
       payload.last_action_fired_at = null;
     } else if (outcome === "interested" && !currentLead?.meeting_at) {
-      // Said yes but hasn't booked — queue a +2d nudge so they don't rot.
-      interestedAt = clampToBusinessHours(
-        new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
-      );
-      payload.callback_at = null;
-      payload.next_action_at = interestedAt;
-      payload.next_action_type = "retry";
-      payload.retry_count = 0;
-      payload.last_action_fired_at = null;
+      // Said yes / "delt link" but hasn't booked — queue a nudge so they don't rot.
+      if (outcomePreset === "meeting_room") {
+        // 1·1·2 resurface ladder: nudge at day 1, 2, 4 (gaps 1·1·2), then quiet.
+        // Never closes — Nexudus auto-marks Booket whenever they eventually book.
+        const newCount = (currentLead?.retry_count ?? 0) + 1;
+        const gapDays =
+          newCount === 1 ? 1 : newCount === 2 ? 1 : newCount === 3 ? 2 : null;
+        payload.callback_at = null;
+        payload.retry_count = newCount;
+        payload.last_action_fired_at = null;
+        if (gapDays === null) {
+          payload.next_action_at = null;
+          payload.next_action_type = null;
+        } else {
+          interestedAt = clampToBusinessHours(
+            new Date(Date.now() + gapDays * 24 * 60 * 60 * 1000).toISOString(),
+          );
+          payload.next_action_at = interestedAt;
+          payload.next_action_type = "retry";
+        }
+      } else {
+        interestedAt = clampToBusinessHours(
+          new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
+        );
+        payload.callback_at = null;
+        payload.next_action_at = interestedAt;
+        payload.next_action_type = "retry";
+        payload.retry_count = 0;
+        payload.last_action_fired_at = null;
+      }
     } else {
       payload.callback_at = null;
       payload.next_action_at = null;
       payload.next_action_type = null;
     }
 
-    const schedulesAction =
-      outcome === "callback" ||
-      outcome === "follow_up" ||
-      (outcome === "interested" && !!interestedAt);
-
+    // Optimistic update mirrors the exact payload, so all paths (incl. the
+    // meeting_room 1·1·2 retry_count) stay consistent with the DB write.
     setLeads((current) =>
       current.map((lead) =>
-        lead.id === leadId
-          ? {
-              ...lead,
-              outcome,
-              outcome_at: outcomeAt,
-              callback_at: outcome === "callback" ? clampedCallback : null,
-              next_action_at:
-                outcome === "callback"
-                  ? clampedCallback
-                  : outcome === "follow_up"
-                    ? followUpAt
-                    : outcome === "interested"
-                      ? interestedAt
-                      : null,
-              next_action_type:
-                outcome === "callback"
-                  ? "callback"
-                  : outcome === "follow_up" ||
-                    (outcome === "interested" && !!interestedAt)
-                    ? "retry"
-                    : null,
-              retry_count: schedulesAction ? 0 : lead.retry_count,
-              last_action_fired_at: schedulesAction
-                ? null
-                : lead.last_action_fired_at,
-            }
-          : lead,
+        lead.id === leadId ? { ...lead, ...(payload as Partial<Lead>) } : lead,
       ),
     );
 
@@ -771,7 +936,7 @@ export default function LeadsPage() {
         p256dh: subscriptionJson.keys?.p256dh,
         auth: subscriptionJson.keys?.auth,
         user_agent: navigator.userAgent,
-        workspace_id: workspace?.id,
+        workspace_id: activeWorkspace?.id,
       },
       { onConflict: "endpoint" },
     );
@@ -833,7 +998,7 @@ export default function LeadsPage() {
           phone: "+4512345678",
           monthly_leads: "50-250",
           response_time: "Under 5 min",
-          workspace_id: workspace?.id,
+          workspace_id: activeWorkspace?.id,
         },
       });
 
@@ -973,7 +1138,7 @@ export default function LeadsPage() {
   }
 
   /* ─── no workspace state ─── */
-  if (!workspaceLoading && !workspace) {
+  if (!workspaceLoading && !activeWorkspace) {
     return (
       <main className="safe-screen safe-pad-top safe-pad-bottom safe-px relative min-h-screen overflow-hidden bg-[var(--sand)] text-[var(--ink)]">
         <div className="grain-overlay" />
@@ -1001,14 +1166,28 @@ export default function LeadsPage() {
       {/* Sticky top bar */}
       <div className="safe-pad-top sticky top-0 z-20 border-b border-[var(--ink)]/[0.10] bg-[var(--sand)]/85 backdrop-blur-xl">
         <div className="mx-auto flex w-full max-w-[1400px] min-w-0 items-center justify-between gap-3 px-4 py-3 sm:gap-4 sm:px-8 lg:px-12">
-          <Link
-            href="/"
-            className="tabular min-w-0 truncate text-[10px] uppercase tracking-[0.24em] text-[var(--ink)]/50 transition hover:text-[var(--ink)]/80 sm:tracking-[0.35em]"
-          >
-            CarterCo
-            <span className="mx-2 text-[var(--ink)]/25">/</span>
-            <span className="text-[var(--ink)]/75">Leads</span>
-          </Link>
+          <div className="flex min-w-0 items-center gap-3">
+            <Link
+              href="/"
+              className="tabular min-w-0 truncate text-[10px] uppercase tracking-[0.24em] text-[var(--ink)]/50 transition hover:text-[var(--ink)]/80 sm:tracking-[0.35em]"
+            >
+              CarterCo
+              <span className="mx-2 text-[var(--ink)]/25">/</span>
+              <span className="text-[var(--ink)]/75">Leads</span>
+            </Link>
+            {workspaces.length > 1 ? (
+              <select
+                value={activeWorkspace?.id ?? ""}
+                onChange={(e) => chooseWorkspace(e.target.value)}
+                className="focus-cream tabular shrink-0 rounded-sm border border-[var(--ink)]/15 bg-transparent px-2 py-1.5 text-[10px] uppercase tracking-[0.18em] text-[var(--ink)]/65 outline-none hover:border-[var(--ink)]/35 focus:border-[var(--ink)]/35"
+                title="Workspace"
+              >
+                {workspaces.map((w) => (
+                  <option key={w.id} value={w.id}>{w.name}</option>
+                ))}
+              </select>
+            ) : null}
+          </div>
 
           <div className="flex min-w-0 shrink-0 items-center gap-1 sm:gap-2">
             <SegmentedToggle value={view} onChange={setView} />
@@ -1080,34 +1259,28 @@ export default function LeadsPage() {
         </div>
       </section>
 
-      {/* Notification status */}
-      <section className="mx-auto mb-5 w-full max-w-[1400px] px-4 sm:px-8 lg:px-12">
-        <div className="grid gap-3 border border-[var(--ink)]/[0.10] bg-[var(--ink)]/[0.025] p-4 sm:grid-cols-[1fr_auto] sm:items-center">
-          <div className="min-w-0">
-            <p className="tabular text-[10px] uppercase tracking-[0.26em] text-[var(--ink)]/35">
-              Push-notifikationer
-            </p>
-            <div className="mt-2 flex min-w-0 flex-wrap items-center gap-2">
-              <span
-                className={`h-2.5 w-2.5 rounded-full ${
-                  notifications === "Aktiv"
-                    ? "bg-[var(--forest)]"
-                    : notifications === "Blokeret"
-                      ? "bg-[var(--clay)]"
-                      : "bg-[var(--ink)]/25"
-                }`}
-                aria-hidden
-              />
-              <p className="font-display text-2xl italic leading-none text-[var(--ink)]">
-                {notificationTitle(notifications)}
-              </p>
-            </div>
-            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-[var(--ink)]/55">
-              {notificationHelp(notifications)}
-            </p>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2 sm:flex sm:justify-end">
+      {/* Notification status — slim bar (was a full card; compacted) */}
+      <section className="mx-auto mb-4 w-full max-w-[1400px] px-4 sm:px-8 lg:px-12">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-[var(--ink)]/[0.08] pb-3">
+          <span
+            className={`h-2 w-2 shrink-0 rounded-full ${
+              notifications === "Aktiv"
+                ? "bg-[var(--forest)]"
+                : notifications === "Blokeret"
+                  ? "bg-[var(--clay)]"
+                  : "bg-[var(--ink)]/25"
+            }`}
+            aria-hidden
+          />
+          <span className="tabular text-[10px] uppercase tracking-[0.2em] text-[var(--ink)]/40">
+            Push
+          </span>
+          <span className="min-w-0 text-[12px] text-[var(--ink)]/55">
+            {notifications === "Aktiv"
+              ? "Aktiv på denne enhed"
+              : notificationHelp(notifications)}
+          </span>
+          <div className="ml-auto flex shrink-0 gap-2">
             <button
               type="button"
               onClick={() => void enableNotifications()}
@@ -1115,18 +1288,20 @@ export default function LeadsPage() {
                 notifications === "Beder om adgang" ||
                 notifications === "Gemmer"
               }
-              className="focus-cream rounded-sm border border-[var(--ink)]/15 px-4 py-3 text-[10px] uppercase tracking-[0.16em] text-[var(--ink)]/70 transition hover:border-[var(--ink)]/30 hover:text-[var(--ink)] disabled:cursor-wait disabled:opacity-45"
+              className="focus-cream tabular rounded-sm border border-[var(--ink)]/15 px-3 py-1.5 text-[10px] uppercase tracking-[0.16em] text-[var(--ink)]/65 transition hover:border-[var(--ink)]/35 hover:text-[var(--ink)] disabled:cursor-wait disabled:opacity-45"
             >
               {notifications === "Aktiv" ? "Tjek igen" : "Slå til"}
             </button>
-            <button
-              type="button"
-              onClick={() => void sendTestNotification()}
-              disabled={notifications !== "Aktiv" || testingNotification}
-              className="focus-cream rounded-sm border border-[var(--ink)]/15 px-4 py-3 text-[10px] uppercase tracking-[0.16em] text-[var(--ink)]/70 transition hover:border-[var(--ink)]/30 hover:text-[var(--ink)] disabled:cursor-not-allowed disabled:opacity-35"
-            >
-              {testingNotification ? "Sender" : "Send test"}
-            </button>
+            {notifications === "Aktiv" ? (
+              <button
+                type="button"
+                onClick={() => void sendTestNotification()}
+                disabled={testingNotification}
+                className="focus-cream tabular rounded-sm border border-[var(--ink)]/15 px-3 py-1.5 text-[10px] uppercase tracking-[0.16em] text-[var(--ink)]/65 transition hover:border-[var(--ink)]/35 hover:text-[var(--ink)] disabled:opacity-35"
+              >
+                {testingNotification ? "Sender" : "Send test"}
+              </button>
+            ) : null}
           </div>
         </div>
       </section>
@@ -1166,7 +1341,9 @@ export default function LeadsPage() {
           <div className="border-b border-[var(--ink)]/[0.08] py-16 text-center">
             <p className="font-display text-2xl italic text-[var(--ink)]/40">
               {view === "active"
-                ? "Ingen aktive leads."
+                ? "Ingen nye leads."
+                : view === "in_progress"
+                  ? "Ingen leads i gang."
                 : view === "waiting"
                   ? "Ingen ventende opfølgninger."
                 : "Ingen leads endnu."}
@@ -1194,6 +1371,11 @@ export default function LeadsPage() {
                 identity={identity}
                 conversationEvents={conversationEvents[lead.id] ?? []}
                 onSent={logOutboundSms}
+                onNote={logNote}
+                names={memberNames}
+                smsEnabled={smsEnabled}
+                branding={branding}
+                preset={outcomePreset}
               />
             ))}
           </ol>
@@ -1228,6 +1410,11 @@ function LeadRow({
   identity,
   conversationEvents,
   onSent,
+  onNote,
+  names,
+  smsEnabled,
+  branding,
+  preset,
 }: {
   lead: Lead;
   index: number;
@@ -1247,6 +1434,11 @@ function LeadRow({
   identity: Identity;
   conversationEvents: ConversationEvent[];
   onSent: (leadId: string, body: string) => void;
+  onNote: (leadId: string, body: string) => void;
+  names: Record<string, string>;
+  smsEnabled: boolean;
+  branding: Branding;
+  preset: string;
 }) {
   const urgent =
     !!lead.response_time && URGENCY[lead.response_time] === "urgent";
@@ -1268,6 +1460,9 @@ function LeadRow({
   const hasInboundReplyWaiting = latestSmsEvent?.direction === "inbound";
   const hasPendingAction =
     Boolean(lead.next_action_at) || lead.outcome === "callback";
+  // Anti-spam glance: has anyone already called this lead? Surfaced as a row chip
+  // so a second receptionist sees it before dialing.
+  const hasCalls = conversationEvents.some((e) => e.channel === "phone");
 
   return (
     <li
@@ -1323,7 +1518,8 @@ function LeadRow({
             {lead.monthly_leads ||
             lead.response_time ||
             lead.next_action_at ||
-            hasInboundReplyWaiting ? (
+            hasInboundReplyWaiting ||
+            hasCalls ? (
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 {lead.monthly_leads ? (
                   <MetaTag>{lead.monthly_leads}</MetaTag>
@@ -1336,7 +1532,8 @@ function LeadRow({
                   </MetaTag>
                 ) : null}
                 <PendingActionChip lead={lead} />
-                <SmsStatusChip events={conversationEvents} />
+                <CallSummaryChip events={conversationEvents} names={names} />
+                {smsEnabled ? <SmsStatusChip events={conversationEvents} /> : null}
               </div>
             ) : null}
           </div>
@@ -1364,10 +1561,11 @@ function LeadRow({
                 <span className="text-[var(--ink)]/30">—</span>
               )}
             </p>
-            {hasPendingAction || hasInboundReplyWaiting ? (
+            {hasPendingAction || hasInboundReplyWaiting || hasCalls ? (
               <div className="mt-1 flex flex-wrap items-center gap-1.5">
                 <PendingActionChip lead={lead} />
-                <SmsStatusChip events={conversationEvents} />
+                <CallSummaryChip events={conversationEvents} names={names} />
+                {smsEnabled ? <SmsStatusChip events={conversationEvents} /> : null}
               </div>
             ) : null}
           </div>
@@ -1435,6 +1633,11 @@ function LeadRow({
           identity={identity}
           conversationEvents={conversationEvents}
           onSent={onSent}
+          onNote={onNote}
+          names={names}
+          smsEnabled={smsEnabled}
+          branding={branding}
+          preset={preset}
         />
       ) : null}
     </li>
@@ -1454,6 +1657,11 @@ function DetailPanel({
   identity,
   conversationEvents,
   onSent,
+  onNote,
+  names,
+  smsEnabled,
+  branding,
+  preset,
 }: {
   lead: Lead;
   hasRung: boolean;
@@ -1469,6 +1677,11 @@ function DetailPanel({
   identity: Identity;
   conversationEvents: ConversationEvent[];
   onSent: (leadId: string, body: string) => void;
+  onNote: (leadId: string, body: string) => void;
+  names: Record<string, string>;
+  smsEnabled: boolean;
+  branding: Branding;
+  preset: string;
 }) {
   // Resolved — terminal state, shown only in "Vis alle".
   // `callback`, `follow_up`, and `interested`-with-nudge stay editable in Aktive.
@@ -1514,7 +1727,8 @@ function DetailPanel({
               {lead.notes}
             </p>
           ) : null}
-          <ConversationTimeline events={conversationEvents} />
+          <ConversationTimeline events={conversationEvents} names={names} />
+          <NoteComposer leadId={lead.id} onNote={onNote} />
           {lead.outcome === "booked" ? (
             <button
               type="button"
@@ -1529,8 +1743,10 @@ function DetailPanel({
     );
   }
 
+  // SMS handoff is CarterCo-only (smsEnabled). When off, the "Intet svar · SMS"
+  // variant and the AI-svar button both drop out — client panels stay call-first.
   const canSms =
-    !!lead.phone && lead.phone.replace(/\D/g, "").length >= 8;
+    smsEnabled && !!lead.phone && lead.phone.replace(/\D/g, "").length >= 8;
   const smsBody = buildSmsBody(lead.name, identity, slotsLine);
   const hasEmail = !!lead.email && lead.email.includes("@");
   const hasDialled = hasRung || lead.call_status !== null;
@@ -1549,7 +1765,7 @@ function DetailPanel({
             value={contactSummary(lead)}
           />
           <ContactAction
-            href={hasEmail ? mailtoHref(lead.email, lead.name, identity, slotsLine) : "#"}
+            href={hasEmail ? mailtoHref(lead.email, lead.name, identity, slotsLine, branding) : "#"}
             enabled={hasEmail}
             icon={<MailIcon />}
             label="Skriv mail"
@@ -1642,7 +1858,8 @@ function DetailPanel({
           )}
         </div>
 
-        <ConversationTimeline events={conversationEvents} />
+        <ConversationTimeline events={conversationEvents} names={names} />
+        <NoteComposer leadId={lead.id} onNote={onNote} />
         {canSms && (
           <AiSmsButton lead={lead} onSent={onSent} />
         )}
@@ -1655,50 +1872,89 @@ function DetailPanel({
                 Resultat
               </p>
               <div className="grid grid-cols-2 gap-2">
-                <OutcomeButton
-                  outcome="customer"
-                  selected={lead.outcome === "customer"}
-                  onClick={() => void setOutcome(lead.id, "customer")}
-                  fullWidth
-                />
-                {(
-                  [
-                    "booked",
-                    "interested",
-                    "follow_up",
-                    "not_interested",
-                  ] as const
-                ).map((key) => (
-                  <OutcomeButton
-                    key={key}
-                    outcome={key}
-                    selected={lead.outcome === key}
-                    onClick={() => void setOutcome(lead.id, key)}
-                    subtitle={
-                      (key === "follow_up" &&
-                        lead.outcome === "follow_up" &&
-                        lead.next_action_at) ||
-                      (key === "interested" &&
-                        lead.outcome === "interested" &&
-                        lead.next_action_at)
-                        ? `Nudge ${formatMeetingTime(lead.next_action_at!)}`
-                        : undefined
-                    }
-                  />
-                ))}
-                <CallbackOutcomeButton
-                  selected={lead.outcome === "callback"}
-                  callbackAt={lead.callback_at}
-                  onPick={(isoTime) =>
-                    void setOutcome(lead.id, "callback", isoTime)
-                  }
-                  onClear={() => void setOutcome(lead.id, null)}
-                />
-                <OutcomeButton
-                  outcome="unqualified"
-                  selected={lead.outcome === "unqualified"}
-                  onClick={() => void setOutcome(lead.id, "unqualified")}
-                />
+                {preset === "meeting_room" ? (
+                  <>
+                    <OutcomeButton
+                      outcome="booked"
+                      label="Booket"
+                      selected={lead.outcome === "booked"}
+                      onClick={() => void setOutcome(lead.id, "booked")}
+                      fullWidth
+                    />
+                    <OutcomeButton
+                      outcome="interested"
+                      label="Delt link – vil kigge"
+                      selected={lead.outcome === "interested"}
+                      onClick={() => void setOutcome(lead.id, "interested")}
+                      subtitle={
+                        lead.outcome === "interested" && lead.next_action_at
+                          ? `Følg op ${formatMeetingTime(lead.next_action_at)}`
+                          : undefined
+                      }
+                    />
+                    <OutcomeButton
+                      outcome="not_interested"
+                      label="Ikke relevant"
+                      selected={lead.outcome === "not_interested"}
+                      onClick={() => void setOutcome(lead.id, "not_interested")}
+                    />
+                    <CallbackOutcomeButton
+                      selected={lead.outcome === "callback"}
+                      callbackAt={lead.callback_at}
+                      onPick={(isoTime) =>
+                        void setOutcome(lead.id, "callback", isoTime)
+                      }
+                      onClear={() => void setOutcome(lead.id, null)}
+                    />
+                  </>
+                ) : (
+                  <>
+                    <OutcomeButton
+                      outcome="customer"
+                      selected={lead.outcome === "customer"}
+                      onClick={() => void setOutcome(lead.id, "customer")}
+                      fullWidth
+                    />
+                    {(
+                      [
+                        "booked",
+                        "interested",
+                        "follow_up",
+                        "not_interested",
+                      ] as const
+                    ).map((key) => (
+                      <OutcomeButton
+                        key={key}
+                        outcome={key}
+                        selected={lead.outcome === key}
+                        onClick={() => void setOutcome(lead.id, key)}
+                        subtitle={
+                          (key === "follow_up" &&
+                            lead.outcome === "follow_up" &&
+                            lead.next_action_at) ||
+                          (key === "interested" &&
+                            lead.outcome === "interested" &&
+                            lead.next_action_at)
+                            ? `Nudge ${formatMeetingTime(lead.next_action_at!)}`
+                            : undefined
+                        }
+                      />
+                    ))}
+                    <CallbackOutcomeButton
+                      selected={lead.outcome === "callback"}
+                      callbackAt={lead.callback_at}
+                      onPick={(isoTime) =>
+                        void setOutcome(lead.id, "callback", isoTime)
+                      }
+                      onClear={() => void setOutcome(lead.id, null)}
+                    />
+                    <OutcomeButton
+                      outcome="unqualified"
+                      selected={lead.outcome === "unqualified"}
+                      onClick={() => void setOutcome(lead.id, "unqualified")}
+                    />
+                  </>
+                )}
               </div>
             </div>
             <textarea
@@ -1780,7 +2036,56 @@ function AiSmsButton({
   );
 }
 
-function ConversationTimeline({ events }: { events: ConversationEvent[] }) {
+// Attributed note composer. Writes a note event (sender = author) that shows in
+// the timeline and broadcasts live to everyone via realtime. ⌘/Ctrl+Enter sends.
+function NoteComposer({
+  leadId,
+  onNote,
+}: {
+  leadId: string;
+  onNote: (leadId: string, body: string) => void;
+}) {
+  const [value, setValue] = useState("");
+  const submit = () => {
+    const v = value.trim();
+    if (!v) return;
+    onNote(leadId, v);
+    setValue("");
+  };
+  return (
+    <div className="flex items-start gap-2">
+      <textarea
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => {
+          if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+            e.preventDefault();
+            submit();
+          }
+        }}
+        rows={2}
+        placeholder="Tilføj en note…"
+        className="focus-cream min-h-0 flex-1 resize-y rounded-sm border border-[var(--ink)]/15 bg-transparent px-3 py-2 text-[13px] leading-relaxed text-[var(--ink)] outline-none placeholder:text-[var(--ink)]/35 focus:border-[var(--ink)]/35"
+      />
+      <button
+        type="button"
+        onClick={submit}
+        disabled={!value.trim()}
+        className="focus-cream tabular shrink-0 rounded-sm border border-[var(--ink)]/15 px-3 py-2 text-[10px] uppercase tracking-[0.18em] text-[var(--ink)]/65 transition hover:border-[var(--ink)]/35 hover:text-[var(--ink)] disabled:opacity-40"
+      >
+        Note
+      </button>
+    </div>
+  );
+}
+
+function ConversationTimeline({
+  events,
+  names,
+}: {
+  events: ConversationEvent[];
+  names: Record<string, string>;
+}) {
   if (events.length === 0) return null;
   return (
     <section className="ledger-detail flex flex-col gap-3 border-t border-[var(--ink)]/[0.10] pt-5">
@@ -1805,7 +2110,7 @@ function ConversationTimeline({ events }: { events: ConversationEvent[] }) {
                 </span>
                 {event.sender ? (
                   <span className="truncate text-[11px] text-[var(--ink)]/40">
-                    {event.sender}
+                    {names[event.sender] ?? event.sender.split("@")[0]}
                   </span>
                 ) : null}
               </div>
@@ -1978,6 +2283,42 @@ function PendingQuickButton({
 // Row chip that lights up when there's an inbound SMS reply newer than any
 // outbound SMS. Operator sees "ball is in your court" at a glance instead of
 // drilling into every lead's conversation timeline. Renders null otherwise.
+// Anti-spam call glance. events arrive newest-first; show the most recent
+// caller(s) + time so a second receptionist sees a lead was just worked. Sender
+// is an email (e.g. rlj@soho.dk) — we show the local-part as a short handle.
+function CallSummaryChip({
+  events,
+  names,
+}: {
+  events: ConversationEvent[];
+  names: Record<string, string>;
+}) {
+  const calls = events.filter((e) => e.channel === "phone");
+  if (calls.length === 0) return null;
+  const last = calls[0]; // events are newest-first
+  const who = last.sender ? names[last.sender] ?? last.sender.split("@")[0] : "?";
+  return (
+    <span
+      className="tabular inline-flex items-center gap-1 rounded-full bg-[var(--forest)]/[0.08] px-2.5 py-0.5 text-[10px] tracking-[0.04em] text-[var(--forest)] ring-1 ring-inset ring-[var(--forest)]/20"
+      title={`${calls.length} opkald — sidst ${who} ${formatClockTime(last.occurred_at)}`}
+    >
+      <span aria-hidden>📞</span>
+      {calls.length} opkald · sidst {who} {formatClockTime(last.occurred_at)}
+    </span>
+  );
+}
+
+function formatClockTime(value: string) {
+  try {
+    return new Date(value).toLocaleTimeString("da-DK", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return "";
+  }
+}
+
 function SmsStatusChip({ events }: { events: ConversationEvent[] }) {
   // events are sorted occurred_at desc by loadConversationEvents — first match
   // for channel==='sms' is the most recent SMS in the thread.
@@ -2130,12 +2471,14 @@ function OutcomeButton({
   onClick,
   fullWidth,
   subtitle,
+  label,
 }: {
   outcome: Exclude<Outcome, null>;
   selected: boolean;
   onClick: () => void;
   fullWidth?: boolean;
   subtitle?: string;
+  label?: string;
 }) {
   const tone = OUTCOME_TONE[outcome];
   return (
@@ -2151,7 +2494,7 @@ function OutcomeButton({
       }`}
     >
       <span className="flex flex-col items-start">
-        <span>{OUTCOME_LABELS[outcome]}</span>
+        <span>{label ?? OUTCOME_LABELS[outcome]}</span>
         {selected && subtitle ? (
           <span className="tabular mt-0.5 text-[9px] text-[var(--ink)]/55 normal-case tracking-normal">
             {subtitle}
@@ -2289,6 +2632,7 @@ function SegmentedToggle({
       {(
         [
           { key: "active", label: "Aktive" },
+          { key: "in_progress", label: "I gang" },
           { key: "waiting", label: "Venter" },
           { key: "meetings", label: "Møder" },
           { key: "customers", label: "Kunder" },
@@ -2554,12 +2898,47 @@ type Identity = {
   signoff: string;
 };
 
+// Per-workspace email branding. When bookingUrl is set (e.g. Soho's Nexudus
+// link), the email draft uses the client's follow-up template instead of the
+// operator's CarterCo identity. PLACEHOLDER booking link until Louis sets it.
+type Branding = {
+  bookingUrl: string | null;
+  signoff: string | null;
+  companyName: string | null;
+  signerName: string | null;
+};
+
 function buildSmsBody(name: string | null, identity: Identity, slotsLine?: string) {
   const slot = slotsLine ? ` Hvordan ser din kalender ud ${slotsLine}?` : "";
   return `Hej ${firstName(name)}, det er ${identity.displayName} fra ${identity.companyName} - jeg prøvede lige at ringe.${slot} /${identity.signoff}`;
 }
 
-function buildEmailDraft(name: string | null, identity: Identity, slotsLine?: string) {
+function buildEmailDraft(
+  name: string | null,
+  identity: Identity,
+  slotsLine?: string,
+  branding?: Branding,
+) {
+  // Client follow-up template (Soho etc.) — used when the workspace has a
+  // booking link. Low-pressure, first-name, their booking link + signoff.
+  if (branding?.bookingUrl) {
+    const company = branding.companyName ?? "os";
+    const me = branding.signerName;
+    const sign = me ? `${me}, ${company}` : branding.signoff ?? company;
+    const intro = me ? `Det er ${me} fra ${company}` : `Det er ${company}`;
+    const subject = `Hej ${firstName(name)} – mødelokale hos ${company}`;
+    const body = `Hej ${firstName(name)},
+
+${intro} — jeg prøvede lige at ringe efter din henvendelse om mødelokale. Beklager jeg ikke fangede dig!
+
+Du kan booke en tid direkte her: ${branding.bookingUrl} — eller skriv/ring til mig, så finder vi et tidspunkt sammen.
+
+De bedste hilsner
+${sign}`;
+    return { subject, body };
+  }
+
+  // Default CarterCo operator template.
   const subject = `Kort follow-up fra ${identity.companyName}`;
   const slotPara = slotsLine
     ? `Hvordan ser din kalender ud ${slotsLine}? Ellers foreslå selv et tidspunkt.\n\n`
@@ -2574,9 +2953,15 @@ ${slotPara}Du kan også booke direkte her: ${identity.calendlyUrl}
   return { subject, body };
 }
 
-function mailtoHref(email: string | null | undefined, name: string | null, identity: Identity, slotsLine?: string) {
+function mailtoHref(
+  email: string | null | undefined,
+  name: string | null,
+  identity: Identity,
+  slotsLine?: string,
+  branding?: Branding,
+) {
   if (!email) return "#";
-  const { subject, body } = buildEmailDraft(name, identity, slotsLine);
+  const { subject, body } = buildEmailDraft(name, identity, slotsLine, branding);
   const query = `subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   return `mailto:${email}?${query}`;
 }
@@ -2709,25 +3094,6 @@ function formatBlocksLine(
   if (parts.length === 1) return parts[0];
   if (parts.length === 2) return `${parts[0]} og ${parts[1]}`;
   return `${parts.slice(0, -1).join(", ")} og ${parts[parts.length - 1]}`;
-}
-
-function notificationTitle(status: NotificationStatus) {
-  switch (status) {
-    case "Aktiv":
-      return "Aktiv på denne enhed";
-    case "Beder om adgang":
-      return "Venter på tilladelse";
-    case "Gemmer":
-      return "Gemmer enheden";
-    case "Installer appen":
-      return "Åbn som Home Screen app";
-    case "Blokeret":
-      return "Blokeret i iOS";
-    case "Ikke understøttet":
-      return "Ikke understøttet";
-    default:
-      return "Ikke slået til";
-  }
 }
 
 function notificationHelp(status: NotificationStatus) {
