@@ -703,6 +703,20 @@ export default function LeadsPage() {
     timers.set(leadId, timer);
   }
 
+  // Drop a lead off the list before it's been worked — junk, duplicate, or
+  // out-of-scope inbound you don't want to dial. Hard delete: it's never been
+  // called, so there's no call history worth keeping. Optimistic remove with
+  // rollback on failure.
+  async function removeLead(leadId: string) {
+    const previous = leads;
+    setLeads((curr) => curr.filter((l) => l.id !== leadId));
+    const { error } = await supabase.from("leads").delete().eq("id", leadId);
+    if (error) {
+      setLeads(previous);
+      setError(error.message);
+    }
+  }
+
   async function refreshNotificationStatus() {
     if (!("Notification" in window) || !("serviceWorker" in navigator)) {
       setNotifications("Ikke understøttet");
@@ -1175,6 +1189,7 @@ export default function LeadsPage() {
                 setCallStatus={setCallStatus}
                 setOutcome={setOutcome}
                 updateNotes={updateNotes}
+                removeLead={removeLead}
                 slotsLine={slotsLine}
                 identity={identity}
                 conversationEvents={conversationEvents[lead.id] ?? []}
@@ -1208,6 +1223,7 @@ function LeadRow({
   setCallStatus,
   setOutcome,
   updateNotes,
+  removeLead,
   slotsLine,
   identity,
   conversationEvents,
@@ -1226,6 +1242,7 @@ function LeadRow({
     callbackAt?: string,
   ) => Promise<void>;
   updateNotes: (id: string, v: string) => void;
+  removeLead: (id: string) => Promise<void>;
   slotsLine: string;
   identity: Identity;
   conversationEvents: ConversationEvent[];
@@ -1413,6 +1430,7 @@ function LeadRow({
           setCallStatus={setCallStatus}
           setOutcome={setOutcome}
           updateNotes={updateNotes}
+          removeLead={removeLead}
           slotsLine={slotsLine}
           identity={identity}
           conversationEvents={conversationEvents}
@@ -1431,6 +1449,7 @@ function DetailPanel({
   setCallStatus,
   setOutcome,
   updateNotes,
+  removeLead,
   slotsLine,
   identity,
   conversationEvents,
@@ -1445,6 +1464,7 @@ function DetailPanel({
     callbackAt?: string,
   ) => Promise<void>;
   updateNotes: (id: string, v: string) => void;
+  removeLead: (id: string) => Promise<void>;
   slotsLine: string;
   identity: Identity;
   conversationEvents: ConversationEvent[];
@@ -1547,6 +1567,21 @@ function DetailPanel({
               <p className="text-[12px] text-[var(--ink)]/55">
                 Tryk på telefonikonet for at starte opkaldet — så kan du markere resultatet bagefter.
               </p>
+              <button
+                type="button"
+                onClick={() => {
+                  if (
+                    window.confirm(
+                      `Fjern ${lead.name ?? "dette lead"} fra listen? Det kan ikke fortrydes.`,
+                    )
+                  ) {
+                    void removeLead(lead.id);
+                  }
+                }}
+                className="mt-1 text-[10px] uppercase tracking-[0.2em] text-[var(--ink)]/40 underline-offset-4 transition hover:text-[var(--clay)] hover:underline"
+              >
+                Fjern lead
+              </button>
             </div>
           ) : (
             <>
