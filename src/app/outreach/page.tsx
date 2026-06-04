@@ -3414,6 +3414,30 @@ function InboxSection({ label, hint, count, children }: {
 
 // ===================== ICP tabs =====================
 
+// Lead names live in outreach_leads, joined by sendpilot_lead_id. A lead
+// invited directly in SendPilot (outside the CSV import) has no outreach_leads
+// row, so first/last are absent — and the alt-review / ICP-rejected cards used
+// to render a bare "?". Fall back to the name carried in the LinkedIn slug
+// (…/in/jan-joergensen-48343060 → "Jan Joergensen"); company/title stay blank
+// because the URL doesn't carry them and we don't invent data.
+function humanizeLinkedinSlug(url: string | null | undefined): string | null {
+  if (!url) return null;
+  const m = url.match(/\/in\/([^/?#]+)/i);
+  if (!m) return null;
+  let slug: string;
+  try { slug = decodeURIComponent(m[1]); } catch { slug = m[1]; }
+  const parts = slug.split("-").filter(Boolean);
+  // LinkedIn appends a disambiguating id token (digits / hex) — drop it.
+  if (parts.length > 1 && /\d/.test(parts[parts.length - 1])) parts.pop();
+  const name = parts.map((p) => p.charAt(0).toUpperCase() + p.slice(1)).join(" ").trim();
+  return name || null;
+}
+
+function leadDisplayName(r: PipelineRow): string {
+  const joined = `${r.lead?.first_name ?? ""} ${r.lead?.last_name ?? ""}`.trim();
+  return joined || humanizeLinkedinSlug(r.linkedin_url) || "(ukendt)";
+}
+
 function IcpRejectedTab({ rows, busyLead, onOverride }: {
   rows: PipelineRow[];
   busyLead: string | null;
@@ -3425,7 +3449,7 @@ function IcpRejectedTab({ rows, busyLead, onOverride }: {
   return (
     <ul className="divide-y divide-[var(--ink)]/[0.08]">
       {rows.map((r) => {
-        const name = `${r.lead?.first_name ?? ""} ${r.lead?.last_name ?? ""}`.trim() || "?";
+        const name = leadDisplayName(r);
         return (
           <li key={r.sendpilot_lead_id} className="py-5">
             <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -3469,7 +3493,7 @@ function AltReviewTab({ rows, altsByLead, busyLead, onUseOriginal, onInviteAlt, 
   return (
     <ul className="divide-y divide-[var(--ink)]/[0.08]">
       {rows.map((r) => {
-        const name = `${r.lead?.first_name ?? ""} ${r.lead?.last_name ?? ""}`.trim() || "?";
+        const name = leadDisplayName(r);
         const alts = altsByLead.get(r.sendpilot_lead_id) ?? [];
         return (
           <li key={r.sendpilot_lead_id} className="py-6">
