@@ -91,7 +91,6 @@ const logoFiles: {
   { file: "logo-burst.png", sizeClass: "h-6 w-auto sm:h-7", offsetClass: "mb-2.5 sm:mb-3" },
   { file: "logo-wono.png" },
   { file: "logo-studio404.png", sizeClass: "h-5 w-auto sm:h-6" },
-  { file: "logo-swob.png", sizeClass: "h-7 w-auto sm:h-9" },
   { file: "logo-gazella.png", sizeClass: "h-9 w-auto sm:h-11" },
   {
     file: "logo-vinduespudserskolen.png",
