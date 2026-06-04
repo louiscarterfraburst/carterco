@@ -4,6 +4,7 @@ import { FormEvent, KeyboardEvent, ReactNode, useEffect, useRef, useState } from
 import { createClient } from "@/utils/supabase/client";
 import { LeadQuiz } from "@/components/lead-quiz";
 import { ExitIntent } from "@/components/exit-intent";
+import { BOOKING_URL, bookingUrl } from "@/lib/booking";
 
 declare global {
   interface Window {
@@ -73,7 +74,7 @@ const steps: Step[] = [
 type FormState = Record<StepKey, string>;
 type FieldErrors = Partial<Record<StepKey, string>>;
 
-const calendlyUrl = "https://calendly.com/louis-carterco/30min";
+const calendlyUrl = BOOKING_URL;
 
 // Logos render at a default height. Square/stacked marks need more height
 // than wordmarks to read at the same visual weight — override per logo.
@@ -118,7 +119,7 @@ const cases: {
   {
     metric: "31×",
     metricLabel: "outreach-volumen",
-    copy: "31× flere outreach-beskeder. Hver med en unik video til prospecten. Tresyv ramte en skala et team aldrig kunne nå — uden at det føltes som spam.",
+    copy: "31× flere outreach-beskeder. Hver med en unik video til prospecten. Tresyv ramte en skala et team aldrig kunne nå, uden at det føltes som spam.",
     client: "Tresyv",
     kind: "heat",
     logo: "/logos/logo-tresyv.svg",
@@ -182,7 +183,7 @@ const journey: JourneyStage[] = [
       "Annoncer til folk der ligner jeres bedste kunder",
       "Genaktivering af kolde leads I allerede har samlet",
     ],
-    anchorClient: { name: "Tresyv", line: "31× outreach-volumen — uden at føles som spam." },
+    anchorClient: { name: "Tresyv", line: "31× outreach-volumen, uden at føles som spam." },
     supportingClients: [],
     visual: "outbound",
     rowTwoEyebrow: "Sendt og modtaget",
@@ -201,11 +202,11 @@ const journey: JourneyStage[] = [
     proof: {
       metric: "21×",
       unit: "mere kvalificeret",
-      note: "Når sælgeren svarer inden for 5 minutter — iflg. MIT-studiet.",
+      note: "Når sælgeren svarer inden for 5 minutter, iflg. MIT-studiet.",
       noteHref:
         "https://25649.fs1.hubspotusercontent-na2.net/hub/25649/file-13535879-pdf/docs/mit_study.pdf",
     },
-    anchorClient: { name: "Murph", line: "Rammer hvert lead på under 3 min — branchen tager 47 timer." },
+    anchorClient: { name: "Murph", line: "Rammer hvert lead på under 3 min. Branchen tager 47 timer." },
     supportingClients: [],
     visual: "sms",
     theme: "sand",
@@ -226,7 +227,7 @@ const journey: JourneyStage[] = [
     proof: {
       metric: "4×",
       unit: "lead-konvertering",
-      note: "Samme målgruppe, samme budget — Burst på et SMS- og pleje-flow over 3 måneder.",
+      note: "Samme målgruppe, samme budget. Burst på et SMS- og pleje-flow over 3 måneder.",
     },
     anchorClient: { name: "Burst", line: "4× på samme budget." },
     supportingClients: [],
@@ -242,7 +243,7 @@ const outboundCards = [
     title: "Adm. direktør · Tagværk ApS",
     initials: "SE",
     preview:
-      "Hej Sara — så at I lige har vundet udbuddet på Frederiksberg. Hvis I vil have flere lignende leads, har jeg…",
+      "Hej Sara, så at I lige har vundet udbuddet på Frederiksberg. Hvis I vil have flere lignende leads, har jeg…",
     chip: "1. grads",
   },
   {
@@ -311,9 +312,9 @@ const leadsRotation: PhoneLead[] = [
       { t: "11:00", available: false },
     ],
     thread: [
-      { from: "us", text: "Hej Mette — tak for din interesse i Nordlys-pakken. Har du tid til en kort snak i morgen kl. 10?", time: "14:32" },
+      { from: "us", text: "Hej Mette, tak for din interesse i Nordlys-pakken. Har du tid til en kort snak i morgen kl. 10?", time: "14:32" },
       { from: "them", text: "Ja, det passer fint :)", time: "14:34" },
-      { from: "us", text: "Perfekt — jeg sender en kalenderinvitation nu.", time: "14:35" },
+      { from: "us", text: "Perfekt. Jeg sender en kalenderinvitation nu.", time: "14:35" },
     ],
     callPath: "missed",
     outcome: "booked",
@@ -335,9 +336,9 @@ const leadsRotation: PhoneLead[] = [
       { t: "14:30", available: false },
     ],
     thread: [
-      { from: "us", text: "Hej Jonas — tak for snakken om Bygma-tilbuddet. Har du 20 min fredag kl. 13:30?", time: "11:04" },
+      { from: "us", text: "Hej Jonas, tak for snakken om Bygma-tilbuddet. Har du 20 min fredag kl. 13:30?", time: "11:04" },
       { from: "them", text: "Det fungerer fint", time: "11:06" },
-      { from: "us", text: "Top — kalenderinvitation kommer nu.", time: "11:07" },
+      { from: "us", text: "Top. Kalenderinvitation kommer nu.", time: "11:07" },
     ],
     callPath: "answered",
     callDuration: "3:42",
@@ -360,7 +361,7 @@ const leadsRotation: PhoneLead[] = [
       { t: "10:30", available: false },
     ],
     thread: [
-      { from: "us", text: "Hej Sara — så I kiggede på altan-pakken. Passer det med en snak overmorgen 09:30?", time: "09:46" },
+      { from: "us", text: "Hej Sara, så I kiggede på altan-pakken. Passer det med en snak overmorgen 09:30?", time: "09:46" },
       { from: "them", text: "Ja gerne", time: "09:48" },
       { from: "us", text: "Sender invite med det samme.", time: "09:49" },
     ],
@@ -654,11 +655,11 @@ export default function Home() {
       return;
     }
 
-    const params = new URLSearchParams({
+    const bookingHref = bookingUrl({
       name: cleaned.name,
       email: cleaned.email,
-      a1: cleaned.company,
-      a2: cleaned.phone,
+      company: cleaned.company,
+      phone: cleaned.phone,
       utm_source: "carterco.dk",
       utm_medium: "hero_form",
     });
@@ -672,7 +673,7 @@ export default function Home() {
     // Supabase insert but still proceed to Calendly so probes can't
     // distinguish a block from a pass.
     if (honeypotRef.current.trim().length > 0) {
-      window.location.href = `${calendlyUrl}?${params.toString()}`;
+      window.location.href = bookingHref;
       setSubmitted(true);
       return;
     }
@@ -722,7 +723,7 @@ export default function Home() {
       return;
     }
 
-    window.location.href = `${calendlyUrl}?${params.toString()}`;
+    window.location.href = bookingHref;
     setSubmitted(true);
   }
 
@@ -1195,7 +1196,7 @@ export default function Home() {
                               <span
                                 key={`${stage.n}-supporting-${idx}`}
                                 className="relative grid h-9 w-9 place-items-center overflow-hidden rounded-full border border-[var(--cream)]/15 bg-[radial-gradient(ellipse_at_top,rgba(255,184,107,0.10),rgba(15,13,10,0.55))] text-[10px] font-bold uppercase tracking-wider text-[var(--cream)]/65 shadow-[0_3px_8px_rgba(0,0,0,0.35)]"
-                                aria-label={isEmpty ? "Yderligere klient — kommer" : `Også: ${c.name}`}
+                                aria-label={isEmpty ? "Yderligere klient, kommer" : `Også: ${c.name}`}
                                 title={c.name}
                               >
                                 {isEmpty ? (
@@ -2184,7 +2185,7 @@ export default function Home() {
                               <span className="rounded-full bg-[var(--clay)]/15 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider text-[var(--clay)]">AI</span>
                             </div>
                             <p className="truncate text-[11px] text-[var(--cream)]/65">
-                              Hej Jonas — så at I ramper jeres pharma-felt-team…
+                              Hej Jonas, så at I ramper jeres pharma-felt-team…
                             </p>
                             <div className="mt-3 flex items-center justify-between border-t border-[var(--cream)]/8 pt-2.5">
                               <span className="text-[9px] uppercase tracking-[0.18em] text-[var(--cream)]/40">Skrevet · 12ms</span>
@@ -2256,7 +2257,7 @@ export default function Home() {
                               <div className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-[linear-gradient(135deg,#5a4a3a,#7a6a5a)] text-[8px] font-bold text-[#fff8ea]">JU</div>
                               <div className="min-w-0 flex-1">
                                 <p className="text-[10px] leading-snug text-[var(--cream)]/80 italic">
-                                  &ldquo;Du burde tale med Morten — han er ansvarlig for driften hos TechSupply, lige skiftet værktøjer.&rdquo;
+                                  &ldquo;Du burde tale med Morten. Han er ansvarlig for driften hos TechSupply, lige skiftet værktøjer.&rdquo;
                                 </p>
                                 <p className="mt-1 text-[8px] uppercase tracking-wider text-[var(--cream)]/45">— Justyna</p>
                               </div>
@@ -2560,7 +2561,7 @@ export default function Home() {
                     På timer, hver måned. Du betaler kun for det jeg laver.
                   </p>
                   <p>
-                    Tag quizzen — se hvor dit eget system lækker.
+                    Tag quizzen. Se hvor dit eget system lækker.
                   </p>
                   <div className="pt-2">
                     <button

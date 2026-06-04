@@ -354,6 +354,9 @@ Deno.serve(async (request) => {
     }, { onConflict: "sendpilot_lead_id" });
 
     scheduleScoutPhones("pipeline", leadId);
+    // CarterCo only: generate the Becc-bucket personalization hook now (async),
+    // so it's ready before the render completes and gets baked into the DM.
+    if (workspaceId === CARTERCO_WORKSPACE_ID) scheduleEnrichBuckets(leadId);
     return json({ ok: true, recorded: "accepted_pending_pre_render", cold: true, referred_from: referredFrom, variant });
   }
 
@@ -540,6 +543,28 @@ async function classifyReplyAsync(
 // but don't fail the webhook. EdgeRuntime.waitUntil keeps the request open
 // long enough for the scout call to complete before the function shuts down,
 // which matters for both Supabase metering and avoiding orphaned fetches.
+function scheduleEnrichBuckets(leadId: string): void {
+  // deno-lint-ignore no-explicit-any
+  const er: any = (globalThis as any).EdgeRuntime;
+  const task = (async () => {
+    try {
+      const url = `${Deno.env.get("SUPABASE_URL")}/functions/v1/enrich-buckets`;
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ leadId }),
+      });
+      if (!res.ok) console.warn("enrich-buckets non-200", res.status, await res.text());
+    } catch (e) {
+      console.error("enrich-buckets fire error", leadId, e);
+    }
+  })();
+  if (er && typeof er.waitUntil === "function") er.waitUntil(task);
+}
+
 function scheduleScoutPhones(kind: "pipeline" | "alt", id: string): void {
   // deno-lint-ignore no-explicit-any
   const er: any = (globalThis as any).EdgeRuntime;

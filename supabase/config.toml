@@ -390,6 +390,14 @@ verify_jwt = false
 [functions.sendpilot-webhook]
 verify_jwt = false
 
+# Bucket-hook generator — invoked on accept without a user JWT (service-role caller).
+[functions.enrich-buckets]
+verify_jwt = false
+
+# Lemlist webhook receiver — external caller, no user JWT.
+[functions.lemlist-webhook]
+verify_jwt = false
+
 # Cron + DB-trigger callee. Header secret check is inside the function.
 [functions.outreach-engagement-tick]
 verify_jwt = false

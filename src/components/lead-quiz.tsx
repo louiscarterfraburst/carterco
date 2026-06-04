@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { bookingUrl } from "@/lib/booking";
 import {
   type Channel,
   type FollowupQuality,
@@ -179,9 +180,7 @@ const COPY: Record<Locale, CopyT> = {
   },
 };
 
-// Calendly booking URL — mirrors src/app/page.tsx:76. If this ever moves
-// behind workspace.calendly_url in settings, both files need to update.
-const CALENDLY_URL = "https://calendly.com/louis-carterco/30min";
+// Public booking link is centralized in src/lib/booking.ts (BOOKING_URL / bookingUrl).
 
 // Lean intake flow (5 screens, 2026-05-21 redesign):
 //   url → volume (leads + deal value) → contact → path (Loom or meeting) → result
@@ -374,14 +373,13 @@ export function LeadQuiz({ open, onClose, onConvert, locale = "da" }: Props) {
         return;
       }
       if (chosenPath === "meeting") {
-        const params = new URLSearchParams({
+        window.location.href = bookingUrl({
           name: contactName.trim(),
           email: contactEmail.trim(),
-          a2: contactPhone.trim(),
+          phone: contactPhone.trim(),
           utm_source: "carterco.dk",
           utm_medium: "lead_quiz",
         });
-        window.location.href = `${CALENDLY_URL}?${params.toString()}`;
         return;
       }
       next();

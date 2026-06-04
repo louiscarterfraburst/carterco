@@ -6,6 +6,18 @@ Format: dato + headline, hvad vi tror, hvad vi har af bevis, hvad vi vil teste/g
 
 ---
 
+## 2026-06-03 · Site-copy: revider carterco.dk efter Stewen (LinkedIn) web-råd
+
+**Hvad:** Stewen (LinkedIn) har web/landingsside-råd vi vil anvende på carterco.dk (hero, cases, "Hele vejen fra kontakt til kontrakt", founder-kort). Den konkrete rådgivning er ikke fanget endnu; denne post er kun en reference, så det ikke glemmes.
+
+**TODO:** Indsæt Stewens punkter (kilde: LinkedIn-post/video) og gennemgå begge homepages imod dem. Filer: `src/app/page.tsx` (DA) + `src/app/en/page.tsx` (EN). Hold de to i sync.
+
+**Gjort 2026-06-03:** Em-dashes fjernet fra al synlig copy på begge homepages (case-metrics, anchor-linjer, SMS/DM-previews, EN-subheadline, quiz-CTA, aria-labels), erstattet med komma/punktum. Bevaret: attributions-dash ("— Justyna" og quote-footer) samt `initials === "—"` sentinel i koden. Kode-kommentarer urørt.
+
+**Status:** Open, afventer Stewens konkrete råd.
+
+---
+
 ## 2026-05-14 — Tresyv-template har 2 links, dræber video-thumbnail
 
 **Hypotese:** Tresyv's `OUTREACH_MESSAGE_TEMPLATE` har "{website}" inline i teksten ("Jeg var lige inde på dinesen.com..."), som LinkedIn auto-linker. Kombineret med video-URL'en bliver det 2 links pr. besked, og LinkedIn dropper video-thumbnail når der er mere end ét URL.

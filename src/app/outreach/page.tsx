@@ -133,6 +133,13 @@ type PipelineRow = {
   message_strategy_rationale: string | null;
   message_model: string | null;
   message_language: "da" | "en" | null;
+  // Becc-bucket personalization (CarterCo). The hook is baked into
+  // rendered_message at render-ready; bucket + trace are shown as context.
+  personalized_hook: string | null;
+  hook_bucket: string | null;
+  hook_trace: string | null;
+  hook_context: string | null;
+  hook_lang: "da" | "en" | null;
   // Tresyv 3-arm A/B. v1_long / v2_short are text-only (no SendSpark render),
   // v3_video uses the existing video flow. Null for non-Tresyv workspaces.
   first_dm_variant: "v1_long" | "v2_short" | "v3_video" | null;
@@ -401,7 +408,7 @@ export default function OutreachPage() {
   const [identity, setIdentity] = useState<Identity>({
     displayName: "Louis",
     companyName: "Carter & Co",
-    calendlyUrl: "https://calendly.com/louis-carter/30min",
+    calendlyUrl: "https://cal.com/louis-carter-3twilu/20min",
     signoff: "Louis",
   });
   const [loading, setLoading] = useState(true);
@@ -464,7 +471,7 @@ export default function OutreachPage() {
       setIdentity({
         displayName: settings.display_name?.trim() || "Louis",
         companyName: settings.company_name?.trim() || "Carter & Co",
-        calendlyUrl: settings.calendly_url?.trim() || "https://calendly.com/louis-carter/30min",
+        calendlyUrl: settings.calendly_url?.trim() || "https://cal.com/louis-carter-3twilu/20min",
         signoff: settings.signoff?.trim() || settings.display_name?.trim() || "Louis",
       });
     })();
@@ -1711,6 +1718,24 @@ function PendingTab(props: {
                       {r.message_strategy_rationale ? (
                         <div className="tabular mt-1 text-[11px] italic text-[var(--ink)]/45">
                           AI: {r.message_strategy_rationale}
+                        </div>
+                      ) : null}
+                      {r.hook_bucket ? (
+                        <div className="tabular mt-1 text-[11px] text-[var(--ink)]/45">
+                          <span className="rounded-sm bg-[var(--ink)]/8 px-1.5 py-0.5 font-medium text-[var(--ink)]/65">
+                            {r.hook_bucket === "1" ? "Eget opslag"
+                              : r.hook_bucket === "2" ? "Engageret"
+                              : r.hook_bucket === "3" ? "Profiltekst"
+                              : r.hook_bucket === "5" ? "Baggrund"
+                              : r.hook_bucket === "6" ? "Virksomhed"
+                              : "Standard"}
+                          </span>
+                          {r.hook_context ? <span className="ml-1.5 italic">{r.hook_context}</span> : null}
+                        </div>
+                      ) : null}
+                      {r.personalized_hook ? (
+                        <div className="mt-1 border-l-2 border-[var(--ink)]/15 pl-2 text-[12px] leading-relaxed text-[var(--ink)]/70">
+                          {r.personalized_hook}
                         </div>
                       ) : null}
 
