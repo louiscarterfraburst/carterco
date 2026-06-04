@@ -131,18 +131,21 @@ def build_candidates(posts, profile, reactions, comments, website=None, with_com
     c = []
     for p in sorted([p for p in posts if not p["is_repost"]], key=lambda x: x["age_days"])[:5]:
         c.append({"b": "1", "age": p["age_days"], "t": "own post: " + p["text"][:400]})
-    for cm in (comments or []):
-        if isinstance(cm, dict) and (cm.get("commentary") or "").strip():
-            age = _age_days(cm.get("createdAtTimestamp"))
-            if age <= 90:
-                on = ((cm.get("post") or {}).get("content") or "")[:80]
-                c.append({"b": "2", "age": age, "t": f'their comment: "{cm["commentary"][:200]}" (under a post about: {on})'})
-    for r in (reactions or []):
-        if isinstance(r, dict):
-            liked = ((r.get("post") or {}).get("content") or "")
-            age = _age_days(r.get("createdAtTimestamp"))
-            if liked and age <= 90:
-                c.append({"b": "2", "age": age, "t": f"liked someone's post: {liked[:200]}"})
+    my_comments = sorted(
+        [{"mine": (cm.get("commentary") or "").strip(), "age": _age_days(cm.get("createdAtTimestamp")),
+          "on": ((cm.get("post") or {}).get("content") or "")[:80]}
+         for cm in (comments or []) if isinstance(cm, dict) and (cm.get("commentary") or "").strip()
+         and _age_days(cm.get("createdAtTimestamp")) <= 90],
+        key=lambda x: x["age"])[:4]
+    for x in my_comments:
+        c.append({"b": "2", "age": x["age"], "t": f'their comment: "{x["mine"][:200]}" (under a post about: {x["on"]})'})
+    my_likes = sorted(
+        [{"liked": ((r.get("post") or {}).get("content") or ""), "age": _age_days(r.get("createdAtTimestamp"))}
+         for r in (reactions or []) if isinstance(r, dict) and ((r.get("post") or {}).get("content") or "")
+         and _age_days(r.get("createdAtTimestamp")) <= 90],
+        key=lambda x: x["age"])[:4]
+    for x in my_likes:
+        c.append({"b": "2", "age": x["age"], "t": f"liked someone's post: {x['liked'][:200]}"})
     for p in posts:
         if p["is_repost"]:
             c.append({"b": "2", "age": p["age_days"], "t": "shared/reposted: " + p["text"][:200]})
@@ -164,14 +167,10 @@ def build_candidates(posts, profile, reactions, comments, website=None, with_com
         blk = b6_block(website)
         if blk:
             c.append({"b": "6", "age": None, "t": "company site: " + blk[:500]})
-    # B6 (web) — external company news; B7 — press / web mention of the person
-    for h in (company_web or []):
-        if skip_host(h["url"], own_domain):
-            continue
+    # B6 (web) — external company news; B7 — press / web mention of the person. Cap 4 each.
+    for h in [h for h in (company_web or []) if not skip_host(h["url"], own_domain)][:4]:
         c.append({"b": "6", "age": None, "t": (f"company news (web, past yr): {h['title']} — {h['description']}")[:400]})
-    for h in (person_web or []):
-        if skip_host(h["url"], own_domain):
-            continue
+    for h in [h for h in (person_web or []) if not skip_host(h["url"], own_domain)][:4]:
         c.append({"b": "7", "age": None, "t": (f"web/press about them: {h['title']} — {h['description']}")[:400]})
     return c
 

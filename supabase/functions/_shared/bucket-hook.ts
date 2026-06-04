@@ -1,12 +1,13 @@
-// Sequential Becc-bucket personalization waterfall (CarterCo's own outbound).
+// Becc-bucket personalization for CarterCo's own outbound — scrape-everything-then-choose.
 //
-// On accept, cascade through buckets best-first and STOP at the first one with a
-// genuinely connected line:
-//   1 self-authored posts -> 2 engaged -> 3 self-written -> 5 background
-//   -> 6 company (deep: site + careers + news) -> floor (honest line).
-// Only scrape what isn't already scraped (cheapest/highest first; deeper sources
-// fetched lazily). State (hook_buckets_tried) persists so a floored lead can
-// continue deeper on a later touch.
+// On accept, gather EVERY signal source up front (no waterfall):
+//   1 self-authored posts · 2 engaged · 3 self-written · 5 background  (LinkedIn/Apify)
+//   6 company deep (site + careers + news, Firecrawl) + web news (Brave)
+//   7 press / web mention of the person                                (Brave)
+// then a single evaluator picks the global best angle across all of it (or floors).
+// At CarterCo volume (tens/month, async render) deep-scraping every lead is pennies and
+// beats the old waterfall, which could pick a locally-OK angle while a stronger unscraped
+// one sat hidden. State (hook_buckets_tried) persists so a later touch re-scrapes fresh.
 //
 // Voice is locked: connected (delete the line and the message breaks), peer not
 // judge, LinkedIn-light, varied. Sonnet writes the body (observation + bridge
@@ -125,16 +126,21 @@ async function apify(actor: string, body: unknown): Promise<unknown[]> {
 async function firecrawl(url: string): Promise<string> {
   const key = Deno.env.get("FIRECRAWL_API") ?? "";
   if (!key || !url) return "";
+  // Now that B6 always runs, cap each page read so one slow site can't stall a render.
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 20000);
   try {
     const res = await fetch("https://api.firecrawl.dev/v1/scrape", {
       method: "POST",
       headers: { "Authorization": `Bearer ${key}`, "Content-Type": "application/json" },
       body: JSON.stringify({ url, formats: ["markdown"] }),
+      signal: ctrl.signal,
     });
     if (!res.ok) return "";
     const d = await res.json();
     return ((d.data || {}).markdown || "").slice(0, 1500);
   } catch { return ""; }
+  finally { clearTimeout(timer); }
 }
 
 // What a human does: google the person + the company. Brave Search returns
@@ -212,15 +218,6 @@ async function scrapeComments(url: string): Promise<unknown[]> {
   return await apify("harvestapi~linkedin-profile-comments", { profiles: [url], maxItems: 8 });
 }
 
-// Becc: company-level (B6) is low efficacy EXCEPT for business owners/founders —
-// their company IS their ego, so it hooks as hard as self-authored. Bump B6 up
-// the order for them.
-function isOwner(title?: string): boolean {
-  const t = (title || "").toLowerCase();
-  return ["founder", "co-founder", "owner", "ejer", "indehaver", "stifter",
-    "medstifter", "grundlægger", "partner", "selvstændig", "self-employed"].some((w) => t.includes(w));
-}
-
 const ageDays = (ts?: number): number => (ts ? Math.round((Date.now() - ts) / 86400000) : 999);
 
 // ---- candidate builder (LAYER 0): flatten every scraped source into one list
@@ -233,23 +230,27 @@ function buildCandidates(posts: Post[], profile: any, reactions: unknown[], comm
   for (const p of posts.filter((p) => !p.is_repost).sort((a, b) => a.age_days - b.age_days).slice(0, 5)) {
     c.push({ b: "1", age: p.age_days, t: "own post: " + p.text.slice(0, 400) });
   }
-  // B2 — their own comments (high signal: their words)
-  for (const cm of comments as Array<Record<string, unknown>>) {
-    const mine = String(cm?.commentary ?? "").trim();
-    if (!mine) continue;
-    const age = ageDays(cm.createdAtTimestamp as number);
-    if (age > FRESH_DAYS) continue;
-    const on = String(((cm.post as Record<string, unknown>) || {}).content ?? "").slice(0, 80);
-    c.push({ b: "2", age, t: `their comment: "${mine.slice(0, 200)}"${on ? ` (under a post about: ${on})` : ""}` });
+  // B2 — their own comments (high signal: their words). Cap to the 4 freshest.
+  const myComments = (comments as Array<Record<string, unknown>>)
+    .map((cm) => ({
+      mine: String(cm?.commentary ?? "").trim(),
+      age: ageDays(cm.createdAtTimestamp as number),
+      on: String(((cm.post as Record<string, unknown>) || {}).content ?? "").slice(0, 80),
+    }))
+    .filter((x) => x.mine && x.age <= FRESH_DAYS)
+    .sort((a, b) => a.age - b.age).slice(0, 4);
+  for (const x of myComments) {
+    c.push({ b: "2", age: x.age, t: `their comment: "${x.mine.slice(0, 200)}"${x.on ? ` (under a post about: ${x.on})` : ""}` });
   }
-  // B2 — likes (what resonates)
-  for (const r of reactions as Array<Record<string, unknown>>) {
-    const liked = String(((r.post as Record<string, unknown>) || {}).content ?? r.content ?? "").trim();
-    if (!liked) continue;
-    const age = ageDays(r.createdAtTimestamp as number);
-    if (age > FRESH_DAYS) continue;
-    c.push({ b: "2", age, t: "liked someone's post: " + liked.slice(0, 200) });
-  }
+  // B2 — likes (what resonates). Cap to the 4 freshest.
+  const myLikes = (reactions as Array<Record<string, unknown>>)
+    .map((r) => ({
+      liked: String(((r.post as Record<string, unknown>) || {}).content ?? r.content ?? "").trim(),
+      age: ageDays(r.createdAtTimestamp as number),
+    }))
+    .filter((x) => x.liked && x.age <= FRESH_DAYS)
+    .sort((a, b) => a.age - b.age).slice(0, 4);
+  for (const x of myLikes) c.push({ b: "2", age: x.age, t: "liked someone's post: " + x.liked.slice(0, 200) });
   // B2 — reposts
   for (const p of posts) if (p.is_repost) c.push({ b: "2", age: p.age_days, t: "shared/reposted: " + p.text.slice(0, 200) });
   // B3 — self-written profile
@@ -266,16 +267,14 @@ function buildCandidates(posts: Post[], profile: any, reactions: unknown[], comm
     const awards = (profile.honorsAndAwards || []).slice(0, 4).map((a: Record<string, unknown>) => a.title).filter(Boolean);
     if (awards.length) c.push({ b: "5", age: null, t: "awards: " + awards.join(", ") });
   }
-  // B6 — company (only when scraped: owners up front, others on floor-escalation)
+  // B6 — company site (always scraped now)
   if (companyText) c.push({ b: "6", age: null, t: "company site: " + companyText.slice(0, 500) });
-  // B6 (web) — external company news (funding/hiring/launch/press) the own-site never shows
-  for (const h of companyWeb) {
-    if (skipHost(h.url, ownDomain)) continue;
+  // B6 (web) — external company news (funding/hiring/launch/press) the own-site never shows. Cap 4.
+  for (const h of companyWeb.filter((h) => !skipHost(h.url, ownDomain)).slice(0, 4)) {
     c.push({ b: "6", age: null, t: `company news (web, past yr): ${h.title} — ${h.description}`.slice(0, 400) });
   }
-  // B7 — press / web mention OF THE PERSON (interview, podcast, talk, quote, article)
-  for (const h of personWeb) {
-    if (skipHost(h.url, ownDomain)) continue;
+  // B7 — press / web mention OF THE PERSON (interview, podcast, talk, quote, article). Cap 4.
+  for (const h of personWeb.filter((h) => !skipHost(h.url, ownDomain)).slice(0, 4)) {
     c.push({ b: "7", age: null, t: `web/press about them: ${h.title} — ${h.description}`.slice(0, 400) });
   }
   return c;
@@ -377,11 +376,11 @@ const TRACE: Record<string, string> = {
 
 /**
  * Two-layer hook generation for one accepted CarterCo lead:
- *   scrape cheap LinkedIn sources -> build all candidate angles
- *   LAYER 1 evaluator picks the single best angle (or floor)
- *   (floor on cheap sources -> escalate to company B6, re-evaluate)
- *   LAYER 2 writer writes the line from the chosen angle
- * Persists the hook + the bucket + the evaluator's reasoning (hook_context).
+ *   scrape EVERYTHING up front (LinkedIn + B6 company site + person/company web)
+ *   build the full candidate set (light per-bucket caps)
+ *   LAYER 1 evaluator picks the single best angle across all of it (or floor)
+ *   LAYER 2 writer writes the body from the chosen angle
+ * Persists the body + the bucket + the evaluator's reasoning (hook_context).
  * CarterCo-only, best-effort (any scrape/model failure floors honestly).
  */
 export async function generateBucketHook(
@@ -413,13 +412,10 @@ export async function generateBucketHook(
     }).eq("sendpilot_lead_id", leadId);
   };
 
-  // Scrape the cheap LinkedIn sources once, in parallel.
-  const [posts, profile, reactions, comments] = await Promise.all([
-    scrapePosts(url), scrapeProfile(url), scrapeReactions(url), scrapeComments(url),
-  ]);
-
-  // What a human does next: google the person + the company. Sequential to respect
-  // Brave's ~1 req/s free tier; best-effort (each returns [] on failure).
+  // SCRAPE EVERYTHING, THEN CHOOSE. No waterfall: gather every source up front and
+  // let the evaluator pick the global best with full context. At CarterCo's volume
+  // (tens/month, async render) the cost of always deep-scraping is pennies, and it
+  // beats picking a locally-OK angle while a stronger unscraped one sits hidden.
   const ownDomain = domainOf(website);
   const first = (lead.first_name || "").trim();
   const last = (lead.last_name || "").trim();
@@ -427,27 +423,19 @@ export async function generateBucketHook(
   // Strip the legal suffix and EXACT-quote the company — bare generic-word names
   // ("VOCAST", "BusySunday") otherwise return dictionary/namesake junk.
   const cleanCo = company.replace(/\s+(a\/s|aps|ivs|p\/s|k\/s|inc|llc|ltd|gmbh)\.?$/i, "").trim();
+
+  // LinkedIn (Apify) + company deep-scrape (Firecrawl) run in parallel — different hosts.
+  const [posts, profile, reactions, comments, companyText] = await Promise.all([
+    scrapePosts(url), scrapeProfile(url), scrapeReactions(url), scrapeComments(url),
+    website ? b6(website) : Promise.resolve(null),
+  ]);
+  // Google the person + the company — sequential to respect Brave's ~1 req/s free tier.
   const personWeb = cleanCo ? await webSearch(`"${`${first} ${last}`.trim()}" "${cleanCo}"`, { count: 5 }) : [];
   const companyWeb = cleanCo ? await webSearch(`"${cleanCo}"`, { count: 6, freshness: "py" }) : [];
 
-  // Becc: owners/founders — company IS their ego, so B6 hooks as hard as a post.
-  // Scrape it up front for them so the evaluator can weigh it from round one.
-  const owner = isOwner(lead.title);
-  const companyUpFront = owner && website ? await b6(website) : null;
-
-  let cands = buildCandidates(posts, profile, reactions, comments, companyUpFront, personWeb, companyWeb, ownDomain);
+  const cands = buildCandidates(posts, profile, reactions, comments, companyText, personWeb, companyWeb, ownDomain);
   tried = [...new Set(cands.map((c) => c.b))];
-  let ev = cands.length ? await evaluate(lead, cands) : { choice: "floor" as const, why: "no signals scraped" };
-
-  // Floored on cheap sources -> escalate to company B6 and re-evaluate (non-owners).
-  if (ev.choice === "floor" && !owner && website) {
-    const companyText = await b6(website);
-    if (companyText) {
-      cands = buildCandidates(posts, profile, reactions, comments, companyText, personWeb, companyWeb, ownDomain);
-      tried = [...new Set(cands.map((c) => c.b))];
-      ev = await evaluate(lead, cands);
-    }
-  }
+  const ev = cands.length ? await evaluate(lead, cands) : { choice: "floor" as const, why: "no signals scraped" };
 
   // Honest floor — no real angle cleared the bar. State persists so a later touch
   // can resume (re-scrape may surface a fresh post / new company event).

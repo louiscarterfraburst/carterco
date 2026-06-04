@@ -37,31 +37,30 @@ funding/launch news to lead more often).
 
 ---
 
-## The waterfall
+## Scrape everything, then choose (no waterfall)
 
 ```
 accept
- └─ scrape B1 posts        → connected line worth sending?  YES → STOP
- └─ scrape B2 engaged      (only the new stuff)             YES → STOP
- └─ scrape B3 self-written (one profile call → also B5)     YES → STOP
- └─        B5 background   (reuse the profile call)         YES → STOP
- └─ scrape B6 company deep (site + careers + news)          YES → STOP
- └─ google person + company (Brave: B7 press + B6 ext news) YES → STOP
- └─ floor: honest website line (NEVER fake personalization)
+ ├─ B1 posts · B2 engaged · B3 self-written · B5 background   (LinkedIn / Apify)   ┐
+ ├─ B6 company deep (site + careers + news)                   (Firecrawl)          ├─ all in parallel,
+ ├─ B6 ext news (company) · B7 press (person)                 (Brave web search)   ┘  always, up front
+ ▼
+ build the FULL candidate set (light per-bucket caps: posts≤5, comments≤4, likes≤4, web≤4/bucket)
+ ▼
+ ONE evaluator pass → single best angle across ALL buckets, or floor → writer
 ```
 
-(The two Brave searches run alongside the LinkedIn scrape on every lead — a human
-always googles — so their candidates are in the pool from round one, not a late
-escalation tier.)
+Earlier this was a sequential best-first waterfall that stopped at the first
+acceptable bucket (so B6/web often never ran for a lead with a decent post). It now
+gathers every source up front and lets the evaluator pick the **global** best with
+full context. At CarterCo volume (tens/month, async render) the extra scraping is
+pennies and beats picking a locally-OK angle while a stronger unscraped one stays
+hidden.
 
-- **Cheapest / highest-priority first, stop early.** Most leads stop at B1 or B3,
-  so the profile/company scrapes never run for them.
-- **Only scrape what isn't already scraped.** `hook_buckets_tried` (text col on
-  `outreach_pipeline`) records which buckets were tried.
-- **Time axis:** because the tried-state persists, a *floored* lead can resume
-  deeper on a LATER touch (re-scrape may surface a fresh post / new company
-  event). The bucket waterfall and the engagement/time waterfall are the **same
-  mechanism**.
+- **Per-bucket caps** keep the evaluator list focused (~15–20 candidates).
+- **Firecrawl per-page timeout (20s)** so one slow site can't stall a render.
+- **`hook_buckets_tried`** records every bucket gathered. The time-axis still works:
+  a later touch re-scrapes and may surface a *fresh* post / new company event.
 
 DB columns on `outreach_pipeline`: `personalized_hook` (now holds the full body,
 not just a line), `hook_bucket`, `hook_trace`, `hook_lang`, `hook_buckets_tried`,
