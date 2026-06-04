@@ -14,7 +14,7 @@ Salone; Bo's PISTA like vs generic).
 
 Usage: python3 scripts/bucket-hooks/evaluator_hooks.py [num_leads]   # default 8
 """
-import sys, json, urllib.request
+import sys, json, os, urllib.request, urllib.parse
 from generate_hooks import load_env, fetch_leads, slugof, fetch_posts, sb_get
 from cascade_hooks import fetch_profiles
 from waterfall_hooks import write_line, apify, _age_days, b6_block
@@ -22,6 +22,73 @@ from waterfall_hooks import write_line, apify, _age_days, b6_block
 ENV = load_env()
 ANTHROPIC = ENV["ANTHROPIC_API_KEY"]
 EVAL_MODEL = "claude-sonnet-4-6"
+
+# ---- web research (what a human does: google the person + the company) ----
+BRAVE_KEY = os.environ.get("BRAVE_SEARCH_API_KEY") or ENV.get("BRAVE_SEARCH_API_KEY")
+SKIP_HOSTS = ["linkedin.com", "facebook.com", "instagram.com", "twitter.com", "x.com",
+              "youtube.com", "greens.dk", "bizz.dk", "proff.dk", "krak.dk", "wikipedia.org", "cvr.dk", "virk.dk",
+              "zoominfo.com", "rocketreach.co", "apollo.io", "tracxn.com", "lusha.com", "contactout.com",
+              "signalhire.com", "leadiq.com", "theorg.com", "cambridge.org", "dictionary.com",
+              "collinsdictionary.com", "merriam-webster.com", "glassdoor.com", "indeed.com", "prospeo.io"]
+
+
+def web_queries(first, last, company):
+    """Strip legal suffix + EXACT-quote the company (bare generic-word names like
+    'VOCAST'/'BusySunday' otherwise return dictionary/namesake junk).
+    Returns (person_query, company_query) or (None, None) if no company."""
+    import re
+    clean = re.sub(r"\s+(a/s|aps|ivs|p/s|k/s|inc|llc|ltd|gmbh)\.?$", "", company, flags=re.I).strip()
+    if not clean:
+        return None, None
+    name = f"{first} {last}".strip()
+    return (f'"{name}" "{clean}"', f'"{clean}"')
+
+
+def web_search(query, count=5, freshness=None):
+    """Brave Search -> [{title,url,description}]. [] on any failure (best-effort)."""
+    if not BRAVE_KEY or not query.strip():
+        return []
+    p = {"q": query, "count": count}
+    if freshness:
+        p["freshness"] = freshness
+    req = urllib.request.Request(
+        "https://api.search.brave.com/res/v1/web/search?" + urllib.parse.urlencode(p),
+        headers={"Accept": "application/json", "X-Subscription-Token": BRAVE_KEY})
+    try:
+        body = json.loads(urllib.request.urlopen(req, timeout=20).read().decode())
+    except Exception:
+        return []
+    web = (body.get("web") or {}).get("results") or []
+    return [{"title": r.get("title") or "", "url": r.get("url") or "", "description": r.get("description") or ""}
+            for r in web if (r.get("title") or r.get("description"))]
+
+
+def _host(url):
+    try:
+        hn = urllib.parse.urlparse(url).hostname or ""
+        return hn[4:] if hn.startswith("www.") else hn
+    except Exception:
+        return ""
+
+
+def skip_host(url, own_domain=None):
+    h = _host(url)
+    if not h:
+        return True
+    if own_domain and (h == own_domain or h.endswith("." + own_domain)):
+        return True
+    return any(h == s or h.endswith("." + s) for s in SKIP_HOSTS)
+
+
+def domain_of(website):
+    if not website:
+        return None
+    try:
+        u = website if website.startswith("http") else "http://" + website
+        hn = urllib.parse.urlparse(u).hostname
+        return (hn[4:] if hn and hn.startswith("www.") else hn) or None
+    except Exception:
+        return None
 
 EVAL_SYS = """You are the ANGLE EVALUATOR for Carter & Co's cold LinkedIn outreach. You get a numbered list of candidate signals about ONE prospect (each tagged with bucket + age). Pick the SINGLE best angle to build a personalized opening line on — or decline (floor).
 
@@ -40,6 +107,8 @@ SCORE each candidate on:
 
 REJECT a candidate outright if: bare title + tenure ("X years as Sales Director"), generic-to-anyone, a like/repost of someone ELSE's post that isn't clearly the prospect's own view, or no real overlap with the pitch.
 
+WEB SIGNALS (bucket 6 "company news (web…)" and bucket 7 "web/press about them") come from googling the person + company — press, interviews, podcasts, talks, funding/hiring/launch news. A clearly-about-THEM web hit with real overlap is strong and recognizable (recent company news especially). But REJECT a web hit if: it could be a NAMESAKE (a different person with the same name — when in doubt, reject), it's a generic directory/aggregator/profile page, or it's a stale fact dressed as news. Only pick a web signal you'd bet is genuinely about this exact prospect/company.
+
 Pick the ONE best overall (a fresh, recognizable, strongly-overlapping own-post usually beats a stale or oblique one). If NOTHING clears the bar, choose floor.
 
 Output ONLY JSON: {"choice": <the [index] number, or "floor">, "why": "one line: the overlap + why this beat the others (freshness / recognizability)"}"""
@@ -57,7 +126,8 @@ def anthropic_json(system, user, model=EVAL_MODEL):
         return {"choice": "floor", "why": "parse-fail"}
 
 
-def build_candidates(posts, profile, reactions, comments, website=None, with_company=False):
+def build_candidates(posts, profile, reactions, comments, website=None, with_company=False,
+                     person_web=None, company_web=None, own_domain=None):
     c = []
     for p in sorted([p for p in posts if not p["is_repost"]], key=lambda x: x["age_days"])[:5]:
         c.append({"b": "1", "age": p["age_days"], "t": "own post: " + p["text"][:400]})
@@ -94,6 +164,15 @@ def build_candidates(posts, profile, reactions, comments, website=None, with_com
         blk = b6_block(website)
         if blk:
             c.append({"b": "6", "age": None, "t": "company site: " + blk[:500]})
+    # B6 (web) — external company news; B7 — press / web mention of the person
+    for h in (company_web or []):
+        if skip_host(h["url"], own_domain):
+            continue
+        c.append({"b": "6", "age": None, "t": (f"company news (web, past yr): {h['title']} — {h['description']}")[:400]})
+    for h in (person_web or []):
+        if skip_host(h["url"], own_domain):
+            continue
+        c.append({"b": "7", "age": None, "t": (f"web/press about them: {h['title']} — {h['description']}")[:400]})
     return c
 
 

@@ -21,9 +21,19 @@ connection-accept from `sendpilot-webhook`.
 | **3** | Self-identified traits | **About / profile line**, company/role line, headline | `harvestapi~linkedin-profile-scraper` (input `queries`) → `headline`, `about`, `currentPosition[].description` | ✅ |
 | **4** | **JUNK DRAWER** | personal interests, charity, languages, schools | — | ❌ **SKIP** (Becc: junk/creepy) |
 | **5** | Background-centric | tenure, **trajectory**, recommendations given/received, boards, awards, **certs**, mutual connections, skill endorsements | same profile-scraper call (`experience`, `certifications`, `honorsAndAwards`, `receivedRecommendations`) | ✅ |
-| **6** | Company level | website language, company posts/blog/news, IPO, **funding**, **hiring**, key hire, M&A, new office, product/feature/integration launch, competitors, problems | Firecrawl on site + `/careers` + `/news` (deep B6); funding/M&A/press would need a news-search source — **not yet wired** | �ðŸ”¶ partial |
+| **6** | Company level | website language, company posts/blog/news, IPO, **funding**, **hiring**, key hire, M&A, new office, product/feature/integration launch, competitors, problems | Firecrawl on site + `/careers` + `/news` (deep B6) **+ Brave web search** `"{company}"` (freshness=past-yr) for external funding/M&A/press the own-site never shows | ✅ |
+| **7** | Press / web mention of the person | interviews, podcasts, talks, quotes, articles about them | **Brave web search** `"{first} {last}" "{company}"` — what a human finds by googling them | ✅ |
 
 Bucket 3 and 5 come from **one** profile scrape. Junk drawer (4) is skipped.
+**Web research** (B6 external + B7) emulates a human googling the person and the
+company. Queries EXACT-quote the company (bare generic names — "VOCAST",
+"BusySunday" — otherwise return dictionary/namesake junk) and a `skipHost` filter
+drops the prospect's own LinkedIn/site, data brokers (ZoomInfo, RocketReach,
+Tracxn, prospeo…) and dictionaries. The **evaluator is the namesake backstop** —
+it rejects look-alike/ambiguous hits; web signal that survives is fed alongside
+LinkedIn. Note: a fresh own-authored post usually still out-scores third-party
+news, so web mostly fills in when LinkedIn is thin (tune the evaluator if you want
+funding/launch news to lead more often).
 
 ---
 
@@ -36,8 +46,13 @@ accept
  └─ scrape B3 self-written (one profile call → also B5)     YES → STOP
  └─        B5 background   (reuse the profile call)         YES → STOP
  └─ scrape B6 company deep (site + careers + news)          YES → STOP
+ └─ google person + company (Brave: B7 press + B6 ext news) YES → STOP
  └─ floor: honest website line (NEVER fake personalization)
 ```
+
+(The two Brave searches run alongside the LinkedIn scrape on every lead — a human
+always googles — so their candidates are in the pool from round one, not a late
+escalation tier.)
 
 - **Cheapest / highest-priority first, stop early.** Most leads stop at B1 or B3,
   so the profile/company scrapes never run for them.
@@ -119,8 +134,10 @@ accepts/month) it's a few dollars/month. Apify is on a paid plan ($29/mo cap).
 
 ## Open / next
 
-- Deep B6 only catches company-published news/hiring (site + careers + news
-  pages). Funding / M&A / external press (B6 #5–10) need a news-search source.
+- ✅ DONE: external funding / M&A / press now wired via Brave web search (B6 ext +
+  B7). Remaining: web hits are **snippet-only** — deep-reading the top result page
+  (Firecrawl) would give richer signal; and the evaluator could be tuned to let
+  recent funding/launch news out-score a fresh own-post when it's the stronger hook.
 - Rotation seed for hedge variety (so "jeg gætter på" doesn't dominate across a
   batch) — optional; each prospect only ever sees their own line.
 - Time-axis is prepared (state persists) but nothing re-invokes `enrich-buckets`

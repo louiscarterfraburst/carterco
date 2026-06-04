@@ -67,6 +67,7 @@ THE VOICE.
 - BANNED grading words (they sound condescending / bedrevidende): imponerende, respekt for, sjældent man ser, stærkt, flot, godt gjort, godt observeret, dygtig, "du ved bedre end de fleste".
 - Do NOT recite their facts back ("Så du byggede X", "I saw you did Y"). Reference, do not narrate.
 - ANCHOR FOR THE READER (important). The prospect does NOT see the signal you saw — give a light, explicit anchor so they instantly recognise what you mean: "dit opslag om [emne]", "din kampagne for [X]", "din kommentar om [Y]". This is the difference from cold recitation: "Så du skrev X" is cold/grading; "dit opslag om X — ..." is a warm reference that orients them in one beat. ALWAYS name the thing clearly enough that the reader knows it is theirs; never an oblique allusion they would have to decode.
+- WEB-SOURCED SIGNALS. The signal may come from googling them, not LinkedIn (a press piece, interview, podcast, talk, or company news like funding/hiring/a launch). Anchor it just as modestly: "jeg så I lige har [rejst kapital / åbnet kontor i X / lanceret Y]", "jeg faldt over din samtale i [medie/podcast] om [emne]", "jeg så jeres nyhed om [X]". Use it only when it's unmistakably about them — never reference a web find you're not sure is theirs.
 - HOOK BY WORD-TWIST. Where you can, take 2-3 words from their own world/content and twist them into the cooling-leads problem (reorganize their phrase), instead of explaining. Their words, bent toward the pitch.
 - DANISH-MODEST (Jante) but WITH SPINE. A Danish LinkedIn DM: understated, warm, a genuine light question is fine. Too confident reads as cocky — but do not over-hedge into wishy-washy. The target is QUIET CONFIDENCE IN THE OBSERVATION, HUMBLE IN TONE. Not every line a "jeg gætter på" guess; some may state the bridge with a little backbone while staying modest.
 - VARY THE MOVE. No single phrase ("jeg gætter på", "du ved bedre end", "det er sjældent") may dominate. Rotate: a genuine question, "det har du nok mærket", "jeg tænker...", a plain modest-but-confident bridge, "mon ikke...".
@@ -102,6 +103,8 @@ SCORE each candidate on:
 
 REJECT a candidate outright if: bare title + tenure ("X years as Sales Director"), generic-to-anyone, a like/repost of someone ELSE's post that isn't clearly the prospect's own view, or no real overlap with the pitch.
 
+WEB SIGNALS (bucket 6 "company news (web…)" and bucket 7 "web/press about them") come from googling the person + company — press, interviews, podcasts, talks, funding/hiring/launch news. A clearly-about-THEM web hit with real overlap is strong and recognizable (recent company news especially). But REJECT a web hit if: it could be a NAMESAKE (a different person with the same name — when in doubt, reject), it's a generic directory/aggregator/profile page, or it's a stale fact dressed as news. Only pick a web signal you'd bet is genuinely about this exact prospect/company.
+
 Pick the ONE best overall (a fresh, recognizable, strongly-overlapping own-post usually beats a stale or oblique one). If NOTHING clears the bar, choose floor.
 
 Output ONLY JSON: {"choice": <the [index] number, or "floor">, "why": "one line: the overlap + why this beat the others (freshness / recognizability)"}`;
@@ -132,6 +135,50 @@ async function firecrawl(url: string): Promise<string> {
     const d = await res.json();
     return ((d.data || {}).markdown || "").slice(0, 1500);
   } catch { return ""; }
+}
+
+// What a human does: google the person + the company. Brave Search returns
+// web results we feed as candidates (press, interviews, talks, funding/news/
+// hiring) — the external signals LinkedIn + the company's own site never show.
+// Best-effort like apify()/firecrawl(): [] on any failure or missing key.
+type WebHit = { title: string; url: string; description: string };
+async function webSearch(query: string, opts?: { count?: number; freshness?: string }): Promise<WebHit[]> {
+  const key = Deno.env.get("BRAVE_SEARCH_API_KEY") ?? "";
+  if (!key || !query.trim()) return [];
+  try {
+    const params = new URLSearchParams({ q: query, count: String(opts?.count ?? 5) });
+    if (opts?.freshness) params.set("freshness", opts.freshness);
+    const res = await fetch(`https://api.search.brave.com/res/v1/web/search?${params}`, {
+      headers: { "Accept": "application/json", "X-Subscription-Token": key },
+    });
+    if (!res.ok) return [];
+    const body = await res.json();
+    const web = ((body.web || {}).results || []) as Array<Record<string, unknown>>;
+    return web.map((r) => ({
+      title: String(r.title ?? ""), url: String(r.url ?? ""), description: String(r.description ?? ""),
+    })).filter((h) => h.title || h.description);
+  } catch { return []; }
+}
+
+// Hosts we never want as a "web signal": the prospect's own LinkedIn/site (already
+// covered by B1-B6) and directory/aggregator pages (no real personalization).
+const SKIP_HOSTS = ["linkedin.com", "facebook.com", "instagram.com", "twitter.com", "x.com",
+  "youtube.com", "greens.dk", "bizz.dk", "proff.dk", "krak.dk", "wikipedia.org", "cvr.dk", "virk.dk",
+  // data brokers / contact-scrapers / dictionaries — never real personalization
+  "zoominfo.com", "rocketreach.co", "apollo.io", "tracxn.com", "lusha.com", "contactout.com",
+  "signalhire.com", "leadiq.com", "theorg.com", "cambridge.org", "dictionary.com",
+  "collinsdictionary.com", "merriam-webster.com", "glassdoor.com", "indeed.com", "prospeo.io"];
+function skipHost(url: string, ownDomain?: string): boolean {
+  let host = "";
+  try { host = new URL(url).hostname.replace(/^www\./, ""); } catch { return true; }
+  if (!host) return true;
+  if (ownDomain && (host === ownDomain || host.endsWith("." + ownDomain))) return true; // own site = B6
+  return SKIP_HOSTS.some((h) => host === h || host.endsWith("." + h));
+}
+function domainOf(website?: string): string | undefined {
+  if (!website) return undefined;
+  try { return new URL(website.startsWith("http") ? website : "http://" + website).hostname.replace(/^www\./, ""); }
+  catch { return undefined; }
 }
 
 // ---- scrapes ----
@@ -180,7 +227,7 @@ const ageDays = (ts?: number): number => (ts ? Math.round((Date.now() - ts) / 86
 // of angles, each tagged with bucket + age. The evaluator picks the best. ----
 type Cand = { b: string; age: number | null; t: string };
 // deno-lint-ignore no-explicit-any
-function buildCandidates(posts: Post[], profile: any, reactions: unknown[], comments: unknown[], companyText?: string | null): Cand[] {
+function buildCandidates(posts: Post[], profile: any, reactions: unknown[], comments: unknown[], companyText?: string | null, personWeb: WebHit[] = [], companyWeb: WebHit[] = [], ownDomain?: string): Cand[] {
   const c: Cand[] = [];
   // B1 — self-authored posts, freshest first
   for (const p of posts.filter((p) => !p.is_repost).sort((a, b) => a.age_days - b.age_days).slice(0, 5)) {
@@ -221,6 +268,16 @@ function buildCandidates(posts: Post[], profile: any, reactions: unknown[], comm
   }
   // B6 — company (only when scraped: owners up front, others on floor-escalation)
   if (companyText) c.push({ b: "6", age: null, t: "company site: " + companyText.slice(0, 500) });
+  // B6 (web) — external company news (funding/hiring/launch/press) the own-site never shows
+  for (const h of companyWeb) {
+    if (skipHost(h.url, ownDomain)) continue;
+    c.push({ b: "6", age: null, t: `company news (web, past yr): ${h.title} — ${h.description}`.slice(0, 400) });
+  }
+  // B7 — press / web mention OF THE PERSON (interview, podcast, talk, quote, article)
+  for (const h of personWeb) {
+    if (skipHost(h.url, ownDomain)) continue;
+    c.push({ b: "7", age: null, t: `web/press about them: ${h.title} — ${h.description}`.slice(0, 400) });
+  }
   return c;
 }
 
@@ -315,6 +372,7 @@ async function writeBody(lead: Lead, angle: string): Promise<{ hook: string; lan
 const TRACE: Record<string, string> = {
   "1": "self-authored post", "2": "engaged content (comment/like/share)",
   "3": "self-written profile", "5": "background", "6": "company signal",
+  "7": "press / web mention",
 };
 
 /**
@@ -360,12 +418,24 @@ export async function generateBucketHook(
     scrapePosts(url), scrapeProfile(url), scrapeReactions(url), scrapeComments(url),
   ]);
 
+  // What a human does next: google the person + the company. Sequential to respect
+  // Brave's ~1 req/s free tier; best-effort (each returns [] on failure).
+  const ownDomain = domainOf(website);
+  const first = (lead.first_name || "").trim();
+  const last = (lead.last_name || "").trim();
+  const company = (lead.company || "").trim();
+  // Strip the legal suffix and EXACT-quote the company — bare generic-word names
+  // ("VOCAST", "BusySunday") otherwise return dictionary/namesake junk.
+  const cleanCo = company.replace(/\s+(a\/s|aps|ivs|p\/s|k\/s|inc|llc|ltd|gmbh)\.?$/i, "").trim();
+  const personWeb = cleanCo ? await webSearch(`"${`${first} ${last}`.trim()}" "${cleanCo}"`, { count: 5 }) : [];
+  const companyWeb = cleanCo ? await webSearch(`"${cleanCo}"`, { count: 6, freshness: "py" }) : [];
+
   // Becc: owners/founders — company IS their ego, so B6 hooks as hard as a post.
   // Scrape it up front for them so the evaluator can weigh it from round one.
   const owner = isOwner(lead.title);
   const companyUpFront = owner && website ? await b6(website) : null;
 
-  let cands = buildCandidates(posts, profile, reactions, comments, companyUpFront);
+  let cands = buildCandidates(posts, profile, reactions, comments, companyUpFront, personWeb, companyWeb, ownDomain);
   tried = [...new Set(cands.map((c) => c.b))];
   let ev = cands.length ? await evaluate(lead, cands) : { choice: "floor" as const, why: "no signals scraped" };
 
@@ -373,7 +443,7 @@ export async function generateBucketHook(
   if (ev.choice === "floor" && !owner && website) {
     const companyText = await b6(website);
     if (companyText) {
-      cands = buildCandidates(posts, profile, reactions, comments, companyText);
+      cands = buildCandidates(posts, profile, reactions, comments, companyText, personWeb, companyWeb, ownDomain);
       tried = [...new Set(cands.map((c) => c.b))];
       ev = await evaluate(lead, cands);
     }

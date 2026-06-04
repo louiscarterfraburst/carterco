@@ -117,4 +117,23 @@ Personal interests, charity, languages, schools. Becc: junk/creepy. Not pulled.
 | 2 | reposts (shared) + reactions (partial) | full **comments** (their own words) + full **likes** |
 | 3 | headline, about, role desc | — |
 | 5 | trajectory, certs, awards, recommendations | skills/education/volunteering/boards |
-| 6 | site + careers + news (Firecrawl) | funding/M&A/press (news search), `track-job-postings` |
+| 6 | site + careers + news (Firecrawl) **+ Brave web search** (ext funding/M&A/press) | deep-read of top result page (Firecrawl) |
+| 7 | **press/web mention of the person** (Brave web search) | deep-read; dated-result extraction |
+
+---
+
+## Web research (Brave Search) — emulating a human googling
+
+Two searches per lead, run alongside the LinkedIn scrape (`BRAVE_SEARCH_API_KEY`):
+
+| Query | → candidates | Fields used |
+|---|---|---|
+| `"{first} {last}" "{cleanCompany}"` | B7 press/web mention of the person | `web.results[].{title,url,description}` |
+| `"{cleanCompany}"` (`freshness=py`) | B6 external company news (funding/launch/hiring/M&A) | same |
+
+- `cleanCompany` = company with legal suffix stripped (`A/S`, `ApS`, `Inc`, `Ltd`…),
+  EXACT-quoted to kill generic-word/namesake noise.
+- `skipHost()` drops the prospect's own LinkedIn/site (already B1–B6), data brokers
+  (ZoomInfo, RocketReach, Tracxn, prospeo, Apollo…) and dictionaries.
+- Snippet-only (title + description); the evaluator scores them like any candidate
+  and rejects namesakes. Best-effort — `[]` on any failure or missing key.
