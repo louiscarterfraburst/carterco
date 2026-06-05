@@ -1463,6 +1463,7 @@ export default function OutreachPage() {
             actions={engagementActions}
             sequences={sequences}
             onSetOutcome={(id, o) => void setOutcome(id, o)}
+            onOverrideIcp={(id) => void overrideIcpRejection(id)}
           />
         ) : (
           <AllTab rows={allRecent} />
@@ -1969,7 +1970,7 @@ function StatusBadge({ status, intent }: { status: string; intent?: string | nul
   );
 }
 
-function ContactTimeline({ contact, lead, replies, emails, actions, sequences, onSetOutcome }: {
+function ContactTimeline({ contact, lead, replies, emails, actions, sequences, onSetOutcome, onOverrideIcp }: {
   contact: PipelineRow;
   lead?: LeadEnrich;
   replies: Reply[];
@@ -1977,6 +1978,7 @@ function ContactTimeline({ contact, lead, replies, emails, actions, sequences, o
   actions: ActionRow[];
   sequences: SeqLite[];
   onSetOutcome: (leadId: string, outcome: Outcome | null) => void;
+  onOverrideIcp: (leadId: string) => void;
 }) {
   const tc = contact as unknown as TimelineContact;
   const thread = useMemo(() => buildThread(tc, replies, emails, actions), [tc, replies, emails, actions]);
@@ -2024,6 +2026,12 @@ function ContactTimeline({ contact, lead, replies, emails, actions, sequences, o
             className="tabular rounded-full border border-[var(--ink)]/15 px-2.5 py-1 text-[11px] text-[var(--ink)]/55 transition hover:border-[var(--ink)]/30">
             LinkedIn ↗
           </a>
+        ) : null}
+        {contact.status === "rejected_by_icp" ? (
+          <button type="button" onClick={() => onOverrideIcp(contact.sendpilot_lead_id)}
+            className="tabular rounded-full border border-[var(--clay)]/40 px-2.5 py-1 text-[11px] text-[var(--clay)] transition hover:border-[var(--clay)]/60">
+            Send til render →
+          </button>
         ) : null}
       </div>
 
@@ -2094,16 +2102,25 @@ function ContactTimeline({ contact, lead, replies, emails, actions, sequences, o
   );
 }
 
-function KontakterTab({ rows, replies, emails, actions, sequences, onSetOutcome }: {
+const KONTAKTER_SCOPES: { id: "all" | "sent" | "forgotten" | "icp_rejected"; label: string }[] = [
+  { id: "all", label: "Alle" },
+  { id: "sent", label: "Sendt" },
+  { id: "forgotten", label: "Glemt?" },
+  { id: "icp_rejected", label: "ICP-afvist" },
+];
+
+function KontakterTab({ rows, replies, emails, actions, sequences, onSetOutcome, onOverrideIcp }: {
   rows: PipelineRow[];
   replies: Reply[];
   emails: EmailRow[];
   actions: ActionRow[];
   sequences: SeqLite[];
   onSetOutcome: (leadId: string, outcome: Outcome | null) => void;
+  onOverrideIcp: (leadId: string) => void;
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [scope, setScope] = useState<"all" | "sent" | "forgotten" | "icp_rejected">("all");
 
   const repliesByLead = useMemo(() => {
     const m = new Map<string, Reply[]>();
@@ -2137,13 +2154,20 @@ function KontakterTab({ rows, replies, emails, actions, sequences, onSetOutcome 
   }, [rows, sequences]);
 
   const filtered = useMemo(() => {
+    const byScope = enriched.filter(({ row, forgotten }) =>
+      scope === "all" ? true
+      : scope === "sent" ? !!row.sent_at
+      : scope === "forgotten" ? forgotten
+      : scope === "icp_rejected" ? row.status === "rejected_by_icp"
+      : true,
+    );
     const q = query.trim().toLowerCase();
-    if (!q) return enriched;
-    return enriched.filter(({ row }) => {
+    if (!q) return byScope;
+    return byScope.filter(({ row }) => {
       const hay = `${row.lead?.first_name ?? ""} ${row.lead?.last_name ?? ""} ${row.lead?.company ?? ""} ${row.contact_email}`.toLowerCase();
       return hay.includes(q);
     });
-  }, [enriched, query]);
+  }, [enriched, query, scope]);
 
   const forgottenCount = enriched.filter((e) => e.forgotten).length;
   const selected = selectedId ? rows.find((r) => r.sendpilot_lead_id === selectedId) ?? null : null;
@@ -2151,6 +2175,18 @@ function KontakterTab({ rows, replies, emails, actions, sequences, onSetOutcome 
   return (
     <div className="grid gap-5 lg:grid-cols-[340px_minmax(0,1fr)]">
       <div>
+        <div className="mb-2 flex flex-wrap gap-1.5">
+          {KONTAKTER_SCOPES.map((s) => (
+            <button key={s.id} type="button" onClick={() => setScope(s.id)}
+              className={`tabular rounded-full border px-2.5 py-1 text-[11px] uppercase tracking-[0.12em] transition ${
+                scope === s.id
+                  ? "border-[var(--ink)]/40 bg-[var(--sand)]/60 text-[var(--ink)]"
+                  : "border-[var(--ink)]/15 text-[var(--ink)]/50 hover:border-[var(--ink)]/30"
+              }`}>
+              {s.label}
+            </button>
+          ))}
+        </div>
         <input
           value={query}
           onChange={(e: ChangeEvent<HTMLInputElement>) => setQuery(e.target.value)}
@@ -2198,6 +2234,7 @@ function KontakterTab({ rows, replies, emails, actions, sequences, onSetOutcome 
             actions={actionsByLead.get(selected.sendpilot_lead_id) ?? []}
             sequences={sequences}
             onSetOutcome={onSetOutcome}
+            onOverrideIcp={onOverrideIcp}
           />
         ) : (
           <p className="text-[13px] text-[var(--ink)]/45">Vælg en kontakt for at se hele tråden og hvad de modtager næste gang.</p>
@@ -2282,10 +2319,8 @@ function buildNavItems(counts: NavCounts, showIcpTabs: boolean): NavItem[] {
     { id: "i_dag", label: "I dag", count: counts.i_dag, accent: counts.i_dag > 0, group: "Gør nu" },
     { id: "inbox", label: "Indbakke", count: counts.inbox, accent: counts.inbox > 0, group: "Gør nu" },
     { id: "replies", label: "Svar", count: counts.replies, accent: counts.replies > 0, group: "Gør nu" },
+    // Sendt / Alle / ICP-afvist folded into Kontakter as filter chips.
     { id: "kontakter", label: "Kontakter", count: counts.kontakter, group: "Kontakter" },
-    { id: "sent", label: "Sendt", count: counts.sent, group: "Kontakter" },
-    { id: "all", label: "Alle", count: counts.all, group: "Kontakter" },
-    { id: "icp_rejected", label: "ICP-afvist", count: counts.icp_rejected, icpOnly: true, group: "Kontakter" },
     { id: "flow", label: "Flow", count: counts.flow, group: "Indsigt" },
     { id: "icp", label: "Læring", count: counts.icp_open_proposals, accent: counts.icp_open_proposals > 0, icpOnly: true, group: "Indsigt" },
   ];
