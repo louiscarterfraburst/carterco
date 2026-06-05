@@ -1548,6 +1548,13 @@ function FlowCardNode({ data }: NodeProps) {
 
 const FLOW_NODE_TYPES = { flowCard: FlowCardNode };
 
+// Universal spine — always shown so the main flow never disconnects, even when
+// a stage is momentarily empty. Everything else shows only when it holds
+// contacts (workspace-aware), so client-specific side-branches don't clutter.
+const FLOW_SPINE = new Set([
+  "invited", "pending_pre_render", "rendering", "rendered", "pending_approval", "sent",
+]);
+
 function MessageBlueprint({ nodeId, seqStep }: {
   nodeId: string;
   seqStep: ReturnType<typeof lookupSeqStep>;
@@ -1669,9 +1676,22 @@ function FlowTab({ rows, sequences, replies, armStats }: {
   const treeDefs = useMemo(() => buildTreeNodes(sequences, rows, armStats), [sequences, rows, armStats]);
   const treeEdges = useMemo(() => buildTreeEdges(treeDefs, sequences), [treeDefs, sequences]);
 
+  // Workspace-aware visibility: always keep the universal spine + any arm node,
+  // and any node that actually holds contacts. Empty side-branches a workspace
+  // doesn't use (e.g. OdaGroup's AI-draft path on the CarterCo board) drop out,
+  // so each client sees its own flow instead of the union of everyone's.
+  const visibleIds = useMemo(() => {
+    const s = new Set<string>();
+    for (const n of treeDefs) {
+      if (FLOW_SPINE.has(n.id) || n.kind === "arm" || (counts.get(n.id) ?? 0) > 0) s.add(n.id);
+    }
+    return s;
+  }, [treeDefs, counts]);
+
   const rfNodes = useMemo<RFNode[]>(() => {
     const byCol = new Map<number, NodeDef[]>();
     for (const n of treeDefs) {
+      if (!visibleIds.has(n.id)) continue;
       const list = byCol.get(n.col);
       if (list) list.push(n); else byCol.set(n.col, [n]);
     }
@@ -1699,13 +1719,15 @@ function FlowTab({ rows, sequences, replies, armStats }: {
       });
     }
     return out;
-  }, [treeDefs, counts, selectedNode, armByVariant]);
+  }, [treeDefs, visibleIds, counts, selectedNode, armByVariant]);
 
   const rfEdges = useMemo<RFEdge[]>(() =>
-    treeEdges.map((e) => ({
-      id: e.id, source: e.source, target: e.target, type: "smoothstep",
-      style: { stroke: "var(--ink)", strokeOpacity: 0.2, strokeWidth: 1.5 },
-    })), [treeEdges]);
+    treeEdges
+      .filter((e) => visibleIds.has(e.source) && visibleIds.has(e.target))
+      .map((e) => ({
+        id: e.id, source: e.source, target: e.target, type: "smoothstep",
+        style: { stroke: "var(--ink)", strokeOpacity: 0.2, strokeWidth: 1.5 },
+      })), [treeEdges, visibleIds]);
 
   const selectedRows = selectedNode ? (byNode.get(selectedNode) ?? []) : [];
   const seqStep = selectedNode ? lookupSeqStep(selectedNode, sequences) : null;

@@ -128,7 +128,7 @@ export function buildTreeNodes(sequences: SeqLite[], rows: FlowRow[], armStats: 
     { id: "invited", label: "Inviteret", col: 0, tone: "neutral", kind: "status" },
     { id: "accepted", label: "Accepteret", col: 1, tone: "neutral", kind: "status" },
     { id: "pending_pre_render", label: "Afventer pre-render", col: 1, tone: "neutral", kind: "status", sublabel: "kold video" },
-    { id: "pending_ai_draft", label: "AI-draft", col: 1, tone: "neutral", kind: "status", sublabel: "OdaGroup tekst" },
+    { id: "pending_ai_draft", label: "AI-draft", col: 1, tone: "neutral", kind: "status", sublabel: "tekst, ingen video" },
     { id: "pre_connected", label: "Pre-forbundet", col: 1, tone: "neutral", kind: "status", sublabel: "allerede forbundet" },
     { id: "rendering", label: "Renderer", col: 2, tone: "neutral", kind: "status" },
     { id: "rendered", label: "Renderet", col: 2, tone: "neutral", kind: "status" },
