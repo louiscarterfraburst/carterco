@@ -263,7 +263,7 @@ type Signal = {
   alt_search_status: "pending" | "completed" | "empty" | "failed" | null;
 };
 
-type Tab = "i_dag" | "opgaver" | "signaler" | "inbox" | "replies" | "sent" | "all" | "icp_rejected" | "icp" | "flow" | "kontakter";
+type Tab = "i_dag" | "opgaver" | "signaler" | "inbox" | "replies" | "sent" | "all" | "icp_rejected" | "icp" | "flow" | "kontakter" | "besog";
 
 // Returned by outreach-ai draft_email — what the EmailActionBar uses to open mailto.
 type EmailDraft = {
@@ -1217,6 +1217,25 @@ export default function OutreachPage() {
     [signals],
   );
 
+  // Besøg: site visitors who AREN'T already a contact, ranked by ICP fit — warm
+  // inbound to pursue. (Matched visitors land on their contact's timeline.)
+  const unmatchedSignals = useMemo(() => {
+    const normLi = (u: string) => u.replace(/\/+$/, "").split("?")[0].toLowerCase();
+    const liSet = new Set<string>();
+    const emailSet = new Set<string>();
+    for (const r of rows) {
+      if (r.linkedin_url) liSet.add(normLi(r.linkedin_url));
+      if (r.contact_email) emailSet.add(r.contact_email.toLowerCase());
+    }
+    return unhandledSignals
+      .filter((s) => {
+        const li = s.person_linkedin_url && liSet.has(normLi(s.person_linkedin_url));
+        const em = s.person_email && emailSet.has(s.person_email.toLowerCase());
+        return !li && !em;
+      })
+      .sort((a, b) => (b.icp_score ?? -1) - (a.icp_score ?? -1));
+  }, [rows, unhandledSignals]);
+
   // Triage'd unhandled replies sorted by priority + due date for the
   // Opgaver tab. Exclude "done" bucket (priority 1) — those are decline-
   // like and don't need active surfacing. Items with a due_at sort by it.
@@ -1337,6 +1356,7 @@ export default function OutreachPage() {
     icp_open_proposals: icpProposals.filter((p) => p.status === "open").length,
     flow: stats.total,
     kontakter: stats.total,
+    besog: unmatchedSignals.length,
   };
 
   return (
@@ -1465,6 +1485,13 @@ export default function OutreachPage() {
             sequences={sequences}
             onSetOutcome={(id, o) => void setOutcome(id, o)}
             onOverrideIcp={(id) => void overrideIcpRejection(id)}
+          />
+        ) : tab === "besog" ? (
+          <BesogTab
+            signals={unmatchedSignals}
+            busyLead={busyLead}
+            onSearchPeople={(id) => void searchSignalPeople(id)}
+            onDismiss={(ids) => void markSignalsHandled(ids)}
           />
         ) : (
           <AllTab rows={allRecent} />
@@ -2277,6 +2304,79 @@ function KontakterTab({ rows, replies, emails, actions, signals, sequences, onSe
   );
 }
 
+// ------------------------------- Besøg -----------------------------------
+// Site visitors who aren't already a contact, ranked by ICP fit — warm inbound
+// to pursue. The matched ones land on their contact's timeline (Kontakter).
+
+function icpFit(score: number | null): { label: string; tone: "good" | "act" | "bad" | "wait" } {
+  if (score == null) return { label: "ukendt fit", tone: "wait" };
+  if (score >= 7) return { label: "ICP-match", tone: "good" };
+  if (score >= 4) return { label: "delvist", tone: "act" };
+  return { label: "lav fit", tone: "bad" };
+}
+
+function BesogTab({ signals, busyLead, onSearchPeople, onDismiss }: {
+  signals: Signal[];
+  busyLead: string | null;
+  onSearchPeople: (id: string) => void;
+  onDismiss: (ids: string[]) => void;
+}) {
+  if (!signals.length) {
+    return (
+      <p className="text-[13px] text-[var(--ink)]/45">
+        Ingen nye besøg lige nu. Når nogen scanner din side og ikke allerede er en kontakt,
+        dukker de op her — sorteret efter ICP-fit.
+      </p>
+    );
+  }
+  return (
+    <div className="space-y-2">
+      {signals.slice(0, 100).map((s) => {
+        const fit = icpFit(s.icp_score);
+        const name = s.person_name || s.company_name || s.company_domain || "?";
+        const busy = busyLead === `signal-search:${s.id}`;
+        return (
+          <div key={s.id} className="rounded-lg border border-[var(--ink)]/12 bg-[var(--cream)] p-4">
+            <div className="flex items-baseline justify-between gap-3">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-baseline gap-2">
+                  <span className="truncate text-[15px] text-[var(--ink)]">🔥 {name}</span>
+                  <span className={`tabular shrink-0 rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] ${STATUS_TONE_CLASS[fit.tone]}`}>
+                    {fit.label}{s.icp_score != null ? ` · ${s.icp_score}` : ""}
+                  </span>
+                </div>
+                <div className="mt-0.5 truncate text-[12px] text-[var(--ink)]/55">
+                  {[s.person_title, s.company_name].filter(Boolean).join(" · ") || s.company_domain}
+                </div>
+              </div>
+              <span className="tabular shrink-0 text-[10px] text-[var(--ink)]/40">{fmtWhen(s.identified_at)}</span>
+            </div>
+            {s.icp_reasoning ? (
+              <p className="mt-2 text-[12px] italic leading-relaxed text-[var(--ink)]/55">{s.icp_reasoning}</p>
+            ) : null}
+            <div className="mt-3 flex flex-wrap items-center gap-1.5">
+              {s.person_linkedin_url ? (
+                <a href={s.person_linkedin_url} target="_blank" rel="noreferrer"
+                  className="tabular rounded-full border border-[var(--ink)]/15 px-2.5 py-1 text-[11px] text-[var(--ink)]/60 transition hover:border-[var(--ink)]/30">
+                  LinkedIn ↗
+                </a>
+              ) : null}
+              <button type="button" disabled={busy} onClick={() => onSearchPeople(s.id)}
+                className="tabular rounded-full border border-[var(--forest)]/40 px-2.5 py-1 text-[11px] text-[var(--forest)] transition hover:border-[var(--forest)]/60 disabled:opacity-50">
+                {busy ? "Finder…" : "Find personer →"}
+              </button>
+              <button type="button" onClick={() => onDismiss([s.id])}
+                className="tabular rounded-full border border-[var(--ink)]/15 px-2.5 py-1 text-[11px] text-[var(--ink)]/50 transition hover:border-[var(--ink)]/30">
+                Afvis
+              </button>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function Funnel({ stats }: { stats: FunnelStats }) {
   const stages = [
     { label: "Inviteret", value: stats.invited + stats.accepted + stats.rendering + stats.pending + stats.sent + stats.rejected + stats.failed },
@@ -2339,7 +2439,7 @@ function Sparkline({ data }: { data: { day: string; count: number }[] }) {
 // = the map + learning.
 type NavCounts = {
   i_dag: number; opgaver: number; signaler: number; inbox: number; replies: number; sent: number; all: number;
-  icp_rejected: number; icp_open_proposals: number; flow: number; kontakter: number;
+  icp_rejected: number; icp_open_proposals: number; flow: number; kontakter: number; besog: number;
 };
 type NavItem = { id: Tab; label: string; count: number; accent?: boolean; icpOnly?: boolean; group: string };
 const NAV_GROUP_ORDER = ["Gør nu", "Kontakter", "Indsigt"];
@@ -2352,6 +2452,7 @@ function buildNavItems(counts: NavCounts, showIcpTabs: boolean): NavItem[] {
     { id: "i_dag", label: "I dag", count: counts.i_dag, accent: counts.i_dag > 0, group: "Gør nu" },
     { id: "inbox", label: "Indbakke", count: counts.inbox, accent: counts.inbox > 0, group: "Gør nu" },
     { id: "replies", label: "Svar", count: counts.replies, accent: counts.replies > 0, group: "Gør nu" },
+    { id: "besog", label: "Besøg", count: counts.besog, accent: counts.besog > 0, group: "Gør nu" },
     // Sendt / Alle / ICP-afvist folded into Kontakter as filter chips.
     { id: "kontakter", label: "Kontakter", count: counts.kontakter, group: "Kontakter" },
     { id: "flow", label: "Flow", count: counts.flow, group: "Indsigt" },
