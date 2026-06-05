@@ -2173,40 +2173,50 @@ function Tabs({ tab, setTab, showIcpTabs, counts }: {
     icp_rejected: number; icp_open_proposals: number; flow: number; kontakter: number;
   };
 }) {
-  const all: { id: Tab; label: string; count: number; accent?: boolean; icpOnly?: boolean }[] = [
-    { id: "i_dag", label: "I dag", count: counts.i_dag, accent: counts.i_dag > 0 },
-    { id: "opgaver", label: "Opgaver", count: counts.opgaver, accent: counts.opgaver > 0 },
-    { id: "signaler", label: "Signaler", count: counts.signaler, accent: counts.signaler > 0 },
-    { id: "inbox", label: "Indbakke", count: counts.inbox, accent: counts.inbox > 0 },
-    { id: "replies", label: "Svar", count: counts.replies, accent: counts.replies > 0 },
-    { id: "kontakter", label: "Kontakter", count: counts.kontakter },
-    { id: "sent", label: "Sendt", count: counts.sent },
-    { id: "flow", label: "Flow", count: counts.flow },
-    { id: "icp_rejected", label: "ICP-afvist", count: counts.icp_rejected, icpOnly: true },
-    { id: "all", label: "Alle", count: counts.all },
-    { id: "icp", label: "Læring", count: counts.icp_open_proposals, accent: counts.icp_open_proposals > 0, icpOnly: true },
+  // Grouped IA: 10 flat tabs read as 3 labeled clusters so the cockpit stops
+  // feeling frankenstein. Gør nu = act now, Kontakter = the contact spine,
+  // Indsigt = the map + learning.
+  const all: { id: Tab; label: string; count: number; accent?: boolean; icpOnly?: boolean; group: string }[] = [
+    { id: "i_dag", label: "I dag", count: counts.i_dag, accent: counts.i_dag > 0, group: "Gør nu" },
+    { id: "opgaver", label: "Opgaver", count: counts.opgaver, accent: counts.opgaver > 0, group: "Gør nu" },
+    { id: "signaler", label: "Signaler", count: counts.signaler, accent: counts.signaler > 0, group: "Gør nu" },
+    { id: "inbox", label: "Indbakke", count: counts.inbox, accent: counts.inbox > 0, group: "Gør nu" },
+    { id: "replies", label: "Svar", count: counts.replies, accent: counts.replies > 0, group: "Gør nu" },
+    { id: "kontakter", label: "Kontakter", count: counts.kontakter, group: "Kontakter" },
+    { id: "sent", label: "Sendt", count: counts.sent, group: "Kontakter" },
+    { id: "all", label: "Alle", count: counts.all, group: "Kontakter" },
+    { id: "icp_rejected", label: "ICP-afvist", count: counts.icp_rejected, icpOnly: true, group: "Kontakter" },
+    { id: "flow", label: "Flow", count: counts.flow, group: "Indsigt" },
+    { id: "icp", label: "Læring", count: counts.icp_open_proposals, accent: counts.icp_open_proposals > 0, icpOnly: true, group: "Indsigt" },
   ];
   const items = all.filter((it) => !it.icpOnly || showIcpTabs);
+  const groupOrder = ["Gør nu", "Kontakter", "Indsigt"];
   return (
     <nav className="mx-auto mt-2 mb-4 w-full max-w-[1400px] px-4 sm:px-8 lg:px-12">
-      <div className="flex gap-1 overflow-x-auto border-b border-[var(--ink)]/10">
-        {items.map((it) => {
-          const active = it.id === tab;
+      <div className="flex items-stretch overflow-x-auto border-b border-[var(--ink)]/10">
+        {groupOrder.map((g, gi) => {
+          const groupItems = items.filter((it) => it.group === g);
+          if (!groupItems.length) return null;
           return (
-            <button key={it.id} type="button" onClick={() => setTab(it.id)}
-              className={`relative tabular flex items-baseline gap-1.5 whitespace-nowrap px-3 py-2 text-[12px] uppercase tracking-[0.22em] transition ${
-                active
-                  ? "text-[var(--ink)] font-semibold"
-                  : "text-[var(--ink)]/50 hover:text-[var(--ink)]/80"
-              }`}>
-              <span>{it.label}</span>
-              <span className={`tabular text-[10px] ${it.accent ? "text-[var(--clay)]" : "text-[var(--ink)]/40"}`}>
-                {it.count}
-              </span>
-              {active ? (
-                <span className="absolute inset-x-0 -bottom-px h-[2px] bg-[var(--clay)]" />
-              ) : null}
-            </button>
+            <div key={g} className="flex items-center">
+              {gi > 0 ? <span className="mx-2 h-4 w-px self-center bg-[var(--ink)]/15" aria-hidden /> : null}
+              <span className="tabular mr-1 self-center whitespace-nowrap text-[9px] uppercase tracking-[0.2em] text-[var(--ink)]/30">{g}</span>
+              {groupItems.map((it) => {
+                const active = it.id === tab;
+                return (
+                  <button key={it.id} type="button" onClick={() => setTab(it.id)}
+                    className={`relative tabular flex items-baseline gap-1.5 whitespace-nowrap px-3 py-2 text-[12px] uppercase tracking-[0.22em] transition ${
+                      active ? "text-[var(--ink)] font-semibold" : "text-[var(--ink)]/50 hover:text-[var(--ink)]/80"
+                    }`}>
+                    <span>{it.label}</span>
+                    <span className={`tabular text-[10px] ${it.accent ? "text-[var(--clay)]" : "text-[var(--ink)]/40"}`}>
+                      {it.count}
+                    </span>
+                    {active ? <span className="absolute inset-x-0 -bottom-px h-[2px] bg-[var(--clay)]" /> : null}
+                  </button>
+                );
+              })}
+            </div>
           );
         })}
       </div>
