@@ -124,16 +124,17 @@ export function activeArms(sequences: SeqLite[], rows: FlowRow[], armStats: ArmS
 
 // Tree nodes (cols 0-4). Outcomes are NOT here — they live in OUTCOME_DEFS.
 export function buildTreeNodes(sequences: SeqLite[], rows: FlowRow[], armStats: ArmStat[]): NodeDef[] {
+  // Levels run top→bottom: invite → accept → path → render/approve → send → seq.
   const nodes: NodeDef[] = [
     { id: "invited", label: "Inviteret", col: 0, tone: "neutral", kind: "status" },
     { id: "accepted", label: "Accepteret", col: 1, tone: "neutral", kind: "status" },
-    { id: "pending_pre_render", label: "Afventer pre-render", col: 1, tone: "neutral", kind: "status", sublabel: "kold video" },
-    { id: "pending_ai_draft", label: "AI-draft", col: 1, tone: "neutral", kind: "status", sublabel: "tekst, ingen video" },
-    { id: "pre_connected", label: "Pre-forbundet", col: 1, tone: "neutral", kind: "status", sublabel: "allerede forbundet" },
-    { id: "rendering", label: "Renderer", col: 2, tone: "neutral", kind: "status" },
-    { id: "rendered", label: "Renderet", col: 2, tone: "neutral", kind: "status" },
-    { id: "pending_approval", label: "Til godkendelse", col: 2, tone: "active", kind: "status" },
+    { id: "pending_pre_render", label: "Afventer pre-render", col: 2, tone: "neutral", kind: "status", sublabel: "kold video" },
+    { id: "pending_ai_draft", label: "AI-draft", col: 2, tone: "neutral", kind: "status", sublabel: "tekst, ingen video" },
+    { id: "pre_connected", label: "Pre-forbundet", col: 2, tone: "neutral", kind: "status", sublabel: "allerede forbundet" },
     { id: "pending_alt_review", label: "Alt-review", col: 2, tone: "neutral", kind: "status" },
+    { id: "rendering", label: "Renderer", col: 3, tone: "neutral", kind: "status" },
+    { id: "rendered", label: "Renderet", col: 3, tone: "neutral", kind: "status" },
+    { id: "pending_approval", label: "Til godkendelse", col: 3, tone: "active", kind: "status" },
   ];
 
   const arms = activeArms(sequences, rows, armStats);
@@ -141,17 +142,17 @@ export function buildTreeNodes(sequences: SeqLite[], rows: FlowRow[], armStats: 
   nodes.push({
     id: "sent",
     label: "Sendt",
-    col: 3,
+    col: 4,
     tone: "active",
     kind: "status",
     sublabel: arms.length ? "uden arm" : "AI-personaliseret 1. DM",
   });
   for (const a of arms) {
     const meta = ARM_META[a] ?? { label: a, sublabel: "" };
-    nodes.push({ id: `arm:${a}`, label: meta.label, col: 3, tone: "active", kind: "arm", sublabel: meta.sublabel, arm: a });
+    nodes.push({ id: `arm:${a}`, label: meta.label, col: 4, tone: "active", kind: "arm", sublabel: meta.sublabel, arm: a });
   }
 
-  // Sequence nodes (col 4), grouped under their arm via match_first_dm_variant.
+  // Sequence nodes (col 5), grouped under their arm via match_first_dm_variant.
   const seen = new Set<string>();
   for (const seq of sequences) {
     seq.steps?.forEach((step, idx) => {
@@ -160,7 +161,7 @@ export function buildTreeNodes(sequences: SeqLite[], rows: FlowRow[], armStats: 
       nodes.push({
         id,
         label: step.id || `trin ${idx}`,
-        col: 4,
+        col: 5,
         tone: "active",
         kind: "sequence",
         sublabel: seq.id,
@@ -174,7 +175,7 @@ export function buildTreeNodes(sequences: SeqLite[], rows: FlowRow[], armStats: 
       const id = `seq:${r.sequence_id}:${r.sequence_step}`;
       if (!seen.has(id)) {
         seen.add(id);
-        nodes.push({ id, label: `trin ${r.sequence_step}`, col: 4, tone: "active", kind: "sequence", sublabel: r.sequence_id });
+        nodes.push({ id, label: `trin ${r.sequence_step}`, col: 5, tone: "active", kind: "sequence", sublabel: r.sequence_id });
       }
     }
   }
@@ -189,17 +190,19 @@ export function buildTreeEdges(nodes: NodeDef[], sequences: SeqLite[]): EdgeDef[
       edges.push({ id: `${source}=>${target}`, source, target });
     }
   };
+  // invited → accepted → the per-client paths fork FROM acceptance, not invite.
   add("invited", "accepted");
-  add("invited", "pending_pre_render");
-  add("invited", "pending_ai_draft");
-  add("invited", "pre_connected");
+  add("accepted", "pending_pre_render");
+  add("accepted", "pending_ai_draft");
+  add("accepted", "pre_connected");
+  add("accepted", "pending_alt_review");
   add("pending_pre_render", "rendering");
   add("rendering", "rendered");
   add("rendered", "pending_approval");
   add("pending_ai_draft", "pending_approval");
 
   // First-DM fork: approval dispatches into "Sendt" + each arm.
-  for (const n of nodes.filter((x) => x.col === 3)) add("pending_approval", n.id);
+  for (const n of nodes.filter((x) => x.col === 4)) add("pending_approval", n.id);
 
   // Each first-DM node flows into its matched follow-up sequences.
   for (const seq of sequences) {

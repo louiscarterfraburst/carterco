@@ -1527,7 +1527,7 @@ function FlowCardNode({ data }: NodeProps) {
       className={`rounded-md border px-3 py-2 ${tone.card} ${d.isSelected ? "ring-2 ring-[var(--ink)]/40" : ""} ${d.count === 0 && !d.armStat ? "opacity-50" : ""}`}
       style={{ width: 188 }}
     >
-      <Handle type="target" position={Position.Left} style={{ opacity: 0 }} />
+      <Handle type="target" position={Position.Top} style={{ opacity: 0 }} />
       <div className="flex items-baseline justify-between gap-2">
         <span className="text-[12px] leading-tight text-[var(--ink)]">{d.label}</span>
         <span className="font-display text-lg italic leading-none text-[var(--ink)]">{d.count}</span>
@@ -1541,7 +1541,7 @@ function FlowCardNode({ data }: NodeProps) {
           <span className="tabular text-[10px] font-semibold text-[var(--forest)]">{d.armStat.reply_pct ?? 0}% svar</span>
         </div>
       ) : null}
-      <Handle type="source" position={Position.Right} style={{ opacity: 0 }} />
+      <Handle type="source" position={Position.Bottom} style={{ opacity: 0 }} />
     </div>
   );
 }
@@ -1552,7 +1552,7 @@ const FLOW_NODE_TYPES = { flowCard: FlowCardNode };
 // a stage is momentarily empty. Everything else shows only when it holds
 // contacts (workspace-aware), so client-specific side-branches don't clutter.
 const FLOW_SPINE = new Set([
-  "invited", "pending_pre_render", "rendering", "rendered", "pending_approval", "sent",
+  "invited", "accepted", "pending_pre_render", "rendering", "rendered", "pending_approval", "sent",
 ]);
 
 function MessageBlueprint({ nodeId, seqStep }: {
@@ -1689,23 +1689,26 @@ function FlowTab({ rows, sequences, replies, armStats }: {
   }, [treeDefs, counts]);
 
   const rfNodes = useMemo<RFNode[]>(() => {
+    // Vertical tree: each level is a row going DOWN (y); siblings within a
+    // level spread across (x), centered so the trunk stays roughly mid-canvas.
     const byCol = new Map<number, NodeDef[]>();
     for (const n of treeDefs) {
       if (!visibleIds.has(n.id)) continue;
       const list = byCol.get(n.col);
       if (list) list.push(n); else byCol.set(n.col, [n]);
     }
-    const COL_W = 240, ROW_H = 100;
-    const maxRows = Math.max(...[...byCol.values()].map((l) => l.length), 1);
+    const LEVEL_H = 132, NODE_W = 220;
+    const widest = Math.max(...[...byCol.values()].map((l) => l.length), 1);
     const out: RFNode[] = [];
     for (const [col, list] of byCol) {
-      const offset = (maxRows - list.length) / 2;
       list.forEach((n, i) => {
         const arm = n.kind === "arm" && n.arm ? (armByVariant.get(n.arm) ?? null) : null;
+        // center this level's row of siblings around x=0
+        const x = (i - (list.length - 1) / 2) * NODE_W + (widest * NODE_W) / 2;
         out.push({
           id: n.id,
           type: "flowCard",
-          position: { x: col * COL_W, y: (offset + i) * ROW_H },
+          position: { x, y: col * LEVEL_H },
           data: {
             label: n.label,
             count: counts.get(n.id) ?? 0,
@@ -1770,7 +1773,7 @@ function FlowTab({ rows, sequences, replies, armStats }: {
         </div>
       ) : null}
 
-      <div className="rounded-lg border border-[var(--ink)]/12 bg-[var(--sand)]/30" style={{ height: 520 }}>
+      <div className="rounded-lg border border-[var(--ink)]/12 bg-[var(--sand)]/30" style={{ height: 640 }}>
         <ReactFlow
           nodes={rfNodes}
           edges={rfEdges}
