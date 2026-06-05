@@ -1441,6 +1441,7 @@ export default function OutreachPage() {
             emails={sentEmails}
             actions={engagementActions}
             sequences={sequences}
+            onSetOutcome={(id, o) => void setOutcome(id, o)}
           />
         ) : (
           <AllTab rows={allRecent} />
@@ -1906,13 +1907,53 @@ function fmtWhen(iso: string): string {
   });
 }
 
-function ContactTimeline({ contact, lead, replies, emails, actions, sequences }: {
+// Status → human label + tone, so lists read by colour at a glance (Lemlist/
+// Instantly pattern) instead of raw lowercase enum text. Colours stay inside
+// the house palette (forest / clay / ink) — no generic SaaS blue.
+const STATUS_META: Record<string, { label: string; tone: "wait" | "go" | "act" | "good" | "bad" }> = {
+  invited: { label: "Inviteret", tone: "wait" },
+  accepted: { label: "Accepteret", tone: "go" },
+  pending_pre_render: { label: "Afventer video", tone: "wait" },
+  pending_ai_draft: { label: "AI-draft", tone: "wait" },
+  rendering: { label: "Renderer", tone: "wait" },
+  rendered: { label: "Renderet", tone: "go" },
+  pending_approval: { label: "Til godkendelse", tone: "act" },
+  pending_alt_review: { label: "Alt-review", tone: "act" },
+  sent: { label: "Sendt", tone: "go" },
+  pre_connected: { label: "Pre-forbundet", tone: "wait" },
+  rejected: { label: "Afvist", tone: "bad" },
+  rejected_by_icp: { label: "ICP-afvist", tone: "bad" },
+  failed: { label: "Fejlet", tone: "bad" },
+};
+
+const STATUS_TONE_CLASS: Record<string, string> = {
+  wait: "bg-[var(--ink)]/8 text-[var(--ink)]/55 border-[var(--ink)]/15",
+  go: "bg-[var(--forest)]/8 text-[var(--forest)] border-[var(--forest)]/25",
+  act: "bg-[var(--clay)]/10 text-[var(--clay)] border-[var(--clay)]/30",
+  good: "bg-[var(--forest)]/12 text-[var(--forest)] border-[var(--forest)]/35",
+  bad: "bg-[var(--clay)]/12 text-[var(--clay)] border-[var(--clay)]/35",
+};
+
+function StatusBadge({ status, intent }: { status: string; intent?: string | null }) {
+  // an interested reply outranks the raw status for at-a-glance reading
+  const meta = intent === "interested"
+    ? { label: "Interesseret", tone: "good" as const }
+    : STATUS_META[status] ?? { label: status, tone: "wait" as const };
+  return (
+    <span className={`tabular inline-flex items-center whitespace-nowrap rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] ${STATUS_TONE_CLASS[meta.tone]}`}>
+      {meta.label}
+    </span>
+  );
+}
+
+function ContactTimeline({ contact, lead, replies, emails, actions, sequences, onSetOutcome }: {
   contact: PipelineRow;
   lead?: LeadEnrich;
   replies: Reply[];
   emails: EmailRow[];
   actions: ActionRow[];
   sequences: SeqLite[];
+  onSetOutcome: (leadId: string, outcome: Outcome | null) => void;
 }) {
   const tc = contact as unknown as TimelineContact;
   const thread = useMemo(() => buildThread(tc, replies, emails, actions), [tc, replies, emails, actions]);
@@ -1933,10 +1974,34 @@ function ContactTimeline({ contact, lead, replies, emails, actions, sequences }:
             {[lead?.title, lead?.company].filter(Boolean).join(" · ") || contact.contact_email}
           </p>
         </div>
-        <div className="text-right">
-          <div className="tabular text-[11px] uppercase tracking-[0.18em] text-[var(--ink)]/45">{contact.status}</div>
-          <div className="tabular mt-0.5 text-[10px] text-[var(--ink)]/40">{seqLabel}</div>
+        <div className="flex flex-col items-end gap-1">
+          <StatusBadge status={contact.status} intent={contact.last_reply_intent} />
+          <div className="tabular text-[10px] text-[var(--ink)]/40">{seqLabel}</div>
         </div>
+      </div>
+
+      {/* quick-actions — mark outcome / open LinkedIn, without leaving the contact */}
+      <div className="mt-4 flex flex-wrap items-center gap-1.5">
+        {OUTCOME_OPTIONS.map((o) => {
+          const on = contact.outcome === o.value;
+          return (
+            <button key={o.value} type="button"
+              onClick={() => onSetOutcome(contact.sendpilot_lead_id, on ? null : o.value)}
+              className={`tabular rounded-full border px-2.5 py-1 text-[11px] transition ${
+                on
+                  ? "border-[var(--forest)]/50 bg-[var(--forest)]/10 text-[var(--forest)]"
+                  : "border-[var(--ink)]/15 text-[var(--ink)]/55 hover:border-[var(--ink)]/30"
+              }`}>
+              {o.label}
+            </button>
+          );
+        })}
+        {contact.linkedin_url ? (
+          <a href={contact.linkedin_url} target="_blank" rel="noreferrer"
+            className="tabular rounded-full border border-[var(--ink)]/15 px-2.5 py-1 text-[11px] text-[var(--ink)]/55 transition hover:border-[var(--ink)]/30">
+            LinkedIn ↗
+          </a>
+        ) : null}
       </div>
 
       {forgotten ? (
@@ -2006,12 +2071,13 @@ function ContactTimeline({ contact, lead, replies, emails, actions, sequences }:
   );
 }
 
-function KontakterTab({ rows, replies, emails, actions, sequences }: {
+function KontakterTab({ rows, replies, emails, actions, sequences, onSetOutcome }: {
   rows: PipelineRow[];
   replies: Reply[];
   emails: EmailRow[];
   actions: ActionRow[];
   sequences: SeqLite[];
+  onSetOutcome: (leadId: string, outcome: Outcome | null) => void;
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -2086,7 +2152,10 @@ function KontakterTab({ rows, replies, emails, actions, sequences }: {
                   {forgotten ? <span className="shrink-0 text-[10px] text-[var(--clay)]">● glemt?</span>
                     : nextAt ? <span className="tabular shrink-0 text-[10px] text-[var(--ink)]/40">{fmtWhen(nextAt)}</span> : null}
                 </div>
-                <span className="truncate text-[11px] text-[var(--ink)]/45">{row.lead?.company ?? row.status}</span>
+                <div className="flex items-center gap-2">
+                  <StatusBadge status={row.status} intent={row.last_reply_intent} />
+                  <span className="truncate text-[11px] text-[var(--ink)]/45">{row.lead?.company ?? ""}</span>
+                </div>
               </button>
             );
           })}
@@ -2105,6 +2174,7 @@ function KontakterTab({ rows, replies, emails, actions, sequences }: {
             emails={emailsByLead.get(selected.sendpilot_lead_id) ?? []}
             actions={actionsByLead.get(selected.sendpilot_lead_id) ?? []}
             sequences={sequences}
+            onSetOutcome={onSetOutcome}
           />
         ) : (
           <p className="text-[13px] text-[var(--ink)]/45">Vælg en kontakt for at se hele tråden og hvad de modtager næste gang.</p>
@@ -2126,6 +2196,9 @@ function Funnel({ stats }: { stats: FunnelStats }) {
     <dl className="mt-6 grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-4">
       {stages.map((s, i) => {
         const pct = Math.max(8, Math.round((s.value / max) * 100));
+        // conversion from the previous stage — the read that says "is this healthy?"
+        const prev = i > 0 ? stages[i - 1].value : 0;
+        const conv = i > 0 && prev > 0 ? Math.round((s.value / prev) * 100) : null;
         return (
           <div key={s.label}>
             <dd className="font-display text-3xl italic leading-tight tracking-tight text-[var(--ink)]">{s.value}</dd>
@@ -2136,7 +2209,10 @@ function Funnel({ stats }: { stats: FunnelStats }) {
                 opacity: i === 0 ? 0.55 : 1,
               }} />
             </div>
-            <dt className="tabular mt-1 text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/45">{s.label}</dt>
+            <dt className="tabular mt-1 flex items-baseline gap-1.5 text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/45">
+              <span>{s.label}</span>
+              {conv !== null ? <span className="text-[var(--forest)] normal-case tracking-normal">{conv}%</span> : null}
+            </dt>
           </div>
         );
       })}
