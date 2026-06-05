@@ -62,3 +62,6 @@ clients/bikenor/.env.*.local
 
 # Codex CLI session state (per-invocation, not source)
 .context/
+
+# npm lock — repo standardizes on pnpm (Vercel builds from pnpm-lock.yaml)
+package-lock.json
