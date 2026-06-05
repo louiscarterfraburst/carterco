@@ -31,11 +31,12 @@ export type TimelineContact = {
 export type ThreadReply = { message: string; intent: string | null; received_at: string };
 export type ThreadEmail = { subject: string; body: string; sent_at: string | null };
 export type ThreadAction = { rule_id: string; action_type: string; fired_at: string; result: unknown };
+export type ThreadSignal = { signal_type: string | null; company_name: string | null; identified_at: string };
 
 export type ThreadItem = {
   at: string;            // ISO timestamp
   direction: "out" | "in";
-  channel: "DM" | "Email";
+  channel: "DM" | "Email" | "Signal";
   label: string;         // e.g. "1. DM · bucket 2", "Opfølgning · kalender", "Svar · interested"
   subject?: string;
   text: string | null;   // null = sent but text not stored
@@ -65,8 +66,21 @@ export function buildThread(
   replies: ThreadReply[],
   emails: ThreadEmail[],
   actions: ThreadAction[],
+  signals: ThreadSignal[] = [],
 ): ThreadItem[] {
   const items: ThreadItem[] = [];
+
+  // Inbound buying signals (RB2B site visits etc.) matched to this contact —
+  // a quiet contact coming back to your site is the warmest re-engagement cue.
+  for (const s of signals) {
+    items.push({
+      at: s.identified_at,
+      direction: "in",
+      channel: "Signal",
+      label: "🔥 Besøgte siden",
+      text: [s.signal_type, s.company_name].filter(Boolean).join(" · ") || null,
+    });
+  }
 
   // The first DM lands in BOTH outreach_pipeline.rendered_message AND the
   // engine's first auto_send in outreach_engagement_actions, so dedupe outbound

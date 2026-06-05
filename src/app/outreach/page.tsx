@@ -1461,6 +1461,7 @@ export default function OutreachPage() {
             replies={replies}
             emails={sentEmails}
             actions={engagementActions}
+            signals={signals}
             sequences={sequences}
             onSetOutcome={(id, o) => void setOutcome(id, o)}
             onOverrideIcp={(id) => void overrideIcpRejection(id)}
@@ -1975,18 +1976,19 @@ function StatusBadge({ status, intent }: { status: string; intent?: string | nul
   );
 }
 
-function ContactTimeline({ contact, lead, replies, emails, actions, sequences, onSetOutcome, onOverrideIcp }: {
+function ContactTimeline({ contact, lead, replies, emails, actions, signals, sequences, onSetOutcome, onOverrideIcp }: {
   contact: PipelineRow;
   lead?: LeadEnrich;
   replies: Reply[];
   emails: EmailRow[];
   actions: ActionRow[];
+  signals: Signal[];
   sequences: SeqLite[];
   onSetOutcome: (leadId: string, outcome: Outcome | null) => void;
   onOverrideIcp: (leadId: string) => void;
 }) {
   const tc = contact as unknown as TimelineContact;
-  const thread = useMemo(() => buildThread(tc, replies, emails, actions), [tc, replies, emails, actions]);
+  const thread = useMemo(() => buildThread(tc, replies, emails, actions, signals), [tc, replies, emails, actions, signals]);
   const upcoming = useMemo(() => projectUpcoming(tc, sequences), [tc, sequences]);
   const forgotten = isPossiblyForgotten(tc, upcoming);
 
@@ -2114,11 +2116,12 @@ const KONTAKTER_SCOPES: { id: "all" | "sent" | "forgotten" | "icp_rejected"; lab
   { id: "icp_rejected", label: "ICP-afvist" },
 ];
 
-function KontakterTab({ rows, replies, emails, actions, sequences, onSetOutcome, onOverrideIcp }: {
+function KontakterTab({ rows, replies, emails, actions, signals, sequences, onSetOutcome, onOverrideIcp }: {
   rows: PipelineRow[];
   replies: Reply[];
   emails: EmailRow[];
   actions: ActionRow[];
+  signals: Signal[];
   sequences: SeqLite[];
   onSetOutcome: (leadId: string, outcome: Outcome | null) => void;
   onOverrideIcp: (leadId: string) => void;
@@ -2143,20 +2146,41 @@ function KontakterTab({ rows, replies, emails, actions, sequences, onSetOutcome,
     return m;
   }, [actions]);
 
-  // At-risk (possibly forgotten) first, then most recently active.
+  // Match inbound signals (RB2B site visits etc.) to contacts by LinkedIn URL or
+  // email, so a known contact revisiting your site lands on their timeline + warm.
+  const signalsByLead = useMemo(() => {
+    const normLi = (u: string) => u.replace(/\/+$/, "").split("?")[0].toLowerCase();
+    const byLi = new Map<string, string>();
+    const byEmail = new Map<string, string>();
+    for (const r of rows) {
+      if (r.linkedin_url) byLi.set(normLi(r.linkedin_url), r.sendpilot_lead_id);
+      if (r.contact_email) byEmail.set(r.contact_email.toLowerCase(), r.sendpilot_lead_id);
+    }
+    const m = new Map<string, Signal[]>();
+    for (const s of signals) {
+      const id = (s.person_linkedin_url && byLi.get(normLi(s.person_linkedin_url)))
+        || (s.person_email && byEmail.get(s.person_email.toLowerCase()));
+      if (id) (m.get(id) ?? m.set(id, []).get(id)!).push(s);
+    }
+    return m;
+  }, [rows, signals]);
+
+  // Warm (just revisited your site) first, then at-risk (forgotten), then recent.
   const enriched = useMemo(() => {
     return rows.map((r) => {
       const up = projectUpcoming(r as unknown as TimelineContact, sequences);
       return {
         row: r,
         forgotten: isPossiblyForgotten(r as unknown as TimelineContact, up),
+        warm: signalsByLead.has(r.sendpilot_lead_id),
         nextAt: up[0]?.at ?? null,
       };
     }).sort((a, b) => {
+      if (a.warm !== b.warm) return a.warm ? -1 : 1;
       if (a.forgotten !== b.forgotten) return a.forgotten ? -1 : 1;
       return new Date(b.row.updated_at).getTime() - new Date(a.row.updated_at).getTime();
     });
-  }, [rows, sequences]);
+  }, [rows, sequences, signalsByLead]);
 
   const filtered = useMemo(() => {
     const byScope = enriched.filter(({ row, forgotten }) =>
@@ -2204,7 +2228,7 @@ function KontakterTab({ rows, replies, emails, actions, sequences, onSetOutcome,
           </div>
         ) : null}
         <div className="mt-2 max-h-[640px] overflow-y-auto rounded-md border border-[var(--ink)]/10 divide-y divide-[var(--ink)]/8">
-          {filtered.slice(0, 400).map(({ row, forgotten, nextAt }) => {
+          {filtered.slice(0, 400).map(({ row, forgotten, warm, nextAt }) => {
             const name = `${row.lead?.first_name ?? ""} ${row.lead?.last_name ?? ""}`.trim() || row.contact_email || row.sendpilot_lead_id;
             const active = row.sendpilot_lead_id === selectedId;
             return (
@@ -2212,8 +2236,11 @@ function KontakterTab({ rows, replies, emails, actions, sequences, onSetOutcome,
                 onClick={() => setSelectedId(row.sendpilot_lead_id)}
                 className={`flex w-full flex-col gap-0.5 px-3 py-2 text-left transition ${active ? "bg-[var(--sand)]/60" : "hover:bg-[var(--sand)]/30"}`}>
                 <div className="flex items-baseline justify-between gap-2">
-                  <span className="truncate text-[14px] text-[var(--ink)]">{name}</span>
-                  {forgotten ? <span className="shrink-0 text-[10px] text-[var(--clay)]">● glemt?</span>
+                  <span className="truncate text-[14px] text-[var(--ink)]">
+                    {warm ? "🔥 " : ""}{name}
+                  </span>
+                  {warm ? <span className="shrink-0 text-[10px] text-[var(--clay)]">besøg</span>
+                    : forgotten ? <span className="shrink-0 text-[10px] text-[var(--clay)]">● glemt?</span>
                     : nextAt ? <span className="tabular shrink-0 text-[10px] text-[var(--ink)]/40">{fmtWhen(nextAt)}</span> : null}
                 </div>
                 <div className="flex items-center gap-2">
@@ -2237,6 +2264,7 @@ function KontakterTab({ rows, replies, emails, actions, sequences, onSetOutcome,
             replies={repliesByLead.get(selected.sendpilot_lead_id) ?? []}
             emails={emailsByLead.get(selected.sendpilot_lead_id) ?? []}
             actions={actionsByLead.get(selected.sendpilot_lead_id) ?? []}
+            signals={signalsByLead.get(selected.sendpilot_lead_id) ?? []}
             sequences={sequences}
             onSetOutcome={onSetOutcome}
             onOverrideIcp={onOverrideIcp}
