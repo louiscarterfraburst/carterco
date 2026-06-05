@@ -16,13 +16,27 @@ import { createClient } from "@/utils/supabase/client";
 import { useWorkspace, type Workspace } from "@/utils/workspace";
 import { clampToBusinessHours } from "@/utils/businessHours";
 import {
-  COLUMN_TITLES,
-  STATIC_NODES,
+  ReactFlow,
+  Background,
+  Controls,
+  Handle,
+  Position,
+  type Node as RFNode,
+  type Edge as RFEdge,
+  type NodeProps,
+} from "@xyflow/react";
+import "@xyflow/react/dist/style.css";
+import {
+  ARM_META,
+  OUTCOME_DEFS,
+  activeArms,
+  buildTreeNodes,
+  buildTreeEdges,
   classifyNode,
-  buildSequenceNodes,
   lookupSeqStep,
-  type FlowNode,
+  type ArmStat,
   type FlowTone,
+  type NodeDef,
   type SeqLite,
 } from "./flow";
 
@@ -430,6 +444,7 @@ export default function OutreachPage() {
 
   const [tab, setTab] = useState<Tab>("i_dag");
   const [sequences, setSequences] = useState<SeqLite[]>([]);
+  const [armStats, setArmStats] = useState<ArmStat[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [filterCompany, setFilterCompany] = useState("");
   const [filterRole, setFilterRole] = useState("");
@@ -633,7 +648,7 @@ export default function OutreachPage() {
     // global with the same id. Drives the step labels + message templates.
     const { data: seqRows } = await supabase
       .from("outreach_sequences")
-      .select("id, workspace_id, description, trigger_signal, steps, position")
+      .select("id, workspace_id, description, trigger_signal, steps, position, match_first_dm_variant")
       .or(`workspace_id.is.null,workspace_id.eq.${activeWorkspaceId}`)
       .eq("is_active", true)
       .order("position", { ascending: true });
@@ -645,6 +660,13 @@ export default function OutreachPage() {
       }
     }
     setSequences(Array.from(seqById.values()));
+
+    // A/B scoreboard per first-DM arm (vw_first_dm_ab: assigned/sent/replied/reply_pct).
+    const { data: abRows } = await supabase
+      .from("vw_first_dm_ab")
+      .select("first_dm_variant, assigned, sent, replied, reply_pct")
+      .eq("workspace_id", activeWorkspaceId);
+    setArmStats((abRows ?? []) as ArmStat[]);
   }, [activeWorkspaceId, supabase]);
 
   const scheduleReload = useCallback(() => {
@@ -1379,7 +1401,7 @@ export default function OutreachPage() {
             onDecide={(id, d) => void decideProposal(id, d)}
           />
         ) : tab === "flow" ? (
-          <FlowTab rows={rows} sequences={sequences} replies={replies} />
+          <FlowTab rows={rows} sequences={sequences} replies={replies} armStats={armStats} />
         ) : (
           <AllTab rows={allRecent} />
         )}
@@ -1462,9 +1484,11 @@ type FunnelStats = {
 };
 
 // ------------------------------- Flow map --------------------------------
-// Read-only automation map: each contact lands in exactly one node (its
-// current position), nodes show live counts, click a node for its message
-// blueprint + the contacts in it, click a contact for their actual text.
+// Branching automation tree (React Flow): invited → accept → render/approve →
+// first DM (forks into the A/B arms) → each arm's follow-up sequence. Replies
+// and terminal states are cross-cutting outcomes shown in a strip below the
+// tree. Click any node/outcome for its message blueprint + the contacts in it;
+// click a contact for their actual text.
 
 function flowTimeAgo(iso: string | null): string {
   if (!iso) return "";
@@ -1477,15 +1501,55 @@ function flowTimeAgo(iso: string | null): string {
 }
 
 const FLOW_TONE_CLASS: Record<FlowTone, { card: string; bar: string }> = {
-  neutral: { card: "border-[var(--ink)]/12 bg-[var(--cream)]", bar: "var(--ink)" },
-  active: { card: "border-[var(--forest)]/30 bg-[var(--cream)]", bar: "var(--forest)" },
-  good: { card: "border-[var(--forest)]/40 bg-[var(--forest)]/5", bar: "var(--forest)" },
-  warn: { card: "border-[var(--clay)]/40 bg-[var(--clay)]/5", bar: "var(--clay)" },
-  bad: { card: "border-[var(--clay)]/50 bg-[var(--clay)]/10", bar: "var(--clay)" },
+  neutral: { card: "border-[var(--ink)]/15 bg-[var(--cream)]", bar: "var(--ink)" },
+  active: { card: "border-[var(--forest)]/35 bg-[var(--cream)]", bar: "var(--forest)" },
+  good: { card: "border-[var(--forest)]/45 bg-[var(--forest)]/8", bar: "var(--forest)" },
+  warn: { card: "border-[var(--clay)]/45 bg-[var(--clay)]/8", bar: "var(--clay)" },
+  bad: { card: "border-[var(--clay)]/55 bg-[var(--clay)]/12", bar: "var(--clay)" },
 };
 
-function MessageBlueprint({ node, seqStep }: {
-  node: FlowNode;
+type FlowNodeData = {
+  label: string;
+  count: number;
+  tone: FlowTone;
+  sublabel?: string;
+  isSelected: boolean;
+  armStat?: ArmStat | null;
+};
+
+// React Flow custom node — a tone-tinted card with label, live count, optional
+// arm scoreboard line, and (hidden) connection handles.
+function FlowCardNode({ data }: NodeProps) {
+  const d = data as FlowNodeData;
+  const tone = FLOW_TONE_CLASS[d.tone];
+  return (
+    <div
+      className={`rounded-md border px-3 py-2 ${tone.card} ${d.isSelected ? "ring-2 ring-[var(--ink)]/40" : ""} ${d.count === 0 && !d.armStat ? "opacity-50" : ""}`}
+      style={{ width: 188 }}
+    >
+      <Handle type="target" position={Position.Left} style={{ opacity: 0 }} />
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="text-[12px] leading-tight text-[var(--ink)]">{d.label}</span>
+        <span className="font-display text-lg italic leading-none text-[var(--ink)]">{d.count}</span>
+      </div>
+      {d.sublabel ? (
+        <div className="tabular mt-0.5 truncate text-[9px] uppercase tracking-[0.14em] text-[var(--ink)]/35">{d.sublabel}</div>
+      ) : null}
+      {d.armStat ? (
+        <div className="mt-1.5 flex items-baseline gap-2 border-t border-[var(--ink)]/10 pt-1.5">
+          <span className="tabular text-[9px] uppercase tracking-[0.12em] text-[var(--ink)]/40">{d.armStat.sent} sendt</span>
+          <span className="tabular text-[10px] font-semibold text-[var(--forest)]">{d.armStat.reply_pct ?? 0}% svar</span>
+        </div>
+      ) : null}
+      <Handle type="source" position={Position.Right} style={{ opacity: 0 }} />
+    </div>
+  );
+}
+
+const FLOW_NODE_TYPES = { flowCard: FlowCardNode };
+
+function MessageBlueprint({ nodeId, seqStep }: {
+  nodeId: string;
   seqStep: ReturnType<typeof lookupSeqStep>;
 }) {
   if (seqStep) {
@@ -1494,6 +1558,7 @@ function MessageBlueprint({ node, seqStep }: {
       <div className="mt-4 rounded-md border border-[var(--ink)]/10 bg-[var(--sand)]/50 p-4">
         <div className="tabular text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/40">
           Skabelon · {seqStep.seq.id} · trin {seqStep.index}
+          {seqStep.seq.match_first_dm_variant ? ` · arm ${seqStep.seq.match_first_dm_variant}` : ""}
         </div>
         {branches.length === 0 ? (
           <p className="mt-2 text-[13px] text-[var(--ink)]/45">Ingen besked på dette trin.</p>
@@ -1513,14 +1578,15 @@ function MessageBlueprint({ node, seqStep }: {
       </div>
     );
   }
-  if (node.id === "sent") {
+  if (nodeId === "sent" || nodeId.startsWith("arm:")) {
+    const arm = nodeId.startsWith("arm:") ? nodeId.slice(4) : null;
     return (
       <div className="mt-4 rounded-md border border-[var(--forest)]/25 bg-[var(--forest)]/5 p-4">
         <div className="tabular text-[10px] uppercase tracking-[0.22em] text-[var(--forest)]">
-          AI-personaliseret · 1. DM
+          {arm ? `A/B-arm · ${ARM_META[arm]?.label ?? arm}` : "AI-personaliseret · 1. DM"}
         </div>
         <p className="mt-2 text-[13px] text-[var(--ink)]/70">
-          Ingen fast skabelon — første besked skrives per kontakt (Becc-bucket hook).
+          Første besked skrives per kontakt{arm ? " i denne arm" : ""} — ingen fast skabelon.
           Klik en kontakt for at se den faktiske tekst.
         </p>
       </div>
@@ -1557,18 +1623,14 @@ function ContactMessages({ row, reply }: { row: PipelineRow; reply: Reply | null
   );
 }
 
-function FlowTab({ rows, sequences, replies }: {
+function FlowTab({ rows, sequences, replies, armStats }: {
   rows: PipelineRow[];
   sequences: SeqLite[];
   replies: Reply[];
+  armStats: ArmStat[];
 }) {
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
   const [openContact, setOpenContact] = useState<string | null>(null);
-
-  const nodes = useMemo<FlowNode[]>(
-    () => [...STATIC_NODES, ...buildSequenceNodes(sequences, rows)],
-    [sequences, rows],
-  );
 
   const { counts, byNode } = useMemo(() => {
     const counts = new Map<string, number>();
@@ -1576,9 +1638,8 @@ function FlowTab({ rows, sequences, replies }: {
     for (const r of rows) {
       const id = classifyNode(r);
       counts.set(id, (counts.get(id) ?? 0) + 1);
-      const list = byNode.get(id) ?? [];
-      list.push(r);
-      byNode.set(id, list);
+      const list = byNode.get(id);
+      if (list) list.push(r); else byNode.set(id, [r]);
     }
     return { counts, byNode };
   }, [rows]);
@@ -1586,83 +1647,159 @@ function FlowTab({ rows, sequences, replies }: {
   // replies arrive newest-first; keep the first seen per lead.
   const replyByLead = useMemo(() => {
     const m = new Map<string, Reply>();
-    for (const rep of replies) {
-      if (!m.has(rep.sendpilot_lead_id)) m.set(rep.sendpilot_lead_id, rep);
-    }
+    for (const rep of replies) if (!m.has(rep.sendpilot_lead_id)) m.set(rep.sendpilot_lead_id, rep);
     return m;
   }, [replies]);
 
-  const columns = useMemo(() => {
-    const byCol = new Map<number, FlowNode[]>();
-    for (const n of nodes) {
-      const list = byCol.get(n.col) ?? [];
-      list.push(n);
-      byCol.set(n.col, list);
-    }
-    return COLUMN_TITLES.map((title, col) => ({ title, col, nodes: byCol.get(col) ?? [] }));
-  }, [nodes]);
+  const armByVariant = useMemo(() => {
+    const m = new Map<string, ArmStat>();
+    for (const a of armStats) m.set(a.first_dm_variant, a);
+    return m;
+  }, [armStats]);
 
-  const total = rows.length;
-  const selected = selectedNode ? nodes.find((n) => n.id === selectedNode) ?? null : null;
+  const bestArm = useMemo(() => {
+    let best: string | null = null, bestPct = -1;
+    for (const a of armStats) {
+      const pct = a.reply_pct ?? -1;
+      if ((a.sent ?? 0) > 0 && pct > bestPct) { bestPct = pct; best = a.first_dm_variant; }
+    }
+    return best;
+  }, [armStats]);
+
+  const treeDefs = useMemo(() => buildTreeNodes(sequences, rows, armStats), [sequences, rows, armStats]);
+  const treeEdges = useMemo(() => buildTreeEdges(treeDefs, sequences), [treeDefs, sequences]);
+
+  const rfNodes = useMemo<RFNode[]>(() => {
+    const byCol = new Map<number, NodeDef[]>();
+    for (const n of treeDefs) {
+      const list = byCol.get(n.col);
+      if (list) list.push(n); else byCol.set(n.col, [n]);
+    }
+    const COL_W = 240, ROW_H = 100;
+    const maxRows = Math.max(...[...byCol.values()].map((l) => l.length), 1);
+    const out: RFNode[] = [];
+    for (const [col, list] of byCol) {
+      const offset = (maxRows - list.length) / 2;
+      list.forEach((n, i) => {
+        const arm = n.kind === "arm" && n.arm ? (armByVariant.get(n.arm) ?? null) : null;
+        out.push({
+          id: n.id,
+          type: "flowCard",
+          position: { x: col * COL_W, y: (offset + i) * ROW_H },
+          data: {
+            label: n.label,
+            count: counts.get(n.id) ?? 0,
+            tone: n.tone,
+            sublabel: n.sublabel,
+            isSelected: n.id === selectedNode,
+            armStat: arm,
+          },
+          draggable: false,
+        });
+      });
+    }
+    return out;
+  }, [treeDefs, counts, selectedNode, armByVariant]);
+
+  const rfEdges = useMemo<RFEdge[]>(() =>
+    treeEdges.map((e) => ({
+      id: e.id, source: e.source, target: e.target, type: "smoothstep",
+      style: { stroke: "var(--ink)", strokeOpacity: 0.2, strokeWidth: 1.5 },
+    })), [treeEdges]);
+
   const selectedRows = selectedNode ? (byNode.get(selectedNode) ?? []) : [];
   const seqStep = selectedNode ? lookupSeqStep(selectedNode, sequences) : null;
+  const selectedLabel = useMemo(() => {
+    if (!selectedNode) return "";
+    const def = treeDefs.find((n) => n.id === selectedNode);
+    if (def) return def.label;
+    return OUTCOME_DEFS.find((o) => o.id === selectedNode)?.label ?? selectedNode;
+  }, [selectedNode, treeDefs]);
+
+  const arms = activeArms(sequences, rows, armStats);
 
   return (
     <div>
-      <div className="overflow-x-auto pb-2">
-        <div className="flex min-w-max gap-2">
-          {columns.map((c) => (
-            <div key={c.col} className="flex items-stretch">
-              <div className="flex w-[176px] flex-col gap-2">
-                <div className="tabular text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/40">{c.title}</div>
-                {c.nodes.length === 0 ? (
-                  <div className="text-[11px] text-[var(--ink)]/25">—</div>
-                ) : c.nodes.map((n) => {
-                  const count = counts.get(n.id) ?? 0;
-                  const tone = FLOW_TONE_CLASS[n.tone];
-                  const isSel = n.id === selectedNode;
-                  return (
-                    <button key={n.id} type="button"
-                      onClick={() => { setSelectedNode(isSel ? null : n.id); setOpenContact(null); }}
-                      className={`text-left rounded-md border px-3 py-2 transition ${tone.card} ${isSel ? "ring-2 ring-[var(--ink)]/30" : ""} ${count === 0 ? "opacity-45" : ""}`}>
-                      <div className="flex items-baseline justify-between gap-2">
-                        <span className="text-[12px] leading-tight text-[var(--ink)]">{n.label}</span>
-                        <span className="font-display text-xl italic leading-none text-[var(--ink)]">{count}</span>
-                      </div>
-                      <div className="mt-1 h-1 rounded-sm bg-[var(--ink)]/10" aria-hidden>
-                        <div className="h-full rounded-sm" style={{
-                          width: `${total ? Math.max(count ? 6 : 0, Math.round((count / total) * 100)) : 0}%`,
-                          background: tone.bar,
-                        }} />
-                      </div>
-                      {n.sublabel ? (
-                        <div className="tabular mt-1 truncate text-[9px] uppercase tracking-[0.14em] text-[var(--ink)]/35">{n.sublabel}</div>
-                      ) : null}
-                    </button>
-                  );
-                })}
-              </div>
-              {c.col < COLUMN_TITLES.length - 1 ? (
-                <div className="flex items-center px-1 text-[var(--ink)]/25" aria-hidden>→</div>
-              ) : null}
-            </div>
-          ))}
+      {arms.length ? (
+        <div className="mb-5 rounded-lg border border-[var(--ink)]/12 bg-[var(--cream)] p-4">
+          <div className="tabular text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/40">A/B-test · første DM</div>
+          <div className="mt-3 grid gap-3 sm:grid-cols-3">
+            {arms.map((a) => {
+              const st = armByVariant.get(a);
+              const meta = ARM_META[a] ?? { label: a, sublabel: "" };
+              const lead = bestArm === a;
+              return (
+                <button key={a} type="button"
+                  onClick={() => { setSelectedNode(`arm:${a}`); setOpenContact(null); }}
+                  className={`rounded-md border p-3 text-left transition ${lead ? "border-[var(--forest)]/50 bg-[var(--forest)]/5" : "border-[var(--ink)]/12 bg-[var(--sand)]/40"}`}>
+                  <div className="flex items-baseline justify-between">
+                    <span className="text-[13px] text-[var(--ink)]">{meta.label}</span>
+                    {lead ? <span className="tabular text-[9px] uppercase tracking-[0.14em] text-[var(--forest)]">fører</span> : null}
+                  </div>
+                  <div className="mt-2 flex items-baseline gap-2">
+                    <span className="font-display text-2xl italic text-[var(--ink)]">{st?.reply_pct ?? 0}%</span>
+                    <span className="tabular text-[10px] uppercase tracking-[0.14em] text-[var(--ink)]/45">svarrate</span>
+                  </div>
+                  <div className="tabular mt-1 text-[10px] text-[var(--ink)]/45">{st?.assigned ?? 0} tildelt · {st?.sent ?? 0} sendt · {st?.replied ?? 0} svar</div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+
+      <div className="rounded-lg border border-[var(--ink)]/12 bg-[var(--sand)]/30" style={{ height: 520 }}>
+        <ReactFlow
+          nodes={rfNodes}
+          edges={rfEdges}
+          nodeTypes={FLOW_NODE_TYPES}
+          onNodeClick={(_, n) => { setSelectedNode(n.id === selectedNode ? null : n.id); setOpenContact(null); }}
+          fitView
+          fitViewOptions={{ padding: 0.15 }}
+          proOptions={{ hideAttribution: true }}
+          nodesDraggable={false}
+          nodesConnectable={false}
+          minZoom={0.3}
+        >
+          <Background color="var(--ink)" gap={20} size={1} style={{ opacity: 0.05 }} />
+          <Controls showInteractive={false} />
+        </ReactFlow>
+      </div>
+
+      <div className="mt-5">
+        <div className="tabular text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/40">Udfald · svar og terminal (uanset arm)</div>
+        <div className="mt-2 flex flex-wrap gap-2">
+          {OUTCOME_DEFS.map((o) => {
+            const count = counts.get(o.id) ?? 0;
+            const tone = FLOW_TONE_CLASS[o.tone];
+            const isSel = o.id === selectedNode;
+            return (
+              <button key={o.id} type="button"
+                onClick={() => { setSelectedNode(isSel ? null : o.id); setOpenContact(null); }}
+                className={`rounded-md border px-3 py-2 text-left ${tone.card} ${isSel ? "ring-2 ring-[var(--ink)]/40" : ""} ${count === 0 ? "opacity-50" : ""}`}
+                style={{ minWidth: 124 }}>
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="text-[12px] text-[var(--ink)]">{o.label}</span>
+                  <span className="font-display text-lg italic text-[var(--ink)]">{count}</span>
+                </div>
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      {selected ? (
+      {selectedNode ? (
         <div className="mt-6 rounded-lg border border-[var(--ink)]/12 bg-[var(--cream)] p-5">
           <div className="flex items-baseline justify-between gap-4">
-            <h3 className="font-display text-2xl italic text-[var(--ink)]">{selected.label}</h3>
-            <span className="tabular text-[11px] uppercase tracking-[0.22em] text-[var(--ink)]/45">{selectedRows.length} kontakter</span>
+            <h3 className="font-display text-2xl italic text-[var(--ink)]">{selectedLabel}</h3>
+            <span className="tabular text-[11px] uppercase tracking-[0.22em] text-[var(--ink)]/45">{selectedRows.length} kontakter her</span>
           </div>
-          {selected.sublabel ? <p className="mt-0.5 text-[12px] text-[var(--ink)]/50">{selected.sublabel}</p> : null}
 
-          <MessageBlueprint node={selected} seqStep={seqStep} />
+          <MessageBlueprint nodeId={selectedNode} seqStep={seqStep} />
 
           <div className="mt-5 divide-y divide-[var(--ink)]/8 border-t border-[var(--ink)]/8">
             {selectedRows.length === 0 ? (
-              <p className="py-4 text-[13px] text-[var(--ink)]/45">Ingen kontakter her lige nu.</p>
+              <p className="py-4 text-[13px] text-[var(--ink)]/45">Ingen kontakter sidder her lige nu.</p>
             ) : selectedRows.slice(0, 200).map((r) => {
               const open = openContact === r.sendpilot_lead_id;
               const name = `${r.lead?.first_name ?? ""} ${r.lead?.last_name ?? ""}`.trim() || r.contact_email || r.sendpilot_lead_id;
@@ -1687,11 +1824,12 @@ function FlowTab({ rows, sequences, replies }: {
           </div>
         </div>
       ) : (
-        <p className="mt-6 text-[13px] text-[var(--ink)]/45">Klik en node for at se beskedteksten og kontakterne der.</p>
+        <p className="mt-6 text-[13px] text-[var(--ink)]/45">Klik en node eller et udfald for at se beskedteksten og kontakterne.</p>
       )}
     </div>
   );
 }
+
 
 function Funnel({ stats }: { stats: FunnelStats }) {
   const stages = [

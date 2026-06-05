@@ -1,15 +1,34 @@
-# Outreach Flow Map — v1 (read-only)
+# Outreach Flow Map — read-only automation tree
 
-An ActiveCampaign-style automation map inside `/outreach`: a visual decision
+An ActiveCampaign-style automation map inside `/outreach`: a branching decision
 tree of the outbound flow with a live count of how many contacts sit at each
-node right now. Read-only to start — no editing the flow, no moving contacts.
+node right now, plus an A/B-test scoreboard for the first-DM arms. Read-only —
+no editing the flow, no moving contacts.
+
+## v2 update (current) — branching tree + A/B scoreboard
+
+Feedback after v1: the column+arrow layout read as a linear pipeline, and the
+Tresyv 3-arm A/B test was invisible. v2 reworks it:
+
+- **Render:** React Flow (`@xyflow/react`) — a real branching tree with drawn
+  edges, fit-to-view, pan/zoom. Custom `flowCard` node themed to the house
+  style. Replaces the v1 custom-SVG columns.
+- **A/B arms:** the first DM forks into the arms (`v1_long` / `v2_short` /
+  `v3_video`, from `outreach_pipeline.first_dm_variant`). Each arm routes to its
+  matched follow-up sequence via `outreach_sequences.match_first_dm_variant`.
+  A scoreboard above the tree shows per-arm assigned / sent / replied /
+  reply-rate (from the `vw_first_dm_ab` view), with the leading arm flagged.
+- **Outcomes strip:** replies (by intent) and terminal states are cross-cutting
+  outcomes — a lead can reply or fail from any branch — so they render as a
+  strip below the tree, not as tree nodes. Keeps the tree clean.
 
 ## Decisions (locked)
 
 - **Scope:** visual flow/decision-tree map with live per-node counts, plus
-  click-a-node to list the contacts in it. No flow editing in v1.
-- **Render:** custom Tailwind/SVG columns, no new dependency. Matches the
-  existing sand/cream/forest + Fraunces/Manrope house style.
+  click-a-node to list the contacts in it. No flow editing.
+- **Render:** React Flow (`@xyflow/react`), themed to the existing
+  sand/cream/forest + Fraunces/Manrope house style. (v1 was custom SVG; the
+  genuine-tree + A/B-branch requirement justified the dependency.)
 - **Counts:** client-side JS bucketing. Pull a lean projection of
   `outreach_pipeline` rows (same pattern `page.tsx` already uses), classify
   each row into one node in TS. No new table, no migration, no RPC.
