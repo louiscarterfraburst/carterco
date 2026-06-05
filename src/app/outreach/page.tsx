@@ -1308,6 +1308,20 @@ export default function OutreachPage() {
     );
   }
 
+  const navCounts: NavCounts = {
+    i_dag: actionQueue.length,
+    opgaver: opgaver.length,
+    signaler: unhandledSignals.length,
+    inbox: stats.pending + accepted.length + altReview.length,
+    replies: unhandledReplies.length,
+    sent: stats.sent,
+    all: stats.total,
+    icp_rejected: icpRejected.length,
+    icp_open_proposals: icpProposals.filter((p) => p.status === "open").length,
+    flow: stats.total,
+    kontakter: stats.total,
+  };
+
   return (
     <main className="safe-screen safe-pad-bottom relative min-h-screen overflow-x-hidden bg-[var(--sand)] text-[var(--ink)]">
       <div className="grain-overlay" />
@@ -1341,21 +1355,11 @@ export default function OutreachPage() {
       {err ? <Banner kind="error">{err}</Banner> : null}
       {bulkProgress ? <Banner kind="info">Behandler {bulkProgress.done}/{bulkProgress.total}…</Banner> : null}
 
-      <Tabs tab={tab} setTab={setTab} showIcpTabs={hasActiveIcp} counts={{
-        i_dag: actionQueue.length,
-        opgaver: opgaver.length,
-        signaler: unhandledSignals.length,
-        inbox: stats.pending + accepted.length + altReview.length,
-        replies: unhandledReplies.length,
-        sent: stats.sent,
-        all: stats.total,
-        icp_rejected: icpRejected.length,
-        icp_open_proposals: icpProposals.filter((p) => p.status === "open").length,
-        flow: stats.total,
-        kontakter: stats.total,
-      }} />
-
-      <section className="mx-auto w-full max-w-[1400px] px-4 pb-12 sm:px-8 lg:px-12">
+      <div className="mx-auto mt-2 w-full max-w-[1400px] px-4 pb-12 sm:px-8 lg:flex lg:items-start lg:gap-8 lg:px-12">
+        <SideNav tab={tab} setTab={setTab} showIcpTabs={hasActiveIcp} counts={navCounts} />
+        <div className="min-w-0 lg:flex-1">
+          <Tabs tab={tab} setTab={setTab} showIcpTabs={hasActiveIcp} counts={navCounts} />
+          <section>
         {tab === "i_dag" ? (
           <IDagTab
             queue={actionQueue}
@@ -1446,7 +1450,9 @@ export default function OutreachPage() {
         ) : (
           <AllTab rows={allRecent} />
         )}
-      </section>
+          </section>
+        </div>
+      </div>
     </main>
   );
 }
@@ -2241,18 +2247,18 @@ function Sparkline({ data }: { data: { day: string; count: number }[] }) {
   );
 }
 
-function Tabs({ tab, setTab, showIcpTabs, counts }: {
-  tab: Tab; setTab: (t: Tab) => void;
-  showIcpTabs: boolean;
-  counts: {
-    i_dag: number; opgaver: number; signaler: number; inbox: number; replies: number; sent: number; all: number;
-    icp_rejected: number; icp_open_proposals: number; flow: number; kontakter: number;
-  };
-}) {
-  // Grouped IA: 10 flat tabs read as 3 labeled clusters so the cockpit stops
-  // feeling frankenstein. Gør nu = act now, Kontakter = the contact spine,
-  // Indsigt = the map + learning.
-  const all: { id: Tab; label: string; count: number; accent?: boolean; icpOnly?: boolean; group: string }[] = [
+// Grouped IA shared by the desktop sidebar (SideNav) and the mobile bar (Tabs)
+// so they can't drift. Gør nu = act now, Kontakter = the contact spine, Indsigt
+// = the map + learning.
+type NavCounts = {
+  i_dag: number; opgaver: number; signaler: number; inbox: number; replies: number; sent: number; all: number;
+  icp_rejected: number; icp_open_proposals: number; flow: number; kontakter: number;
+};
+type NavItem = { id: Tab; label: string; count: number; accent?: boolean; icpOnly?: boolean; group: string };
+const NAV_GROUP_ORDER = ["Gør nu", "Kontakter", "Indsigt"];
+
+function buildNavItems(counts: NavCounts, showIcpTabs: boolean): NavItem[] {
+  const all: NavItem[] = [
     { id: "i_dag", label: "I dag", count: counts.i_dag, accent: counts.i_dag > 0, group: "Gør nu" },
     { id: "opgaver", label: "Opgaver", count: counts.opgaver, accent: counts.opgaver > 0, group: "Gør nu" },
     { id: "signaler", label: "Signaler", count: counts.signaler, accent: counts.signaler > 0, group: "Gør nu" },
@@ -2265,12 +2271,50 @@ function Tabs({ tab, setTab, showIcpTabs, counts }: {
     { id: "flow", label: "Flow", count: counts.flow, group: "Indsigt" },
     { id: "icp", label: "Læring", count: counts.icp_open_proposals, accent: counts.icp_open_proposals > 0, icpOnly: true, group: "Indsigt" },
   ];
-  const items = all.filter((it) => !it.icpOnly || showIcpTabs);
-  const groupOrder = ["Gør nu", "Kontakter", "Indsigt"];
+  return all.filter((it) => !it.icpOnly || showIcpTabs);
+}
+
+// Desktop: vertical sidebar (Lemlist/Instantly pattern). Hidden on mobile,
+// where Tabs renders the horizontal grouped bar instead.
+function SideNav({ tab, setTab, showIcpTabs, counts }: {
+  tab: Tab; setTab: (t: Tab) => void; showIcpTabs: boolean; counts: NavCounts;
+}) {
+  const items = buildNavItems(counts, showIcpTabs);
   return (
-    <nav className="mx-auto mt-2 mb-4 w-full max-w-[1400px] px-4 sm:px-8 lg:px-12">
+    <nav className="hidden lg:block lg:w-48 lg:shrink-0 lg:sticky lg:top-24 lg:self-start">
+      {NAV_GROUP_ORDER.map((g) => {
+        const groupItems = items.filter((it) => it.group === g);
+        if (!groupItems.length) return null;
+        return (
+          <div key={g} className="mb-4">
+            <div className="tabular mb-1 px-2 text-[9px] uppercase tracking-[0.2em] text-[var(--ink)]/30">{g}</div>
+            {groupItems.map((it) => {
+              const active = it.id === tab;
+              return (
+                <button key={it.id} type="button" onClick={() => setTab(it.id)}
+                  className={`tabular flex w-full items-baseline justify-between gap-2 rounded-md px-2 py-1.5 text-[12px] uppercase tracking-[0.14em] transition ${
+                    active ? "bg-[var(--sand)]/60 text-[var(--ink)] font-semibold" : "text-[var(--ink)]/50 hover:bg-[var(--sand)]/30 hover:text-[var(--ink)]/80"
+                  }`}>
+                  <span className="truncate">{it.label}</span>
+                  <span className={`tabular text-[10px] ${it.accent ? "text-[var(--clay)]" : "text-[var(--ink)]/40"}`}>{it.count}</span>
+                </button>
+              );
+            })}
+          </div>
+        );
+      })}
+    </nav>
+  );
+}
+
+function Tabs({ tab, setTab, showIcpTabs, counts }: {
+  tab: Tab; setTab: (t: Tab) => void; showIcpTabs: boolean; counts: NavCounts;
+}) {
+  const items = buildNavItems(counts, showIcpTabs);
+  return (
+    <nav className="mb-4 lg:hidden">
       <div className="flex items-stretch overflow-x-auto border-b border-[var(--ink)]/10">
-        {groupOrder.map((g, gi) => {
+        {NAV_GROUP_ORDER.map((g, gi) => {
           const groupItems = items.filter((it) => it.group === g);
           if (!groupItems.length) return null;
           return (
