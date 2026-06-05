@@ -1,5 +1,10 @@
--- Retry scheduler: fires pushes when next_action_at is due.
+-- Due-action scheduler: fires pushes when next_action_at is due.
 -- Depends on pg_cron + pg_net (both installed).
+--
+-- Live dispatcher is public.process_due_lead_actions(), run every minute by the
+-- 'process-due-lead-actions' cron. (Historical note: an earlier
+-- public.dispatch_due_retries() + 'leads-dispatch-retries' job was superseded
+-- and dropped 2026-06-05; the function below is the source of truth.)
 
 -- Clamp a timestamptz into Mon-Fri 09:00-17:00 Europe/Copenhagen. Input is
 -- pushed forward to the earliest valid business-hours moment >= ts.
@@ -46,8 +51,8 @@ begin
 end;
 $$;
 
--- Given how many retries have already fired, return when the next one should
--- fire. Returns null when the cadence is exhausted.
+-- Hard retry cadence for unanswered dials. Given how many retries have already
+-- fired, return when the next one should fire. Null when exhausted (after 4).
 create or replace function public.next_retry_due(fired int, from_ts timestamptz)
 returns timestamptz
 language sql
@@ -62,8 +67,8 @@ as $$
   end;
 $$;
 
--- Softer cadence for leads already marked "interested" but not booked.
--- Two nudges, then we stop bothering the operator.
+-- Softer cadence for leads already marked "interested"/"follow_up" but not
+-- booked. Two nudges, then we stop bothering the operator.
 create or replace function public.next_interested_nudge(fired int, from_ts timestamptz)
 returns timestamptz
 language sql
@@ -76,76 +81,99 @@ as $$
   end;
 $$;
 
--- Dispatcher: find due leads, fire push, advance cadence.
-create or replace function public.dispatch_due_retries()
-returns int
+-- Dispatcher: find due leads, fire push, advance the cadence.
+--   * retry rows fire regardless of outcome. The app schedules
+--     next_action_type='retry' both for unanswered dials (outcome null) and for
+--     interested/follow_up nudges (outcome kept) — all must fire.
+--   * push title is outcome-aware: interested/follow_up send action_type
+--     'follow_up' ("Follow-up: X"); unanswered dials send 'retry' ("Prøv igen").
+--   * cadence comes from the business-hours-clamped helpers: hard retries
+--     2h/24h/3d/7d (max 4), soft nudges 2d/7d (max 2). Ladder end clears the
+--     action so the lead settles in its outcome state.
+--   * callback rows fire once, then reopen the lead and clear action state.
+create or replace function public.process_due_lead_actions()
+returns void
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, net
 as $$
 declare
-  fn_url text := 'https://znpaevzwlcfuzqxsbyie.supabase.co/functions/v1/notify-new-lead';
-  due record;
+  r record;
+  notify_url text := 'https://znpaevzwlcfuzqxsbyie.functions.supabase.co/notify-new-lead';
+  is_nudge boolean;
+  push_action text;
   next_ts timestamptz;
-  fired int := 0;
 begin
-  for due in
+  for r in
     select *
     from public.leads
-    where is_draft = false
-      and next_action_at is not null
+    where next_action_at is not null
       and next_action_at <= now()
-      and next_action_type in ('retry', 'callback')
-      and (last_action_fired_at is null or last_action_fired_at < next_action_at)
-    order by next_action_at asc
+      and not is_draft
+      and (
+        next_action_type = 'retry'
+        or (next_action_type = 'callback' and outcome = 'callback')
+      )
+    order by next_action_at
     limit 50
   loop
-    -- Interested-lead nudges use a distinct push title via action_type=follow_up.
-    perform net.http_post(
-      url := fn_url,
-      headers := jsonb_build_object('Content-Type', 'application/json'),
-      body := jsonb_build_object(
-        'record', to_jsonb(due),
-        'action_type',
-        case
-          when due.next_action_type = 'retry' and due.outcome = 'interested'
-            then 'follow_up'
-          else due.next_action_type
-        end
-      )
-    );
+    if r.next_action_type = 'retry' then
+      is_nudge := r.outcome in ('interested', 'follow_up');
+      push_action := case when is_nudge then 'follow_up' else 'retry' end;
 
-    if due.next_action_type = 'retry' then
-      -- Notify once, but keep the action due until the operator handles it.
-      -- The operator click ("Intet svar", outcome, callback) is what schedules
-      -- the next cadence step. Moving next_action_at here hides overdue work.
+      perform net.http_post(
+        url := notify_url,
+        headers := jsonb_build_object('Content-Type', 'application/json'),
+        body := jsonb_build_object('record', to_jsonb(r), 'action_type', push_action)
+      );
+
+      next_ts := case
+        when is_nudge then public.next_interested_nudge(r.retry_count + 1, now())
+        else public.next_retry_due(r.retry_count + 1, now())
+      end;
+
+      if next_ts is null then
+        update public.leads
+        set retry_count = r.retry_count + 1,
+            next_action_at = null,
+            next_action_type = null,
+            last_action_fired_at = now()
+        where id = r.id;
+      else
+        update public.leads
+        set retry_count = r.retry_count + 1,
+            next_action_at = next_ts,
+            last_action_fired_at = now()
+        where id = r.id;
+      end if;
+
+    elsif r.next_action_type = 'callback' then
+      perform net.http_post(
+        url := notify_url,
+        headers := jsonb_build_object('Content-Type', 'application/json'),
+        body := jsonb_build_object('record', to_jsonb(r), 'action_type', 'callback')
+      );
+      -- Callback fired: reopen the lead and clear action state.
       update public.leads
-      set retry_count = least(due.retry_count + 1, 4),
+      set outcome = null,
+          outcome_at = null,
+          next_action_at = null,
+          next_action_type = null,
+          callback_at = null,
           last_action_fired_at = now()
-      where id = due.id;
-    else
-      -- Callback reminders behave the same: notify once, leave the callback due
-      -- and visible until the operator handles it.
-      update public.leads
-      set last_action_fired_at = now()
-      where id = due.id;
+      where id = r.id;
     end if;
-
-    fired := fired + 1;
   end loop;
-
-  return fired;
 end;
 $$;
 
-revoke all on function public.dispatch_due_retries() from public, anon, authenticated;
+revoke all on function public.process_due_lead_actions() from public, anon, authenticated;
 
--- Register cron job. Unschedule first so re-runs of this file are idempotent.
--- Hotfix 2026-05-21: leave the cron unscheduled until the due queue has been
--- reworked. The app must never hide overdue rows by advancing/clearing them
--- without an operator action.
-do $$
-begin
-  perform cron.unschedule('leads-dispatch-retries');
-exception when others then null;
-end$$;
+-- Register cron job (every minute). Unschedule first so re-runs are idempotent.
+select cron.unschedule('process-due-lead-actions')
+  where exists (select 1 from cron.job where jobname = 'process-due-lead-actions');
+select cron.schedule(
+  'process-due-lead-actions',
+  '* * * * *',
+  $$ select public.process_due_lead_actions(); $$
+);
