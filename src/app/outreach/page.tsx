@@ -2276,9 +2276,10 @@ const NAV_GROUP_ORDER = ["Gør nu", "Kontakter", "Indsigt"];
 
 function buildNavItems(counts: NavCounts, showIcpTabs: boolean): NavItem[] {
   const all: NavItem[] = [
+    // Gør nu: I dag is the unified queue; Indbakke (approvals) + Svar (replies)
+    // are the rich workflows Louis works in. Opgaver/Signaler were redundant
+    // (their items already surface in I dag) — dropped from the nav.
     { id: "i_dag", label: "I dag", count: counts.i_dag, accent: counts.i_dag > 0, group: "Gør nu" },
-    { id: "opgaver", label: "Opgaver", count: counts.opgaver, accent: counts.opgaver > 0, group: "Gør nu" },
-    { id: "signaler", label: "Signaler", count: counts.signaler, accent: counts.signaler > 0, group: "Gør nu" },
     { id: "inbox", label: "Indbakke", count: counts.inbox, accent: counts.inbox > 0, group: "Gør nu" },
     { id: "replies", label: "Svar", count: counts.replies, accent: counts.replies > 0, group: "Gør nu" },
     { id: "kontakter", label: "Kontakter", count: counts.kontakter, group: "Kontakter" },
