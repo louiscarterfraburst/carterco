@@ -60,11 +60,12 @@ export const ARM_ORDER = ["v1_long", "v2_short", "v3_video"];
 export type NodeDef = {
   id: string;
   label: string;
-  col: number;
+  col: number;        // vertical depth (top→bottom)
   tone: FlowTone;
   kind: FlowKind;
   sublabel?: string;
   arm?: string;
+  lane?: number;      // horizontal lane (arm mode): keeps each arm's chain vertical
 };
 
 export type EdgeDef = { id: string; source: string; target: string };
@@ -83,7 +84,11 @@ export function classifyNode(r: FlowRow): string {
     return KNOWN_REPLY_INTENTS.has(intent) ? `reply:${intent}` : "reply:other";
   }
   if (r.sequence_id && r.sequence_step != null) return `seq:${r.sequence_id}:${r.sequence_step}`;
-  if (r.status === "sent") return r.first_dm_variant ? `arm:${r.first_dm_variant}` : "sent";
+  // An assigned A/B arm (immutable at accept) owns the lead through its whole
+  // pre-follow-up life — sent AND pre-send (V3 mid-render etc.) — so arm leads
+  // don't scatter across render/approve status nodes.
+  if (r.first_dm_variant) return `arm:${r.first_dm_variant}`;
+  if (r.status === "sent") return "sent";
   if (r.status === "pending_approval") return "pending_approval";
   if (r.status === "pending_alt_review") return "pending_alt_review";
   if (r.status === "rendered") return "rendered";
@@ -122,9 +127,51 @@ export function activeArms(sequences: SeqLite[], rows: FlowRow[], armStats: ArmS
   return [...ordered, ...extra];
 }
 
-// Tree nodes (cols 0-4). Outcomes are NOT here — they live in OUTCOME_DEFS.
+// Tree nodes. Outcomes are NOT here — they live in OUTCOME_DEFS.
 export function buildTreeNodes(sequences: SeqLite[], rows: FlowRow[], armStats: ArmStat[]): NodeDef[] {
-  // Levels run top→bottom: invite → accept → path → render/approve → send → seq.
+  const arms = activeArms(sequences, rows, armStats);
+
+  // ARM MODE (Tresyv-style A/B): invited → each arm → that arm's matched
+  // follow-up steps, chained straight down its own lane. No render spine, no
+  // stray "Sendt" — arms fork at the top, every arm shows its own follow-ups.
+  if (arms.length) {
+    const armNodes: NodeDef[] = [
+      { id: "invited", label: "Inviteret", col: 0, tone: "neutral", kind: "status", lane: (arms.length - 1) / 2 },
+    ];
+    arms.forEach((a, i) => {
+      const meta = ARM_META[a] ?? { label: a, sublabel: "" };
+      armNodes.push({ id: `arm:${a}`, label: meta.label, col: 1, tone: "active", kind: "arm", sublabel: meta.sublabel, arm: a, lane: i });
+    });
+    // sequences grouped by arm; multiple sequences in one arm get sub-lanes.
+    const seqsByArm = new Map<string, SeqLite[]>();
+    for (const seq of sequences) {
+      const v = seq.match_first_dm_variant;
+      if (v && arms.includes(v) && seq.steps?.length) {
+        const list = seqsByArm.get(v); if (list) list.push(seq); else seqsByArm.set(v, [seq]);
+      }
+    }
+    arms.forEach((a, armIdx) => {
+      const seqs = seqsByArm.get(a) ?? [];
+      seqs.forEach((seq, sj) => {
+        const sub = seqs.length > 1 ? (sj - (seqs.length - 1) / 2) * 0.5 : 0;
+        seq.steps.forEach((step, idx) => {
+          armNodes.push({
+            id: `seq:${seq.id}:${idx}`,
+            label: step.id || `trin ${idx}`,
+            col: 2 + idx,
+            tone: "active",
+            kind: "sequence",
+            sublabel: seq.id,
+            arm: a,
+            lane: armIdx + sub,
+          });
+        });
+      });
+    });
+    return armNodes;
+  }
+
+  // NON-ARM MODE (CarterCo / OdaGroup): invite → accept → path → render → send.
   const nodes: NodeDef[] = [
     { id: "invited", label: "Inviteret", col: 0, tone: "neutral", kind: "status" },
     { id: "accepted", label: "Accepteret", col: 1, tone: "neutral", kind: "status" },
@@ -137,20 +184,16 @@ export function buildTreeNodes(sequences: SeqLite[], rows: FlowRow[], armStats: 
     { id: "pending_approval", label: "Til godkendelse", col: 3, tone: "active", kind: "status" },
   ];
 
-  const arms = activeArms(sequences, rows, armStats);
-  // "Sendt" (no arm) always present for non-arm leads (e.g. CarterCo).
+  // "Sendt" — the AI-personalised first DM (this branch only runs when there
+  // are no A/B arms).
   nodes.push({
     id: "sent",
     label: "Sendt",
     col: 4,
     tone: "active",
     kind: "status",
-    sublabel: arms.length ? "uden arm" : "AI-personaliseret 1. DM",
+    sublabel: "AI-personaliseret 1. DM",
   });
-  for (const a of arms) {
-    const meta = ARM_META[a] ?? { label: a, sublabel: "" };
-    nodes.push({ id: `arm:${a}`, label: meta.label, col: 4, tone: "active", kind: "arm", sublabel: meta.sublabel, arm: a });
-  }
 
   // Sequence nodes (col 5), grouped under their arm via match_first_dm_variant.
   const seen = new Set<string>();
@@ -190,7 +233,21 @@ export function buildTreeEdges(nodes: NodeDef[], sequences: SeqLite[]): EdgeDef[
       edges.push({ id: `${source}=>${target}`, source, target });
     }
   };
-  // invited → accepted → the per-client paths fork FROM acceptance, not invite.
+
+  // ARM MODE: invited → each arm → that arm's follow-up step chain.
+  const armIds = nodes.filter((n) => n.kind === "arm").map((n) => n.id);
+  if (armIds.length) {
+    for (const armId of armIds) add("invited", armId);
+    for (const seq of sequences) {
+      const v = seq.match_first_dm_variant;
+      if (!v || !seq.steps?.length || !have.has(`arm:${v}`)) continue;
+      add(`arm:${v}`, `seq:${seq.id}:0`);
+      for (let i = 0; i < seq.steps.length - 1; i++) add(`seq:${seq.id}:${i}`, `seq:${seq.id}:${i + 1}`);
+    }
+    return edges;
+  }
+
+  // NON-ARM MODE: invited → accepted → the per-client paths fork FROM acceptance.
   add("invited", "accepted");
   add("accepted", "pending_pre_render");
   add("accepted", "pending_ai_draft");

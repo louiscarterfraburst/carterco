@@ -1748,7 +1748,9 @@ function FlowTab({ rows, sequences, replies, armStats }: {
   const visibleIds = useMemo(() => {
     const s = new Set<string>();
     for (const n of treeDefs) {
-      if (FLOW_SPINE.has(n.id) || n.kind === "arm" || (counts.get(n.id) ?? 0) > 0) s.add(n.id);
+      // Always show the spine, arms, and the sequence skeleton (so every arm
+      // shows its follow-ups even at 0 leads); plus anything holding contacts.
+      if (FLOW_SPINE.has(n.id) || n.kind === "arm" || n.kind === "sequence" || (counts.get(n.id) ?? 0) > 0) s.add(n.id);
     }
     return s;
   }, [treeDefs, counts]);
@@ -1768,8 +1770,11 @@ function FlowTab({ rows, sequences, replies, armStats }: {
     for (const [col, list] of byCol) {
       list.forEach((n, i) => {
         const arm = n.kind === "arm" && n.arm ? (armByVariant.get(n.arm) ?? null) : null;
-        // center this level's row of siblings around x=0
-        const x = (i - (list.length - 1) / 2) * NODE_W + (widest * NODE_W) / 2;
+        // Arm mode: x is fixed by lane so each arm's chain stays vertical.
+        // Otherwise center this level's row of siblings.
+        const x = n.lane != null
+          ? n.lane * NODE_W + (widest * NODE_W) / 2
+          : (i - (list.length - 1) / 2) * NODE_W + (widest * NODE_W) / 2;
         out.push({
           id: n.id,
           type: "flowCard",
