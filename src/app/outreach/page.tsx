@@ -1190,10 +1190,27 @@ export default function OutreachPage() {
   const sparkline = useMemo(() => buildSparkline(rows, 30), [rows]);
   // Only inbound replies count as "unhandled" — outbound messages are by
   // definition already our own action.
-  const unhandledReplies = useMemo(
-    () => replies.filter((r) => r.direction === "inbound" && !r.handled),
-    [replies],
-  );
+  // Auto-inferred "needs my response" — no manual marking. A contact's inbound
+  // reply surfaces only while it's their NEWEST message (you haven't replied
+  // after it), its intent warrants a reply (decline/OOO skipped), and it hasn't
+  // been manually dismissed. An outbound reply (cockpit, or synced from
+  // LinkedIn via sync-sendpilot-messages) auto-resolves it.
+  const unhandledReplies = useMemo(() => {
+    const latestAt = new Map<string, number>();
+    for (const r of replies) {
+      const t = new Date(r.received_at).getTime();
+      const cur = latestAt.get(r.sendpilot_lead_id);
+      if (cur === undefined || t > cur) latestAt.set(r.sendpilot_lead_id, t);
+    }
+    return replies.filter(
+      (r) =>
+        r.direction === "inbound" &&
+        !r.handled &&
+        r.intent !== "decline" &&
+        r.intent !== "ooo" &&
+        latestAt.get(r.sendpilot_lead_id) === new Date(r.received_at).getTime(),
+    );
+  }, [replies]);
 
   const unhandledSignals = useMemo(
     () => signals.filter((s) => !s.handled),
@@ -3059,7 +3076,7 @@ function OpgaverTab({ tasks, onMarkHandled }: {
                   </a>
                   <button type="button" onClick={() => onMarkHandled(t.id)}
                     className="focus-cream tabular rounded-sm border border-[var(--ink)]/15 px-3 py-1.5 text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/65 hover:border-[var(--ink)]/35 hover:text-[var(--ink)]">
-                    Markér behandlet
+                    Skjul
                   </button>
                 </div>
               </div>
@@ -3529,7 +3546,7 @@ function SignalerTab({ signals, busyLead, identity, leadMatches, altContacts, on
                   <span className="flex-1" />
                   <button type="button" onClick={() => onMarkHandled(g.visits.map((v) => v.id))}
                     className="focus-cream tabular rounded-sm border border-[var(--ink)]/12 px-2.5 py-1 text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/50 hover:border-[var(--ink)]/25 hover:text-[var(--ink)]/80">
-                    Markér behandlet
+                    Skjul
                   </button>
                 </div>
               </div>
@@ -3676,7 +3693,7 @@ function RepliesTab({ replies, referralsByLead, busyLead, onMarkHandled, onInvit
                         {showHandleButton ? (
                           <button type="button" onClick={() => onMarkHandled(r.id)}
                             className="focus-cream tabular rounded-sm border border-[var(--ink)]/15 px-2.5 py-1 text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/65 hover:border-[var(--ink)]/35 hover:text-[var(--ink)]">
-                            Markér behandlet
+                            Skjul
                           </button>
                         ) : null}
                       </div>
