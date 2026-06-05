@@ -1198,6 +1198,12 @@ export default function LeadsPage() {
             >
               Møder →
             </Link>
+            <Link
+              href="/leads/overview"
+              className="focus-cream tabular hidden rounded-sm border border-[var(--ink)]/15 px-3 py-1.5 text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/65 transition hover:border-[var(--ink)]/35 hover:text-[var(--ink)] sm:inline-flex"
+            >
+              Oversigt →
+            </Link>
             <IconButton
               title={`Push: ${notifications}`}
               onClick={() => void enableNotifications()}
