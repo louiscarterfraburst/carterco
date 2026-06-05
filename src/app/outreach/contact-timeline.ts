@@ -68,6 +68,12 @@ export function buildThread(
 ): ThreadItem[] {
   const items: ThreadItem[] = [];
 
+  // The first DM lands in BOTH outreach_pipeline.rendered_message AND the
+  // engine's first auto_send in outreach_engagement_actions, so dedupe outbound
+  // messages by text to avoid showing the same message twice.
+  const seenOut = new Set<string>();
+  const normOut = (t: string | null) => (t ?? "").replace(/\s+/g, " ").trim().toLowerCase();
+
   if (contact.sent_at && contact.rendered_message) {
     const arm = contact.first_dm_variant ? ` · ${contact.first_dm_variant}` : "";
     const bucket = contact.hook_bucket ? ` · bucket ${contact.hook_bucket}` : "";
@@ -78,21 +84,29 @@ export function buildThread(
       label: `1. DM${arm}${bucket}`,
       text: contact.rendered_message,
     });
+    seenOut.add(normOut(contact.rendered_message));
   }
 
   for (const a of actions) {
     if (a.action_type !== "auto_send") continue;
+    const text = pickText(a.result);
+    const key = normOut(text);
+    if (key && seenOut.has(key)) continue; // already shown (e.g. as the 1. DM)
+    if (key) seenOut.add(key);
     items.push({
       at: a.fired_at,
       direction: "out",
       channel: "DM",
       label: `Opfølgning · ${a.rule_id}`,
-      text: pickText(a.result),
+      text,
     });
   }
 
   for (const e of emails) {
     if (!e.sent_at) continue;
+    const key = normOut(e.body);
+    if (key && seenOut.has(key)) continue;
+    if (key) seenOut.add(key);
     items.push({ at: e.sent_at, direction: "out", channel: "Email", label: "Email", subject: e.subject, text: e.body });
   }
 
