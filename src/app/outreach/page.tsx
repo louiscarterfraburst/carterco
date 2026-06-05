@@ -39,6 +39,15 @@ import {
   type NodeDef,
   type SeqLite,
 } from "./flow";
+import {
+  buildThread,
+  projectUpcoming,
+  isPossiblyForgotten,
+  type TimelineContact,
+} from "./contact-timeline";
+
+type EmailRow = { pipeline_lead_id: string; subject: string; body: string; sent_at: string | null };
+type ActionRow = { sendpilot_lead_id: string; rule_id: string; action_type: string; fired_at: string; result: unknown };
 
 const VAPID_PUBLIC_KEY =
   process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ??
@@ -254,7 +263,7 @@ type Signal = {
   alt_search_status: "pending" | "completed" | "empty" | "failed" | null;
 };
 
-type Tab = "i_dag" | "opgaver" | "signaler" | "inbox" | "replies" | "sent" | "all" | "icp_rejected" | "icp" | "flow";
+type Tab = "i_dag" | "opgaver" | "signaler" | "inbox" | "replies" | "sent" | "all" | "icp_rejected" | "icp" | "flow" | "kontakter";
 
 // Returned by outreach-ai draft_email — what the EmailActionBar uses to open mailto.
 type EmailDraft = {
@@ -445,6 +454,8 @@ export default function OutreachPage() {
   const [tab, setTab] = useState<Tab>("i_dag");
   const [sequences, setSequences] = useState<SeqLite[]>([]);
   const [armStats, setArmStats] = useState<ArmStat[]>([]);
+  const [sentEmails, setSentEmails] = useState<EmailRow[]>([]);
+  const [engagementActions, setEngagementActions] = useState<ActionRow[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [filterCompany, setFilterCompany] = useState("");
   const [filterRole, setFilterRole] = useState("");
@@ -667,6 +678,26 @@ export default function OutreachPage() {
       .select("first_dm_variant, assigned, sent, replied, reply_pct")
       .eq("workspace_id", activeWorkspaceId);
     setArmStats((abRows ?? []) as ArmStat[]);
+
+    // Sent emails + follow-up DM fires — the outbound half of each contact's
+    // thread (inbound replies already load above). Drives the Kontakter timeline.
+    const { data: emailRows } = await supabase
+      .from("outreach_emails")
+      .select("pipeline_lead_id, subject, body, sent_at")
+      .eq("workspace_id", activeWorkspaceId)
+      .not("sent_at", "is", null)
+      .order("sent_at", { ascending: false })
+      .limit(1000);
+    setSentEmails((emailRows ?? []) as EmailRow[]);
+
+    const { data: actionRows } = await supabase
+      .from("outreach_engagement_actions")
+      .select("sendpilot_lead_id, rule_id, action_type, fired_at, result")
+      .eq("workspace_id", activeWorkspaceId)
+      .eq("action_type", "auto_send")
+      .order("fired_at", { ascending: false })
+      .limit(1000);
+    setEngagementActions((actionRows ?? []) as ActionRow[]);
   }, [activeWorkspaceId, supabase]);
 
   const scheduleReload = useCallback(() => {
@@ -1321,6 +1352,7 @@ export default function OutreachPage() {
         icp_rejected: icpRejected.length,
         icp_open_proposals: icpProposals.filter((p) => p.status === "open").length,
         flow: stats.total,
+        kontakter: stats.total,
       }} />
 
       <section className="mx-auto w-full max-w-[1400px] px-4 pb-12 sm:px-8 lg:px-12">
@@ -1402,6 +1434,14 @@ export default function OutreachPage() {
           />
         ) : tab === "flow" ? (
           <FlowTab rows={rows} sequences={sequences} replies={replies} armStats={armStats} />
+        ) : tab === "kontakter" ? (
+          <KontakterTab
+            rows={rows}
+            replies={replies}
+            emails={sentEmails}
+            actions={engagementActions}
+            sequences={sequences}
+          />
         ) : (
           <AllTab rows={allRecent} />
         )}
@@ -1856,6 +1896,224 @@ function FlowTab({ rows, sequences, replies, armStats }: {
 }
 
 
+// ------------------------------ Kontakter --------------------------------
+// Contact-first view: a searchable contact list (at-risk first) + a per-contact
+// timeline — the full thread (past) plus projected upcoming sends (future).
+
+function fmtWhen(iso: string): string {
+  return new Date(iso).toLocaleString("da-DK", {
+    day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit",
+  });
+}
+
+function ContactTimeline({ contact, lead, replies, emails, actions, sequences }: {
+  contact: PipelineRow;
+  lead?: LeadEnrich;
+  replies: Reply[];
+  emails: EmailRow[];
+  actions: ActionRow[];
+  sequences: SeqLite[];
+}) {
+  const tc = contact as unknown as TimelineContact;
+  const thread = useMemo(() => buildThread(tc, replies, emails, actions), [tc, replies, emails, actions]);
+  const upcoming = useMemo(() => projectUpcoming(tc, sequences), [tc, sequences]);
+  const forgotten = isPossiblyForgotten(tc, upcoming);
+
+  const name = `${lead?.first_name ?? ""} ${lead?.last_name ?? ""}`.trim() || contact.contact_email || contact.sendpilot_lead_id;
+  const seqLabel = contact.sequence_id
+    ? `${contact.sequence_id} · trin ${contact.sequence_step ?? 0}`
+    : "intet aktivt forløb";
+
+  return (
+    <div className="rounded-lg border border-[var(--ink)]/12 bg-[var(--cream)] p-5">
+      <div className="flex items-baseline justify-between gap-4">
+        <div>
+          <h3 className="font-display text-2xl italic text-[var(--ink)]">{name}</h3>
+          <p className="mt-0.5 text-[12px] text-[var(--ink)]/55">
+            {[lead?.title, lead?.company].filter(Boolean).join(" · ") || contact.contact_email}
+          </p>
+        </div>
+        <div className="text-right">
+          <div className="tabular text-[11px] uppercase tracking-[0.18em] text-[var(--ink)]/45">{contact.status}</div>
+          <div className="tabular mt-0.5 text-[10px] text-[var(--ink)]/40">{seqLabel}</div>
+        </div>
+      </div>
+
+      {forgotten ? (
+        <div className="mt-4 rounded-md border border-[var(--clay)]/45 bg-[var(--clay)]/10 px-3 py-2 text-[13px] text-[var(--ink)]/80">
+          Ingen næste handling planlagt — sendt, intet svar, intet forløb. Kan være glemt.
+        </div>
+      ) : null}
+
+      {/* Thread (past) */}
+      <div className="mt-5">
+        <div className="tabular text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/40">Tråd</div>
+        {thread.length === 0 ? (
+          <p className="mt-2 text-[13px] text-[var(--ink)]/45">Ingen beskeder endnu.</p>
+        ) : (
+          <div className="mt-2 space-y-2">
+            {thread.map((m, i) => (
+              <div key={i} className={`rounded-md border p-3 ${
+                m.direction === "in"
+                  ? "border-[var(--forest)]/25 bg-[var(--forest)]/5"
+                  : "border-[var(--ink)]/10 bg-[var(--sand)]/40"
+              }`}>
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="tabular text-[10px] uppercase tracking-[0.16em] text-[var(--ink)]/45">
+                    {m.direction === "in" ? "← " : "→ "}{m.label} · {m.channel}
+                  </span>
+                  <span className="tabular text-[10px] text-[var(--ink)]/40">{fmtWhen(m.at)}</span>
+                </div>
+                {m.subject ? <div className="mt-1 text-[12px] font-semibold text-[var(--ink)]/75">{m.subject}</div> : null}
+                {m.text ? (
+                  <pre className="mt-1 whitespace-pre-wrap font-body text-[13px] leading-relaxed text-[var(--ink)]/85">{m.text}</pre>
+                ) : (
+                  <p className="mt-1 text-[12px] italic text-[var(--ink)]/40">(sendt — tekst ikke gemt)</p>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Upcoming (projected) */}
+      <div className="mt-5">
+        <div className="tabular text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/40">Kommende (forventet)</div>
+        {upcoming.length === 0 ? (
+          <p className="mt-2 text-[13px] text-[var(--ink)]/45">
+            {contact.sequence_completed_at ? "Forløb afsluttet." : "Intet planlagt."}
+          </p>
+        ) : (
+          <div className="mt-2 space-y-2">
+            {upcoming.map((u, i) => (
+              <div key={i} className="rounded-md border border-dashed border-[var(--ink)]/20 bg-[var(--cream)] p-3">
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="tabular text-[10px] uppercase tracking-[0.16em] text-[var(--ink)]/45">
+                    {u.stepId}{u.conditional ? " · betinget" : ""}
+                  </span>
+                  <span className="tabular text-[10px] text-[var(--forest)]">{fmtWhen(u.at)}</span>
+                </div>
+                {u.template ? (
+                  <pre className="mt-1 whitespace-pre-wrap font-body text-[13px] leading-relaxed text-[var(--ink)]/70">{u.template}</pre>
+                ) : null}
+              </div>
+            ))}
+            <p className="text-[11px] text-[var(--ink)]/40">Datoer er fremskrevet ud fra forløbets ventetider — kan ændre sig ved svar.</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function KontakterTab({ rows, replies, emails, actions, sequences }: {
+  rows: PipelineRow[];
+  replies: Reply[];
+  emails: EmailRow[];
+  actions: ActionRow[];
+  sequences: SeqLite[];
+}) {
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+
+  const repliesByLead = useMemo(() => {
+    const m = new Map<string, Reply[]>();
+    for (const r of replies) (m.get(r.sendpilot_lead_id) ?? m.set(r.sendpilot_lead_id, []).get(r.sendpilot_lead_id)!).push(r);
+    return m;
+  }, [replies]);
+  const emailsByLead = useMemo(() => {
+    const m = new Map<string, EmailRow[]>();
+    for (const e of emails) (m.get(e.pipeline_lead_id) ?? m.set(e.pipeline_lead_id, []).get(e.pipeline_lead_id)!).push(e);
+    return m;
+  }, [emails]);
+  const actionsByLead = useMemo(() => {
+    const m = new Map<string, ActionRow[]>();
+    for (const a of actions) (m.get(a.sendpilot_lead_id) ?? m.set(a.sendpilot_lead_id, []).get(a.sendpilot_lead_id)!).push(a);
+    return m;
+  }, [actions]);
+
+  // At-risk (possibly forgotten) first, then most recently active.
+  const enriched = useMemo(() => {
+    return rows.map((r) => {
+      const up = projectUpcoming(r as unknown as TimelineContact, sequences);
+      return {
+        row: r,
+        forgotten: isPossiblyForgotten(r as unknown as TimelineContact, up),
+        nextAt: up[0]?.at ?? null,
+      };
+    }).sort((a, b) => {
+      if (a.forgotten !== b.forgotten) return a.forgotten ? -1 : 1;
+      return new Date(b.row.updated_at).getTime() - new Date(a.row.updated_at).getTime();
+    });
+  }, [rows, sequences]);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return enriched;
+    return enriched.filter(({ row }) => {
+      const hay = `${row.lead?.first_name ?? ""} ${row.lead?.last_name ?? ""} ${row.lead?.company ?? ""} ${row.contact_email}`.toLowerCase();
+      return hay.includes(q);
+    });
+  }, [enriched, query]);
+
+  const forgottenCount = enriched.filter((e) => e.forgotten).length;
+  const selected = selectedId ? rows.find((r) => r.sendpilot_lead_id === selectedId) ?? null : null;
+
+  return (
+    <div className="grid gap-5 lg:grid-cols-[340px_minmax(0,1fr)]">
+      <div>
+        <input
+          value={query}
+          onChange={(e: ChangeEvent<HTMLInputElement>) => setQuery(e.target.value)}
+          placeholder="Søg navn, firma, email…"
+          className="focus-cream w-full rounded-md border border-[var(--ink)]/15 bg-[var(--cream)] px-3 py-2 text-[13px] text-[var(--ink)] outline-none"
+        />
+        {forgottenCount > 0 ? (
+          <div className="tabular mt-2 text-[11px] uppercase tracking-[0.16em] text-[var(--clay)]">
+            {forgottenCount} muligvis glemt
+          </div>
+        ) : null}
+        <div className="mt-2 max-h-[640px] overflow-y-auto rounded-md border border-[var(--ink)]/10 divide-y divide-[var(--ink)]/8">
+          {filtered.slice(0, 400).map(({ row, forgotten, nextAt }) => {
+            const name = `${row.lead?.first_name ?? ""} ${row.lead?.last_name ?? ""}`.trim() || row.contact_email || row.sendpilot_lead_id;
+            const active = row.sendpilot_lead_id === selectedId;
+            return (
+              <button key={row.sendpilot_lead_id} type="button"
+                onClick={() => setSelectedId(row.sendpilot_lead_id)}
+                className={`flex w-full flex-col gap-0.5 px-3 py-2 text-left transition ${active ? "bg-[var(--sand)]/60" : "hover:bg-[var(--sand)]/30"}`}>
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="truncate text-[14px] text-[var(--ink)]">{name}</span>
+                  {forgotten ? <span className="shrink-0 text-[10px] text-[var(--clay)]">● glemt?</span>
+                    : nextAt ? <span className="tabular shrink-0 text-[10px] text-[var(--ink)]/40">{fmtWhen(nextAt)}</span> : null}
+                </div>
+                <span className="truncate text-[11px] text-[var(--ink)]/45">{row.lead?.company ?? row.status}</span>
+              </button>
+            );
+          })}
+          {filtered.length > 400 ? (
+            <div className="px-3 py-2 text-[11px] text-[var(--ink)]/40">+{filtered.length - 400} flere — søg for at indsnævre</div>
+          ) : null}
+        </div>
+      </div>
+
+      <div>
+        {selected ? (
+          <ContactTimeline
+            contact={selected}
+            lead={selected.lead}
+            replies={repliesByLead.get(selected.sendpilot_lead_id) ?? []}
+            emails={emailsByLead.get(selected.sendpilot_lead_id) ?? []}
+            actions={actionsByLead.get(selected.sendpilot_lead_id) ?? []}
+            sequences={sequences}
+          />
+        ) : (
+          <p className="text-[13px] text-[var(--ink)]/45">Vælg en kontakt for at se hele tråden og hvad de modtager næste gang.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function Funnel({ stats }: { stats: FunnelStats }) {
   const stages = [
     { label: "Inviteret", value: stats.invited + stats.accepted + stats.rendering + stats.pending + stats.sent + stats.rejected + stats.failed },
@@ -1912,7 +2170,7 @@ function Tabs({ tab, setTab, showIcpTabs, counts }: {
   showIcpTabs: boolean;
   counts: {
     i_dag: number; opgaver: number; signaler: number; inbox: number; replies: number; sent: number; all: number;
-    icp_rejected: number; icp_open_proposals: number; flow: number;
+    icp_rejected: number; icp_open_proposals: number; flow: number; kontakter: number;
   };
 }) {
   const all: { id: Tab; label: string; count: number; accent?: boolean; icpOnly?: boolean }[] = [
@@ -1921,6 +2179,7 @@ function Tabs({ tab, setTab, showIcpTabs, counts }: {
     { id: "signaler", label: "Signaler", count: counts.signaler, accent: counts.signaler > 0 },
     { id: "inbox", label: "Indbakke", count: counts.inbox, accent: counts.inbox > 0 },
     { id: "replies", label: "Svar", count: counts.replies, accent: counts.replies > 0 },
+    { id: "kontakter", label: "Kontakter", count: counts.kontakter },
     { id: "sent", label: "Sendt", count: counts.sent },
     { id: "flow", label: "Flow", count: counts.flow },
     { id: "icp_rejected", label: "ICP-afvist", count: counts.icp_rejected, icpOnly: true },
