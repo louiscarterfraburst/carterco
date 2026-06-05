@@ -15,6 +15,16 @@ import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/utils/supabase/client";
 import { useWorkspace, type Workspace } from "@/utils/workspace";
 import { clampToBusinessHours } from "@/utils/businessHours";
+import {
+  COLUMN_TITLES,
+  STATIC_NODES,
+  classifyNode,
+  buildSequenceNodes,
+  lookupSeqStep,
+  type FlowNode,
+  type FlowTone,
+  type SeqLite,
+} from "./flow";
 
 const VAPID_PUBLIC_KEY =
   process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ??
@@ -230,7 +240,7 @@ type Signal = {
   alt_search_status: "pending" | "completed" | "empty" | "failed" | null;
 };
 
-type Tab = "i_dag" | "opgaver" | "signaler" | "inbox" | "replies" | "sent" | "all" | "icp_rejected" | "icp";
+type Tab = "i_dag" | "opgaver" | "signaler" | "inbox" | "replies" | "sent" | "all" | "icp_rejected" | "icp" | "flow";
 
 // Returned by outreach-ai draft_email — what the EmailActionBar uses to open mailto.
 type EmailDraft = {
@@ -419,6 +429,7 @@ export default function OutreachPage() {
   const [err, setErr] = useState<string | null>(null);
 
   const [tab, setTab] = useState<Tab>("i_dag");
+  const [sequences, setSequences] = useState<SeqLite[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [filterCompany, setFilterCompany] = useState("");
   const [filterRole, setFilterRole] = useState("");
@@ -616,6 +627,24 @@ export default function OutreachPage() {
     ]);
     setActiveIcp((ver as IcpVersion | null) ?? null);
     setIcpProposals((props ?? []) as IcpProposal[]);
+
+    // Sequence definitions for the Flow map. Fetch global (workspace_id null)
+    // + this workspace, then resolve: a workspace-specific row overrides a
+    // global with the same id. Drives the step labels + message templates.
+    const { data: seqRows } = await supabase
+      .from("outreach_sequences")
+      .select("id, workspace_id, description, trigger_signal, steps, position")
+      .or(`workspace_id.is.null,workspace_id.eq.${activeWorkspaceId}`)
+      .eq("is_active", true)
+      .order("position", { ascending: true });
+    const seqById = new Map<string, SeqLite>();
+    for (const s of (seqRows ?? []) as SeqLite[]) {
+      const existing = seqById.get(s.id);
+      if (!existing || (existing.workspace_id === null && s.workspace_id !== null)) {
+        seqById.set(s.id, s);
+      }
+    }
+    setSequences(Array.from(seqById.values()));
   }, [activeWorkspaceId, supabase]);
 
   const scheduleReload = useCallback(() => {
@@ -1269,6 +1298,7 @@ export default function OutreachPage() {
         all: stats.total,
         icp_rejected: icpRejected.length,
         icp_open_proposals: icpProposals.filter((p) => p.status === "open").length,
+        flow: stats.total,
       }} />
 
       <section className="mx-auto w-full max-w-[1400px] px-4 pb-12 sm:px-8 lg:px-12">
@@ -1348,6 +1378,8 @@ export default function OutreachPage() {
             onGenerateProposal={() => void generateProposal()}
             onDecide={(id, d) => void decideProposal(id, d)}
           />
+        ) : tab === "flow" ? (
+          <FlowTab rows={rows} sequences={sequences} replies={replies} />
         ) : (
           <AllTab rows={allRecent} />
         )}
@@ -1429,6 +1461,238 @@ type FunnelStats = {
   total: number;
 };
 
+// ------------------------------- Flow map --------------------------------
+// Read-only automation map: each contact lands in exactly one node (its
+// current position), nodes show live counts, click a node for its message
+// blueprint + the contacts in it, click a contact for their actual text.
+
+function flowTimeAgo(iso: string | null): string {
+  if (!iso) return "";
+  const ms = Date.now() - new Date(iso).getTime();
+  const min = Math.round(ms / 60000);
+  if (min < 60) return `${Math.max(0, min)} min`;
+  const hrs = Math.round(min / 60);
+  if (hrs < 24) return `${hrs} t`;
+  return `${Math.round(hrs / 24)} d`;
+}
+
+const FLOW_TONE_CLASS: Record<FlowTone, { card: string; bar: string }> = {
+  neutral: { card: "border-[var(--ink)]/12 bg-[var(--cream)]", bar: "var(--ink)" },
+  active: { card: "border-[var(--forest)]/30 bg-[var(--cream)]", bar: "var(--forest)" },
+  good: { card: "border-[var(--forest)]/40 bg-[var(--forest)]/5", bar: "var(--forest)" },
+  warn: { card: "border-[var(--clay)]/40 bg-[var(--clay)]/5", bar: "var(--clay)" },
+  bad: { card: "border-[var(--clay)]/50 bg-[var(--clay)]/10", bar: "var(--clay)" },
+};
+
+function MessageBlueprint({ node, seqStep }: {
+  node: FlowNode;
+  seqStep: ReturnType<typeof lookupSeqStep>;
+}) {
+  if (seqStep) {
+    const branches = seqStep.step.branches ?? [];
+    return (
+      <div className="mt-4 rounded-md border border-[var(--ink)]/10 bg-[var(--sand)]/50 p-4">
+        <div className="tabular text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/40">
+          Skabelon · {seqStep.seq.id} · trin {seqStep.index}
+        </div>
+        {branches.length === 0 ? (
+          <p className="mt-2 text-[13px] text-[var(--ink)]/45">Ingen besked på dette trin.</p>
+        ) : branches.map((b, i) => (
+          <div key={i} className="mt-3">
+            <div className="tabular text-[10px] uppercase tracking-[0.16em] text-[var(--ink)]/35">
+              {b.action?.type ?? "—"}{b.requires?.length ? ` · kræver: ${b.requires.join(", ")}` : ""}
+            </div>
+            <pre className="mt-1 whitespace-pre-wrap font-body text-[13px] leading-relaxed text-[var(--ink)]/80">
+              {b.action?.template || "(tom)"}
+            </pre>
+          </div>
+        ))}
+        <p className="mt-3 text-[11px] text-[var(--ink)]/40">
+          {"{firstName}"}, {"{company}"}, {"{videoLink}"} udfyldes per kontakt ved afsendelse.
+        </p>
+      </div>
+    );
+  }
+  if (node.id === "sent") {
+    return (
+      <div className="mt-4 rounded-md border border-[var(--forest)]/25 bg-[var(--forest)]/5 p-4">
+        <div className="tabular text-[10px] uppercase tracking-[0.22em] text-[var(--forest)]">
+          AI-personaliseret · 1. DM
+        </div>
+        <p className="mt-2 text-[13px] text-[var(--ink)]/70">
+          Ingen fast skabelon — første besked skrives per kontakt (Becc-bucket hook).
+          Klik en kontakt for at se den faktiske tekst.
+        </p>
+      </div>
+    );
+  }
+  return null;
+}
+
+function ContactMessages({ row, reply }: { row: PipelineRow; reply: Reply | null }) {
+  const blocks: { label: string; body: string; good?: boolean }[] = [];
+  if (row.personalized_hook) {
+    blocks.push({ label: `AI-hook${row.hook_bucket ? ` · bucket ${row.hook_bucket}` : ""}`, body: row.personalized_hook });
+  }
+  if (row.rendered_message) {
+    blocks.push({ label: "Sendt besked", body: row.rendered_message });
+  }
+  if (reply?.message) {
+    blocks.push({ label: `Svar${reply.intent ? ` · ${reply.intent}` : ""}`, body: reply.message, good: true });
+  }
+  return (
+    <div className="pb-4 pl-1">
+      {blocks.length === 0 ? (
+        <p className="text-[12px] text-[var(--ink)]/40">Ingen beskedtekst gemt for denne kontakt endnu.</p>
+      ) : blocks.map((b, i) => (
+        <div key={i} className={`mt-2 rounded-md border p-3 ${b.good ? "border-[var(--forest)]/25 bg-[var(--forest)]/5" : "border-[var(--ink)]/10 bg-[var(--sand)]/50"}`}>
+          <div className="tabular text-[10px] uppercase tracking-[0.16em] text-[var(--ink)]/40">{b.label}</div>
+          <pre className="mt-1 whitespace-pre-wrap font-body text-[13px] leading-relaxed text-[var(--ink)]/85">{b.body}</pre>
+        </div>
+      ))}
+      {row.hook_context ? (
+        <p className="mt-2 text-[11px] italic text-[var(--ink)]/45">Hvorfor: {row.hook_context}</p>
+      ) : null}
+    </div>
+  );
+}
+
+function FlowTab({ rows, sequences, replies }: {
+  rows: PipelineRow[];
+  sequences: SeqLite[];
+  replies: Reply[];
+}) {
+  const [selectedNode, setSelectedNode] = useState<string | null>(null);
+  const [openContact, setOpenContact] = useState<string | null>(null);
+
+  const nodes = useMemo<FlowNode[]>(
+    () => [...STATIC_NODES, ...buildSequenceNodes(sequences, rows)],
+    [sequences, rows],
+  );
+
+  const { counts, byNode } = useMemo(() => {
+    const counts = new Map<string, number>();
+    const byNode = new Map<string, PipelineRow[]>();
+    for (const r of rows) {
+      const id = classifyNode(r);
+      counts.set(id, (counts.get(id) ?? 0) + 1);
+      const list = byNode.get(id) ?? [];
+      list.push(r);
+      byNode.set(id, list);
+    }
+    return { counts, byNode };
+  }, [rows]);
+
+  // replies arrive newest-first; keep the first seen per lead.
+  const replyByLead = useMemo(() => {
+    const m = new Map<string, Reply>();
+    for (const rep of replies) {
+      if (!m.has(rep.sendpilot_lead_id)) m.set(rep.sendpilot_lead_id, rep);
+    }
+    return m;
+  }, [replies]);
+
+  const columns = useMemo(() => {
+    const byCol = new Map<number, FlowNode[]>();
+    for (const n of nodes) {
+      const list = byCol.get(n.col) ?? [];
+      list.push(n);
+      byCol.set(n.col, list);
+    }
+    return COLUMN_TITLES.map((title, col) => ({ title, col, nodes: byCol.get(col) ?? [] }));
+  }, [nodes]);
+
+  const total = rows.length;
+  const selected = selectedNode ? nodes.find((n) => n.id === selectedNode) ?? null : null;
+  const selectedRows = selectedNode ? (byNode.get(selectedNode) ?? []) : [];
+  const seqStep = selectedNode ? lookupSeqStep(selectedNode, sequences) : null;
+
+  return (
+    <div>
+      <div className="overflow-x-auto pb-2">
+        <div className="flex min-w-max gap-2">
+          {columns.map((c) => (
+            <div key={c.col} className="flex items-stretch">
+              <div className="flex w-[176px] flex-col gap-2">
+                <div className="tabular text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/40">{c.title}</div>
+                {c.nodes.length === 0 ? (
+                  <div className="text-[11px] text-[var(--ink)]/25">—</div>
+                ) : c.nodes.map((n) => {
+                  const count = counts.get(n.id) ?? 0;
+                  const tone = FLOW_TONE_CLASS[n.tone];
+                  const isSel = n.id === selectedNode;
+                  return (
+                    <button key={n.id} type="button"
+                      onClick={() => { setSelectedNode(isSel ? null : n.id); setOpenContact(null); }}
+                      className={`text-left rounded-md border px-3 py-2 transition ${tone.card} ${isSel ? "ring-2 ring-[var(--ink)]/30" : ""} ${count === 0 ? "opacity-45" : ""}`}>
+                      <div className="flex items-baseline justify-between gap-2">
+                        <span className="text-[12px] leading-tight text-[var(--ink)]">{n.label}</span>
+                        <span className="font-display text-xl italic leading-none text-[var(--ink)]">{count}</span>
+                      </div>
+                      <div className="mt-1 h-1 rounded-sm bg-[var(--ink)]/10" aria-hidden>
+                        <div className="h-full rounded-sm" style={{
+                          width: `${total ? Math.max(count ? 6 : 0, Math.round((count / total) * 100)) : 0}%`,
+                          background: tone.bar,
+                        }} />
+                      </div>
+                      {n.sublabel ? (
+                        <div className="tabular mt-1 truncate text-[9px] uppercase tracking-[0.14em] text-[var(--ink)]/35">{n.sublabel}</div>
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
+              {c.col < COLUMN_TITLES.length - 1 ? (
+                <div className="flex items-center px-1 text-[var(--ink)]/25" aria-hidden>→</div>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {selected ? (
+        <div className="mt-6 rounded-lg border border-[var(--ink)]/12 bg-[var(--cream)] p-5">
+          <div className="flex items-baseline justify-between gap-4">
+            <h3 className="font-display text-2xl italic text-[var(--ink)]">{selected.label}</h3>
+            <span className="tabular text-[11px] uppercase tracking-[0.22em] text-[var(--ink)]/45">{selectedRows.length} kontakter</span>
+          </div>
+          {selected.sublabel ? <p className="mt-0.5 text-[12px] text-[var(--ink)]/50">{selected.sublabel}</p> : null}
+
+          <MessageBlueprint node={selected} seqStep={seqStep} />
+
+          <div className="mt-5 divide-y divide-[var(--ink)]/8 border-t border-[var(--ink)]/8">
+            {selectedRows.length === 0 ? (
+              <p className="py-4 text-[13px] text-[var(--ink)]/45">Ingen kontakter her lige nu.</p>
+            ) : selectedRows.slice(0, 200).map((r) => {
+              const open = openContact === r.sendpilot_lead_id;
+              const name = `${r.lead?.first_name ?? ""} ${r.lead?.last_name ?? ""}`.trim() || r.contact_email || r.sendpilot_lead_id;
+              const when = r.last_engagement_at ?? r.last_reply_at ?? r.sent_at ?? r.updated_at;
+              return (
+                <div key={r.sendpilot_lead_id}>
+                  <button type="button" onClick={() => setOpenContact(open ? null : r.sendpilot_lead_id)}
+                    className="flex w-full items-baseline justify-between gap-3 py-2.5 text-left">
+                    <span className="truncate text-[14px] text-[var(--ink)]">{name}</span>
+                    <span className="flex shrink-0 items-baseline gap-3">
+                      <span className="max-w-[160px] truncate text-[12px] text-[var(--ink)]/45">{r.lead?.company ?? ""}</span>
+                      <span className="tabular text-[11px] text-[var(--ink)]/40">{flowTimeAgo(when)}</span>
+                    </span>
+                  </button>
+                  {open ? <ContactMessages row={r} reply={replyByLead.get(r.sendpilot_lead_id) ?? null} /> : null}
+                </div>
+              );
+            })}
+            {selectedRows.length > 200 ? (
+              <p className="py-3 text-[12px] text-[var(--ink)]/40">+{selectedRows.length - 200} flere…</p>
+            ) : null}
+          </div>
+        </div>
+      ) : (
+        <p className="mt-6 text-[13px] text-[var(--ink)]/45">Klik en node for at se beskedteksten og kontakterne der.</p>
+      )}
+    </div>
+  );
+}
+
 function Funnel({ stats }: { stats: FunnelStats }) {
   const stages = [
     { label: "Inviteret", value: stats.invited + stats.accepted + stats.rendering + stats.pending + stats.sent + stats.rejected + stats.failed },
@@ -1485,7 +1749,7 @@ function Tabs({ tab, setTab, showIcpTabs, counts }: {
   showIcpTabs: boolean;
   counts: {
     i_dag: number; opgaver: number; signaler: number; inbox: number; replies: number; sent: number; all: number;
-    icp_rejected: number; icp_open_proposals: number;
+    icp_rejected: number; icp_open_proposals: number; flow: number;
   };
 }) {
   const all: { id: Tab; label: string; count: number; accent?: boolean; icpOnly?: boolean }[] = [
@@ -1495,6 +1759,7 @@ function Tabs({ tab, setTab, showIcpTabs, counts }: {
     { id: "inbox", label: "Indbakke", count: counts.inbox, accent: counts.inbox > 0 },
     { id: "replies", label: "Svar", count: counts.replies, accent: counts.replies > 0 },
     { id: "sent", label: "Sendt", count: counts.sent },
+    { id: "flow", label: "Flow", count: counts.flow },
     { id: "icp_rejected", label: "ICP-afvist", count: counts.icp_rejected, icpOnly: true },
     { id: "all", label: "Alle", count: counts.all },
     { id: "icp", label: "Læring", count: counts.icp_open_proposals, accent: counts.icp_open_proposals > 0, icpOnly: true },
