@@ -2385,6 +2385,35 @@ function icpFit(score: number | null): { label: string; tone: "good" | "act" | "
   return { label: "lav fit", tone: "bad" };
 }
 
+// Signal layout helpers. The Signal type carries source/signal_type, page_views
+// and company_size that the old card ignored — surface them for hierarchy.
+function signalKindLabel(s: Signal): string {
+  const t = `${s.signal_type ?? ""} ${s.source ?? ""}`.toLowerCase();
+  if (/rb2b|visit|bes[øo]g|site/.test(t)) return "Besøg";
+  if (/hir|job|stilling/.test(t)) return "Hiring";
+  if (/meta|ad|leadgen|annonce/.test(t)) return "Annonce";
+  const raw = (s.signal_type || s.source || "signal").replace(/[_-]+/g, " ");
+  return raw.charAt(0).toUpperCase() + raw.slice(1);
+}
+
+function pageViewCount(pv: unknown): number | null {
+  if (typeof pv === "number") return pv > 0 ? pv : null;
+  if (Array.isArray(pv)) return pv.length || null;
+  return null;
+}
+
+// Four-dot intent meter from the ICP score (0-100). Filled dots in clay.
+function IntentDots({ score, title }: { score: number; title?: string }) {
+  const filled = Math.max(0, Math.min(4, Math.round(score / 25)));
+  return (
+    <span className="flex items-center gap-0.5" title={title} aria-label={`intent ${score}`}>
+      {[0, 1, 2, 3].map((i) => (
+        <span key={i} className={`h-1.5 w-1.5 rounded-full ${i < filled ? "bg-[var(--clay)]" : "bg-[var(--ink)]/15"}`} />
+      ))}
+    </span>
+  );
+}
+
 function BesogTab({ signals, busyLead, onSearchPeople, onDismiss }: {
   signals: Signal[];
   busyLead: string | null;
@@ -2405,24 +2434,44 @@ function BesogTab({ signals, busyLead, onSearchPeople, onDismiss }: {
         const fit = icpFit(s.icp_score);
         const name = s.person_name || s.company_name || s.company_domain || "?";
         const busy = busyLead === `signal-search:${s.id}`;
+        const pages = pageViewCount(s.page_views);
+        const meta = [
+          pages != null ? `${pages} ${pages === 1 ? "side" : "sider"} set` : null,
+          s.company_size ? `${s.company_size} ansatte` : null,
+        ].filter(Boolean);
         return (
           <div key={s.id} className="rounded-lg border border-[var(--ink)]/12 bg-[var(--cream)] p-4">
-            <div className="flex items-baseline justify-between gap-3">
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-baseline gap-2">
-                  <span className="truncate text-[15px] text-[var(--ink)]">{name}</span>
-                  <span className={`tabular shrink-0 rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] ${STATUS_TONE_CLASS[fit.tone]}`}>
-                    {fit.label}{s.icp_score != null ? ` · ${s.icp_score}` : ""}
-                  </span>
-                </div>
-                <div className="mt-0.5 truncate text-[12px] text-[var(--ink)]/55">
-                  {[s.person_title, s.company_name].filter(Boolean).join(" · ") || s.company_domain}
-                </div>
-              </div>
+            {/* header: signal type + recency */}
+            <div className="flex items-center justify-between gap-2">
+              <span className="tabular rounded-sm border border-[var(--ink)]/15 px-1.5 py-0.5 text-[9px] uppercase tracking-[0.18em] text-[var(--ink)]/55">
+                {signalKindLabel(s)}
+              </span>
               <span className="tabular shrink-0 text-[10px] text-[var(--ink)]/40">{fmtWhen(s.identified_at)}</span>
             </div>
+            {/* name + intent meter */}
+            <div className="mt-2 flex items-baseline justify-between gap-3">
+              <span className="truncate text-[16px] text-[var(--ink)]">{name}</span>
+              {s.icp_score != null ? (
+                <span className="flex shrink-0 items-center gap-1.5">
+                  <IntentDots score={s.icp_score} title={fit.label} />
+                  <span className="tabular text-[11px] text-[var(--ink)]/55">{s.icp_score}</span>
+                </span>
+              ) : null}
+            </div>
+            <div className="mt-0.5 truncate text-[12px] text-[var(--ink)]/55">
+              {[s.person_title, s.company_industry || s.company_name].filter(Boolean).join(" · ") || s.company_domain}
+            </div>
+            {meta.length ? (
+              <div className="tabular mt-1 text-[11px] text-[var(--ink)]/45">{meta.join(" · ")}</div>
+            ) : null}
+            {/* rationale, collapsed by default */}
             {s.icp_reasoning ? (
-              <p className="mt-2 text-[12px] italic leading-relaxed text-[var(--ink)]/55">{s.icp_reasoning}</p>
+              <details className="group mt-2">
+                <summary className="tabular cursor-pointer list-none text-[10px] uppercase tracking-[0.14em] text-[var(--ink)]/40 transition hover:text-[var(--ink)]/65">
+                  hvorfor <span className="inline-block transition group-open:rotate-180">⌄</span>
+                </summary>
+                <p className="mt-1.5 text-[12px] italic leading-relaxed text-[var(--ink)]/55">{s.icp_reasoning}</p>
+              </details>
             ) : null}
             <div className="mt-3 flex flex-wrap items-center gap-1.5">
               {s.person_linkedin_url ? (
