@@ -2514,34 +2514,74 @@ const NAV_GROUP_ORDER = ["Gør nu", "Kontakter", "Indsigt"];
 // strip (staged → invited → accepted → video → reply) + the staged leads.
 // "staged" comes from outreach_leads (pre-invite); the rest from pipeline rows
 // tagged play='hiring_signal'. Phase 3 will generalise this to a play selector.
+// Per-lead stage, derived by matching the staged lead to its pipeline row
+// (if invited yet). Drives the row status pill.
+function hiringLeadStage(l: StagedLead, pipe: PipelineRow[]): string {
+  const r = pipe.find((p) => p.linkedin_url === l.linkedin_url);
+  if (!r) return "Staged";
+  if (r.last_reply_at) return "Svar";
+  if (r.sent_at) return "Video";
+  if (r.accepted_at) return "Accepteret";
+  if (r.invited_at) return "Inviteret";
+  return "Staged";
+}
+
+const HIRING_PILL: Record<string, string> = {
+  Staged: "border-[var(--ink)]/20 text-[var(--ink)]/45",
+  Inviteret: "border-[var(--clay)]/40 text-[var(--clay)]",
+  Accepteret: "border-[var(--forest)]/40 text-[var(--forest)]",
+  Video: "border-[var(--clay)]/40 text-[var(--clay)]",
+  Svar: "border-[var(--clay)] bg-[var(--clay)]/10 text-[var(--clay)]",
+};
+
 function PlaysOverview({ staged, rows }: { staged: StagedLead[]; rows: PipelineRow[] }) {
   const hiring = staged.filter((l) => l.play === "hiring_signal");
   const pipe = rows.filter((r) => r.play === "hiring_signal");
-  const funnel: [string, number][] = [
-    ["Virksomheder", new Set(hiring.map((l) => l.company || l.linkedin_url)).size],
+  // Funnel stages, in flow order. Conversion % is shown between stages.
+  const stages: [string, number][] = [
     ["Staged", hiring.length],
     ["Inviteret", pipe.filter((r) => r.invited_at).length],
     ["Accepteret", pipe.filter((r) => r.accepted_at).length],
-    ["Video sendt", pipe.filter((r) => r.sent_at).length],
+    ["Video", pipe.filter((r) => r.sent_at).length],
     ["Svar", pipe.filter((r) => r.last_reply_at).length],
   ];
+  const companies = new Set(hiring.map((l) => l.company || l.linkedin_url)).size;
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-7">
       <div>
         <h2 className="font-display text-3xl italic leading-tight tracking-[-0.01em] text-[var(--ink)]">Hiring-signal</h2>
         <p className="mt-1 max-w-xl text-sm text-[var(--ink)]/60">
           DK-virksomheder der lige har slået en salgsrolle op → deres beslutningstager,
           staged til outreach. Upload SendPilot-CSV&apos;en for at sende invitationer.
         </p>
+        <p className="tabular mt-2 text-[11px] uppercase tracking-[0.14em] text-[var(--ink)]/40">
+          {hiring.length} leads · {companies} virksomheder
+        </p>
       </div>
 
-      <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
-        {funnel.map(([label, n]) => (
-          <div key={label} className="rounded-md border border-[var(--ink)]/10 bg-[var(--sand)]/40 p-3">
-            <div className="font-display text-2xl italic leading-none text-[var(--ink)]">{n}</div>
-            <div className="tabular mt-1 text-[10px] uppercase tracking-[0.14em] text-[var(--ink)]/50">{label}</div>
-          </div>
-        ))}
+      {/* Funnel as a flow: stages with conversion % between them; spent stages
+          accented in clay, stages not yet reached dimmed. Reads left-to-right. */}
+      <div className="flex items-end overflow-x-auto border-y border-[var(--ink)]/10 py-4">
+        {stages.flatMap(([label, n], i) => {
+          const cell = (
+            <div key={label} className="flex shrink-0 flex-col items-center px-2" style={{ minWidth: 66 }}>
+              <div className={`font-display text-3xl italic leading-none ${n > 0 ? "text-[var(--clay)]" : "text-[var(--ink)]/25"}`}>{n}</div>
+              <div className="tabular mt-1.5 text-[9px] uppercase tracking-[0.16em] text-[var(--ink)]/50">{label}</div>
+            </div>
+          );
+          if (i === stages.length - 1) return [cell];
+          const prev = stages[i][1];
+          const next = stages[i + 1][1];
+          const conv = prev > 0 ? `${Math.round((next / prev) * 100)}%` : "·";
+          const connector = (
+            <div key={`${label}-c`} className="flex flex-1 flex-col items-center pb-4" style={{ minWidth: 36 }}>
+              <div className="tabular text-[9px] tracking-wide text-[var(--ink)]/35">{conv}</div>
+              <div className="mt-1 h-px w-full bg-[var(--ink)]/15" />
+            </div>
+          );
+          return [cell, connector];
+        })}
       </div>
 
       {hiring.length === 0 ? (
@@ -2551,21 +2591,29 @@ function PlaysOverview({ staged, rows }: { staged: StagedLead[]; rows: PipelineR
         </p>
       ) : (
         <ul className="divide-y divide-[var(--ink)]/10 border-t border-[var(--ink)]/10">
-          {hiring.map((l) => (
-            <li key={l.linkedin_url} className="flex items-baseline justify-between gap-3 py-2.5">
-              <div className="min-w-0">
-                <div className="font-display text-lg italic leading-tight text-[var(--ink)]">
-                  {[l.first_name, l.last_name].filter(Boolean).join(" ") || "—"}
+          {hiring.map((l) => {
+            const name = [l.first_name, l.last_name].filter(Boolean).join(" ") || "—";
+            const stage = hiringLeadStage(l, pipe);
+            const initial = (l.first_name || l.company || "?").trim().charAt(0).toUpperCase();
+            return (
+              <li key={l.linkedin_url} className="flex items-center gap-3 py-3">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[var(--clay)]/30 bg-[var(--cream)] font-display text-base italic leading-none text-[var(--ink)]">
+                  {initial}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="font-display text-lg italic leading-tight text-[var(--ink)]">{name}</div>
+                  <div className="tabular truncate text-[11px] text-[var(--ink)]/50">
+                    {[l.title, l.company].filter(Boolean).join(" · ") || "—"}
+                  </div>
                 </div>
-                <div className="tabular truncate text-[11px] text-[var(--ink)]/50">{l.title || "—"}</div>
-              </div>
-              <div className="shrink-0 text-right">
-                <div className="text-sm text-[var(--ink)]">{l.company || "—"}</div>
+                <span className={`tabular shrink-0 rounded-full border px-2 py-0.5 text-[9px] uppercase tracking-[0.14em] ${HIRING_PILL[stage] ?? HIRING_PILL.Staged}`}>
+                  {stage}
+                </span>
                 <a href={l.linkedin_url} target="_blank" rel="noreferrer"
-                  className="tabular text-[11px] text-[var(--clay)] hover:underline">LinkedIn ↗</a>
-              </div>
-            </li>
-          ))}
+                  className="tabular shrink-0 text-[11px] text-[var(--clay)] hover:underline">LinkedIn ↗</a>
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>
