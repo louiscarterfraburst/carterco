@@ -583,6 +583,10 @@ export default function OutreachPage() {
       .from("vw_action_queue")
       .select("*")
       .eq("workspace_id", activeWorkspaceId)
+      // I dag = the do-now kinds only. Approvals have their own home (Indbakke),
+      // referrals are a backlog, signals live in Besøg — keeping them all here
+      // turned "I dag" into a 200-item dump instead of a daily action list.
+      .in("kind", ["reply", "call", "email", "signal"])
       .order("priority_score", { ascending: false })
       .order("surfaced_at", { ascending: false })
       .limit(200);
@@ -3875,8 +3879,8 @@ function RepliesTab({ replies, referralsByLead, busyLead, onMarkHandled, onInvit
                       {!isOutbound && r.reasoning ? (
                         <p className="tabular mt-1 text-[11px] text-[var(--ink)]/55">AI: {r.reasoning}</p>
                       ) : null}
-                      {!isOutbound && r.suggested_reply ? (
-                        <SuggestedReply replyId={r.id} text={r.suggested_reply} onSend={onSendReply} />
+                      {!isOutbound && r.id === latestInbound.id ? (
+                        <SuggestedReply replyId={r.id} text={r.suggested_reply ?? ""} onSend={onSendReply} />
                       ) : null}
                     </div>
                   </li>
@@ -4058,8 +4062,9 @@ function SuggestedReply({ replyId, text, onSend }: {
   text: string;
   onSend: (replyId: string, messageOverride: string) => Promise<boolean>;
 }) {
+  const hasSuggestion = !!text.trim();
   const [draft, setDraft] = useState(text);
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState(!hasSuggestion); // no AI draft → open compose
   const [sending, setSending] = useState(false);
   const [copied, setCopied] = useState(false);
   const [hidden, setHidden] = useState(false);
@@ -4087,7 +4092,7 @@ function SuggestedReply({ replyId, text, onSend }: {
   return (
     <div className="mt-2 rounded-sm border border-dashed border-[var(--forest)]/30 bg-[var(--forest)]/[0.04] p-3 text-left">
       <div className="tabular flex items-center justify-between gap-2 text-[10px] uppercase tracking-[0.22em] text-[var(--forest)]">
-        <span>✦ Foreslået svar</span>
+        <span>{hasSuggestion ? "✦ Foreslået svar" : "Svar direkte"}</span>
         <div className="flex gap-1">
           {!editing ? (
             <button type="button" onClick={() => setEditing(true)}
