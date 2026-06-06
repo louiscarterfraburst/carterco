@@ -58,6 +58,22 @@ alter table public.leads add column if not exists retry_count int not null defau
 alter table public.leads add column if not exists last_action_fired_at timestamptz;
 alter table public.leads add column if not exists workspace_id uuid references public.workspaces(id);
 
+-- Pipeline model: leads is the working pipeline (one row per human you're actively
+-- pursuing), not just inbound. A person is in exactly one of {still-cold in outreach}
+-- or {promoted into leads}. Crossing the line (reply / book / call / referral) promotes
+-- them here and stops their outreach followup.
+-- referred_by_lead_id: who referred this person (warm/call referrals live in leads;
+--   reply_referral alt-contacts are only for cold-LinkedIn-reply invite redirects).
+-- outreach_lead_id: soft link to outreach_pipeline.sendpilot_lead_id when promoted from
+--   the cold machine, so a promoted person is linked, not duplicated. No FK (loose coupling).
+alter table public.leads add column if not exists referred_by_lead_id uuid references public.leads(id) on delete set null;
+alter table public.leads add column if not exists outreach_lead_id text;
+create index if not exists leads_referred_by_lead_id_idx on public.leads(referred_by_lead_id);
+-- Partial UNIQUE: a cold outreach contact (sendpilot_lead_id) promotes to at most
+-- one leads row. Serves lookups too, so no separate plain index needed.
+create unique index if not exists leads_outreach_lead_id_key
+  on public.leads(outreach_lead_id) where outreach_lead_id is not null;
+
 do $$
 begin
   if not exists (
