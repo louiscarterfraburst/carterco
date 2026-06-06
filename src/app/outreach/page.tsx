@@ -1478,7 +1478,9 @@ export default function OutreachPage() {
             onDecide={(id, d) => void decideProposal(id, d)}
           />
         ) : tab === "flow" ? (
-          <FlowTab rows={rows} sequences={sequences} replies={replies} armStats={armStats} />
+          <FlowTab rows={rows} sequences={sequences} replies={replies} armStats={armStats}
+            busyLead={busyLead}
+            onRetry={(id) => void decide(id, "approve").then((ok) => { if (ok) { setInfo("Sendt — prøvede igen."); void load(); } })} />
         ) : tab === "kontakter" ? (
           <KontakterTab
             rows={rows}
@@ -1727,11 +1729,13 @@ function ContactMessages({ row, reply }: { row: PipelineRow; reply: Reply | null
   );
 }
 
-function FlowTab({ rows, sequences, replies, armStats }: {
+function FlowTab({ rows, sequences, replies, armStats, busyLead, onRetry }: {
   rows: PipelineRow[];
   sequences: SeqLite[];
   replies: Reply[];
   armStats: ArmStat[];
+  busyLead: string | null;
+  onRetry: (leadId: string) => void;
 }) {
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
   const [openContact, setOpenContact] = useState<string | null>(null);
@@ -1950,6 +1954,18 @@ function FlowTab({ rows, sequences, replies, armStats }: {
                       <span className="tabular text-[11px] text-[var(--ink)]/40">{flowTimeAgo(when)}</span>
                     </span>
                   </button>
+                  {r.error ? (
+                    <div className="-mt-1 flex items-center gap-2 pb-1">
+                      <p className="text-[11px] text-[var(--clay)]">⚠ {r.error}</p>
+                      {r.status === "failed" ? (
+                        <button type="button" disabled={busyLead === r.sendpilot_lead_id}
+                          onClick={() => onRetry(r.sendpilot_lead_id)}
+                          className="tabular shrink-0 rounded-full border border-[var(--forest)]/40 px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] text-[var(--forest)] transition hover:border-[var(--forest)]/60 disabled:opacity-50">
+                          {busyLead === r.sendpilot_lead_id ? "Sender…" : "Prøv igen"}
+                        </button>
+                      ) : null}
+                    </div>
+                  ) : null}
                   {open ? <ContactMessages row={r} reply={replyByLead.get(r.sendpilot_lead_id) ?? null} /> : null}
                 </div>
               );
