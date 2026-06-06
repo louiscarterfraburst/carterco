@@ -3,20 +3,25 @@
 
 A sales job posting is the richest cold-outbound trigger there is — it's a
 timed, public, self-declared "we need more leads" with budget attached. This
-script fires the harvestapi LinkedIn job-search actor (same vendor as the
-profile/employee/posts actors, same APIFY_API_TOKEN, ~$1 per 1k jobs, no
-cookies), searching DK for sales/SDR roles posted recently.
+script fires the `fantastic-jobs/advanced-linkedin-job-search-api` Apify actor
+(same APIFY_API_TOKEN, ~$1.50 per 1k jobs), searching DK for sales/SDR roles.
+
+Why this actor: it actually FILTERS by title. The earlier harvestapi job-search
+actor ignored the keyword and returned every recent DK job (blacksmiths, nurses),
+so we sampled blind. fantastic-jobs does titleSearch + titleExclusionSearch +
+organizationEmployeesLte + datePostedAfter server-side, so the role/size/recency
+filtering happens at the source — the client-side gates below are just safety.
 
 Each posting is five inputs in one document:
-  - trigger    → postedDate (+ --posted-limit recency window)
-  - pain spec  → descriptionText (the JD = the spec, in their words)
-  - ICP hint   → descriptionText (target vertical they sell into)
-  - budget     → salary (price comp: a seat vs. the system)
-  - contact    → company.name + company.linkedinUrl
+  - trigger    → date_posted (+ --days recency window)
+  - pain spec  → description_text (the JD = the spec, in their words)
+  - ICP hint   → description_text + linkedin_org_industry/size
+  - budget     → ai_salary_* (price comp: a seat vs. the system)
+  - contact    → organization + organization_url (company LinkedIn)
 
-The actor hands back `company.linkedinUrl` already in the exact format
-apify_enrich_brands.py wants, so the --companies-out file pipes straight into
-the employee-scrape stage with no Jina/find_linkedin_companies bridge.
+The actor hands back `organization_url` (company LinkedIn) in the exact format
+apify_enrich_brands.py wants, plus `linkedin_org_url` (domain), so --companies-out
+pipes straight into the employee-scrape stage with no Jina bridge.
 
 Pipeline:
   apify_hiring_intake.py  →  (companies-out)  →  apify_enrich_brands.py  →  hooks
@@ -42,6 +47,7 @@ import os
 import re
 import sys
 import time
+from datetime import datetime, timedelta
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -63,31 +69,40 @@ DEFAULT_ROLES = [
     "forretningsudvikler",
 ]
 
-# API enum values (the actor's UI shows "Past Week" etc., but the API wants these).
-POSTED_LIMITS = ["1h", "24h", "week", "month"]
+# titleExclusionSearch — farming / management / partnerships / junior roles that
+# are NOT an outbound-prospecting seat. The API drops these server-side.
+DEFAULT_TITLE_EXCLUDE = [
+    "manager", "partner", "partnership", "key account", "trainee",
+    "head of", "salgschef", "director",
+]
 
 # LinkedIn keyword search is loose — "business developer" pulls in engineers,
 # supply planners, even a French gastroenterologist. Mirror the decision-maker
 # title-regex trick from apify_enrich_brands.py: keep a posting only if its
 # title is genuinely a B2B sales / outbound seat (the thing the machine
 # replaces), and drop retail "sales associate"-type roles even when they match.
+# HUNTERS ONLY. The play premise is "they just posted a role whose job IS the
+# outbound prospecting we automate." That's an SDR/BDR/biz-dev/AE/sælger seat —
+# NOT account-manager / key-account / partnerships (farming existing relationships),
+# NOT salgschef / head-of-sales (team-build), NOT trainee (junior). Those farming
+# roles were what contaminated the first batch (Eneba partnerships, OOONO key
+# account, Nobel partner manager, TDC salgstrainee) — they're in DROP below.
 SALES_ROLE_KEEP = [
     re.compile(r"\b(sdr|bdr)\b", re.I),
     re.compile(r"sales develop", re.I),
     re.compile(r"business develop|forretningsudvikl", re.I),
-    re.compile(r"account (executive|manager|director)|key account|kundeansvarlig|kundechef", re.I),
-    re.compile(r"\bsælger\b|salgskonsulent|salgsrepræsentant|salgschef|salgsdirektør|salgsudvikl", re.I),
-    re.compile(r"inside sales|field sales|outbound|territory manager", re.I),
-    re.compile(r"\bsales\b.*\b(rep|representative|consultant|specialist|executive|manager|lead|director)\b", re.I),
-    re.compile(r"commercial (manager|director|lead)|kommerciel", re.I),
+    re.compile(r"\baccount executive\b", re.I),                 # AE = hunter; account MANAGER is not
+    re.compile(r"\bsælger\b|salgskonsulent|salgsrepræsentant", re.I),
+    re.compile(r"inside sales|outbound", re.I),
+    re.compile(r"\bsales (rep|representative|consultant|specialist|executive)\b", re.I),
     re.compile(r"new business|demand generation", re.I),
     re.compile(r"cold call|koldkald|telefonsælg|telesælg|telemarketing", re.I),
-    re.compile(r"salgstrainee|salgselev", re.I),
-    re.compile(r"partner manager|partnerchef|partnerships? manager", re.I),
 ]
 SALES_ROLE_DROP = [
     re.compile(r"sales associate|sales assistant|part[- ]?time sales|retail|\bshop\b|\bstore\b|butik|ekspedient|kassemedarbejder", re.I),
     re.compile(r"\bengineer\b|developer\b|\btechnician\b|udvikler\b", re.I),  # not "business developer" (caught by KEEP first)
+    # farming / management / partnerships / junior — not an outbound-prospecting seat
+    re.compile(r"account manager|key account|kundeansvarlig|kundechef|partner\s*manager|partnerchef|partnership|trainee|\belev\b|head of|salgschef|salgsdirektør", re.I),
 ]
 
 
@@ -102,13 +117,26 @@ def is_sales_role(title: str) -> bool:
     return True
 
 
+# DK gate. The actor's location filter is loose — searching "Denmark" still
+# returns "European Union" / "EMEA" / remote postings (Eneba's was EU-wide).
+# Keep only postings whose location text actually names Denmark or a DK city.
+DK_LOC = re.compile(
+    r"denmark|danmark|copenhagen|k[øo]benhavn|aarhus|[åa]rhus|odense|aalborg|"
+    r"esbjerg|kolding|vejle|horsens|randers|roskilde|herning|silkeborg|\bdk\b", re.I)
+
+
+def is_dk_location(loc: str) -> bool:
+    return bool(DK_LOC.search(loc or ""))
+
+
 # ICP gate on the COMPANY (not the role). The foot-in-the-door play targets
 # mid-market B2B building an outbound function — not the giants who ARE the
 # outbound machine (Salesforce, Google, IFS) nor retailers hiring floor staff
 # (STARK). employee_count + industries are already on every row.
 ICP_EXCLUDE_INDUSTRY = re.compile(
     r"retail|apparel|fashion|supermarket|grocer|restaurant|hospitality|"
-    r"food.*beverage|consumer goods|leisure", re.I)
+    r"food.*beverage|consumer goods|leisure|"
+    r"building material|byggemarked|byggecenter|trælast|home improvement", re.I)
 
 
 def is_icp_company(row: dict, min_emp: int, max_emp: int) -> tuple[bool, str]:
@@ -137,23 +165,27 @@ def http_json(method: str, url: str, body: dict | None = None, timeout: int = 60
         return json.loads(f.read())
 
 
-def fire_actor(actor_id: str, roles: list[str], location: str, posted_limit: str,
-               sort_by: str, max_items: int, under10: bool) -> tuple[str, str]:
-    """POST one run searching all role queries at once. Returns (runId, datasetId).
+def fire_actor(actor_id: str, titles: list[str], title_excludes: list[str],
+               location: str, posted_after: str, max_emp: int, max_items: int) -> tuple[str, str]:
+    """POST one run. Returns (runId, datasetId).
 
-    The job actor takes searchQueries as an array, so a single run covers every
-    role — no chunking needed (unlike the employee actor's free-tier 10/run cap).
+    fantastic-jobs filters server-side: titleSearch + titleExclusionSearch do the
+    role include/exclude, organizationEmployeesLte does the ICP size gate,
+    datePostedAfter does recency — work the old actor ignored. Unlike harvestapi,
+    the keyword search is actually applied.
     """
     url = f"{BASE}/acts/{actor_id}/runs?token={TOKEN}"
     body: dict = {
-        "searchQueries": roles,
-        "locations": [location],
-        "postedLimit": posted_limit,
-        "sortBy": sort_by,
+        "titleSearch": titles,
+        "locationSearch": [location],
         "maxItems": max_items,
     }
-    if under10:
-        body["under10Applicants"] = True
+    if title_excludes:
+        body["titleExclusionSearch"] = title_excludes
+    if posted_after:
+        body["datePostedAfter"] = posted_after
+    if max_emp:
+        body["organizationEmployeesLte"] = max_emp
     r = http_json("POST", url, body=body, timeout=30)
     data = r.get("data", {})
     return (data.get("id"), data.get("defaultDatasetId"))
@@ -193,20 +225,6 @@ def normalize_li_company(url: str) -> str:
     return (url or "").rstrip("/").lower().replace("http://", "https://")
 
 
-def fmt_salary(s: object) -> str:
-    """salary = {min,max,currency,payPeriod} → '40000-55000 DKK/MONTH' or ''."""
-    if not isinstance(s, dict):
-        return ""
-    mn, mx = s.get("min"), s.get("max")
-    cur = s.get("currency") or ""
-    per = s.get("payPeriod") or ""
-    if mn is None and mx is None:
-        return (s.get("text") or "").strip()  # actor sometimes gives free-text only
-    rng = f"{mn}-{mx}" if (mn is not None and mx is not None) else str(mn if mn is not None else mx)
-    tail = f" {cur}/{per}".rstrip("/").rstrip()
-    return f"{rng}{tail}".strip()
-
-
 def clean_domain(url: str) -> str:
     """http://www.cej.dk/ → cej.dk (bare domain for the Firecrawl B6 stage)."""
     u = (url or "").strip().lower()
@@ -215,56 +233,48 @@ def clean_domain(url: str) -> str:
     return u.split("/")[0].rstrip("/")
 
 
-def loc_text(loc: object) -> str:
-    """location = {parsed:{text}, linkedinText, ...} → 'Copenhagen, Denmark'."""
-    if isinstance(loc, dict):
-        parsed = loc.get("parsed") or {}
-        return parsed.get("text") or loc.get("linkedinText") or parsed.get("city") or ""
-    return loc or ""
-
-
-def industries_text(company: dict) -> str:
-    """company.industries = [{name,...}] → 'Real Estate; Software Development'."""
-    inds = company.get("industries") or []
-    names = [i.get("name") if isinstance(i, dict) else str(i) for i in inds]
-    return "; ".join(n for n in names if n)
-
-
-def hiring_contact(job: dict) -> str:
-    """hiringTeam (when present) = the person who posted the role → 'Name <url>'."""
-    team = job.get("hiringTeam") or []
-    if team and isinstance(team[0], dict):
-        m = team[0]
-        name = (m.get("name") or "").strip()
-        url = (m.get("linkedinUrl") or "").strip()
-        if name or url:
-            return f"{name} <{url}>".strip()
-    return ""
-
-
 def flatten(job: dict) -> dict:
-    """Map one harvestapi job item → flat intake row."""
-    company = job.get("company") or {}
-    apply_method = job.get("applyMethod") or {}
-    jd = (job.get("descriptionText") or "").strip()
-    # Collapse runaway whitespace, cap for CSV sanity (full JDs are <4k chars).
-    jd = " ".join(jd.split())[:6000]
+    """Map one fantastic-jobs (Advanced LinkedIn Job Search API) item → flat row.
+
+    organization_url is the company LinkedIn URL (→ enrich handoff);
+    linkedin_org_url is the company website (→ domain, Firecrawl B6).
+    """
+    jd = " ".join((job.get("description_text") or "").split())[:6000]
+    locs = job.get("locations_derived") or []
+    cities = job.get("cities_derived") or []
+    location = ((cities[0] + ", ") if cities else "") + (locs[0] if locs else "")
+    location = location.strip().strip(",").strip() or (job.get("countries_derived") or [""])[0]
+    # salary from the ai_* fields, when present
+    smin, smax = job.get("ai_salary_minvalue"), job.get("ai_salary_maxvalue")
+    salary = ""
+    if smin or smax:
+        rng = f"{smin}-{smax}" if (smin and smax) else str(smin or smax)
+        salary = f"{rng} {job.get('ai_salary_currency') or ''}/{job.get('ai_salary_unittext') or ''}".strip().rstrip("/").strip()
+    # contact: the recruiter who posted, else the AI-extracted hiring manager
+    rec_name = (job.get("recruiter_name") or "").strip()
+    rec_url = (job.get("recruiter_url") or "").strip()
+    contact = f"{rec_name} <{rec_url}>".strip() if (rec_name or rec_url) else (job.get("ai_hiring_manager_name") or "").strip()
+    emp_type = job.get("employment_type")
+    if isinstance(emp_type, list):
+        emp_type = emp_type[0] if emp_type else ""
+    ec = job.get("linkedin_org_employees")
     return {
-        "company": company.get("name") or "",
-        "company_linkedin_url": normalize_li_company(company.get("linkedinUrl") or ""),
-        "domain": clean_domain(company.get("website") or ""),
+        "company": job.get("organization") or "",
+        "company_linkedin_url": normalize_li_company(job.get("organization_url") or ""),
+        "domain": clean_domain(job.get("linkedin_org_url") or ""),
         "role_title": job.get("title") or "",
-        "salary": fmt_salary(job.get("salary")),
-        "posted_date": job.get("postedDate") or "",
-        "location": loc_text(job.get("location")),
-        "employee_count": company.get("employeeCount") or "",
-        "industries": industries_text(company),
-        "applicants": job.get("applicants") if job.get("applicants") is not None else "",
-        "employment_type": job.get("employmentType") or "",
-        "workplace_type": job.get("workplaceType") or "",
-        "hiring_contact": hiring_contact(job),
-        "job_url": job.get("linkedinUrl") or "",
-        "apply_url": apply_method.get("companyApplyUrl") or job.get("easyApplyUrl") or "",
+        "salary": salary,
+        "posted_date": job.get("date_posted") or job.get("date_created") or "",
+        "location": location,
+        "employee_count": ec if ec is not None else "",
+        "industries": job.get("linkedin_org_industry") or "",
+        "applicants": "",
+        "employment_type": emp_type or "",
+        "workplace_type": job.get("ai_work_arrangement") or "",
+        "hiring_contact": contact,
+        "recruiter_agency": "yes" if job.get("linkedin_org_recruitment_agency_derived") else "",
+        "job_url": job.get("url") or "",
+        "apply_url": job.get("external_apply_url") or job.get("url") or "",
         "jd_text": jd,
     }
 
@@ -272,8 +282,8 @@ def flatten(job: dict) -> dict:
 POSTING_FIELDS = [
     "company", "company_linkedin_url", "domain", "role_title", "salary",
     "posted_date", "location", "employee_count", "industries", "applicants",
-    "employment_type", "workplace_type", "hiring_contact", "job_url",
-    "apply_url", "jd_text",
+    "employment_type", "workplace_type", "hiring_contact", "recruiter_agency",
+    "job_url", "apply_url", "jd_text",
 ]
 
 
@@ -282,38 +292,41 @@ def main() -> int:
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--out", required=True, help="postings CSV (one row per job)")
     ap.add_argument("--companies-out", help="deduped companies CSV, shaped for apify_enrich_brands.py")
-    ap.add_argument("--actor", default="harvestapi~linkedin-job-search")
+    ap.add_argument("--actor", default="fantastic-jobs~advanced-linkedin-job-search-api")
     ap.add_argument("--location", default="Denmark")
     ap.add_argument("--roles", nargs="+", default=DEFAULT_ROLES,
-                    help="search queries (job titles); boolean operators supported")
-    ap.add_argument("--posted-limit", default="week", choices=POSTED_LIMITS)
-    ap.add_argument("--sort-by", default="date", choices=["date", "relevance"])
-    ap.add_argument("--max-items", type=int, default=50,
-                    help="results per query (0 = all pages, up to 40 ~ 1000/query)")
-    ap.add_argument("--under10", action="store_true",
-                    help="only postings with <10 applicants (fresh, role not yet filled)")
+                    help="titleSearch terms (hunter roles) — the API actually filters by these")
+    ap.add_argument("--title-exclude", nargs="+", default=DEFAULT_TITLE_EXCLUDE,
+                    help="titleExclusionSearch terms (farming/mgmt dropped at source)")
+    ap.add_argument("--days", type=int, default=7,
+                    help="only postings newer than N days (datePostedAfter)")
+    ap.add_argument("--max-items", type=int, default=100)
     ap.add_argument("--strict", action=argparse.BooleanOptionalAction, default=True,
-                    help="keep only genuine B2B sales/SDR titles (drop engineers/retail/ops). --no-strict to disable")
+                    help="client-side safety: also drop non-hunter titles the API let through")
+    ap.add_argument("--dk", action=argparse.BooleanOptionalAction, default=True,
+                    help="client-side safety: drop any non-DK location")
     ap.add_argument("--icp", action=argparse.BooleanOptionalAction, default=True,
-                    help="ICP gate on the company: drop giants/retail. --no-icp to disable")
-    ap.add_argument("--min-employees", type=int, default=10)
+                    help="ICP gate: drop retail/building-materials + out-of-band sizes")
+    ap.add_argument("--recruiters", action=argparse.BooleanOptionalAction, default=False,
+                    help="include recruiter-agency-posted roles (default: drop them)")
+    ap.add_argument("--min-employees", type=int, default=5)
     ap.add_argument("--max-employees", type=int, default=1000,
-                    help="drop companies bigger than this (they ARE the outbound machine)")
+                    help="server-side organizationEmployeesLte + client-side gate")
     ap.add_argument("--poll-interval", type=float, default=10.0)
     ap.add_argument("--poll-timeout", type=float, default=900.0)
     ap.add_argument("--dump-raw", help="write raw dataset JSON here for debugging")
     args = ap.parse_args()
 
-    est_jobs = (args.max_items or 1000) * len(args.roles)
+    posted_after = (datetime.utcnow() - timedelta(days=args.days)).strftime("%Y-%m-%d") if args.days else ""
     print(f"actor: {args.actor}")
-    print(f"roles ({len(args.roles)}): {', '.join(args.roles)}")
-    print(f"location: {args.location} | posted: {args.posted_limit} | sort: {args.sort_by}"
-          f"{' | <10 applicants' if args.under10 else ''}")
-    print(f"max-items/query: {args.max_items} | est ceiling: ~{est_jobs} jobs (~${est_jobs/1000:.2f})")
+    print(f"titleSearch ({len(args.roles)}): {', '.join(args.roles)}")
+    print(f"titleExclude: {', '.join(args.title_exclude)}")
+    print(f"location: {args.location} | posted after: {posted_after or 'any'} | max-emp: {args.max_employees}")
+    print(f"max-items: {args.max_items} (~${args.max_items/1000:.2f})")
     print()
 
-    run_id, dataset_id = fire_actor(args.actor, args.roles, args.location,
-                                    args.posted_limit, args.sort_by, args.max_items, args.under10)
+    run_id, dataset_id = fire_actor(args.actor, args.roles, args.title_exclude, args.location,
+                                    posted_after, args.max_employees, args.max_items)
     if not run_id:
         print("ERROR: failed to start actor run")
         return 1
@@ -330,10 +343,28 @@ def main() -> int:
     rows = [flatten(j) for j in jobs]
     rows = [r for r in rows if r["company_linkedin_url"]]  # need the URL to act on it
 
-    dropped_role = dropped_icp = 0
+    dropped_role = dropped_icp = dropped_loc = dropped_rec = 0
+    if not args.recruiters:
+        kept = []
+        for r in rows:
+            if r.get("recruiter_agency") == "yes":
+                dropped_rec += 1
+                print(f"  ⊘ recruiter: {r['company'][:22].ljust(24)} ({r['role_title'][:28]})")
+            else:
+                kept.append(r)
+        rows = kept
     if args.strict:
         kept = [r for r in rows if is_sales_role(r["role_title"])]
         dropped_role = len(rows) - len(kept)
+        rows = kept
+    if args.dk:
+        kept = []
+        for r in rows:
+            if is_dk_location(r["location"]):
+                kept.append(r)
+            else:
+                dropped_loc += 1
+                print(f"  ⊘ non-DK: {r['company'][:22].ljust(24)} ({r['location'][:24]})")
         rows = kept
     if args.icp:
         kept = []
@@ -388,8 +419,12 @@ def main() -> int:
         companies_written = len(seen)
 
     print("=== SUMMARY ===")
+    if not args.recruiters:
+        print(f"  dropped (recruiter-posted):      {dropped_rec}")
     if args.strict:
-        print(f"  dropped (non-sales titles):      {dropped_role}")
+        print(f"  dropped (non-hunter titles):     {dropped_role}")
+    if args.dk:
+        print(f"  dropped (non-DK location):       {dropped_loc}")
     if args.icp:
         print(f"  dropped (wrong-ICP company):     {dropped_icp}")
     print(f"  job postings (with company URL): {len(rows)}")
