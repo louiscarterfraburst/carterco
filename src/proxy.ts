@@ -1,10 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
+import {
+  portalClient,
+  portalCookieName,
+  portalPasswordEnvVar,
+  portalHash,
+  portalSafeEqual,
+} from "./portal-auth";
 
-// Combined proxy for three unrelated jobs:
+// Combined proxy for four unrelated jobs:
 //
 // 1. Basic-auth gate on /test-leads (admin-only debug page)
 // 2. Locale auto-routing on / and /en
 // 3. Password gate on /outreach-bikenor (admin approve page for the bikenor pilot)
+// 4. Per-client password gate on /portal/<slug> (curated client overview)
 //
 // The matcher covers all path patterns; the function dispatches.
 
@@ -15,6 +23,8 @@ export const config = {
     "/test-leads/:path*",
     "/outreach-bikenor/:path*",
     "/api/outreach-bikenor/:path*",
+    "/portal/:path*",
+    "/api/portal/:path*",
   ],
 };
 
@@ -31,6 +41,13 @@ export function proxy(req: NextRequest) {
     pathname.startsWith("/api/outreach-bikenor")
   ) {
     return bikenorGate(req);
+  }
+
+  if (
+    pathname.startsWith("/portal") ||
+    pathname.startsWith("/api/portal")
+  ) {
+    return portalGate(req);
   }
 
   if (pathname.startsWith("/test-leads")) {
@@ -153,6 +170,51 @@ function bikenorGate(req: NextRequest) {
 
   const loginUrl = url.clone();
   loginUrl.pathname = "/outreach-bikenor/login";
+  loginUrl.searchParams.set("next", url.pathname + url.search);
+  return NextResponse.redirect(loginUrl);
+}
+
+// ─── /portal/<slug> per-client password gate ───────────────────────
+//
+// Curated read-only client overview. Each client has its own password in env
+// (PORTAL_PASSWORD_<SLUG>) and its own cookie (portal_<slug>), so one client's
+// link never opens another's. If a client's password is unset: prod blocks
+// (503), dev passes through. See docs/client-pipeline-view.md.
+
+function portalGate(req: NextRequest) {
+  const url = req.nextUrl;
+  const parts = url.pathname.split("/").filter(Boolean); // ["portal", slug, ...] or ["api","portal",slug,...]
+  const slug = parts[0] === "api" ? parts[2] : parts[1];
+
+  // No slug (bare /portal) or unknown client → let the route 404, nothing to gate.
+  if (!slug || !portalClient(slug)) return NextResponse.next();
+
+  const expected = process.env[portalPasswordEnvVar(slug)];
+  if (!expected) {
+    if (process.env.NODE_ENV === "production") {
+      return new NextResponse(
+        `${portalPasswordEnvVar(slug)} not set in this environment`,
+        { status: 503 },
+      );
+    }
+    return NextResponse.next();
+  }
+
+  const loginPath = `/portal/${slug}/login`;
+
+  // Let the login POST (and the login page itself) through unauthenticated.
+  if (url.pathname === loginPath) return NextResponse.next();
+  if (url.pathname === `/api/portal/${slug}/login` && req.method === "POST") {
+    return NextResponse.next();
+  }
+
+  const cookie = req.cookies.get(portalCookieName(slug))?.value;
+  if (cookie && portalSafeEqual(cookie, portalHash(expected))) {
+    return NextResponse.next();
+  }
+
+  const loginUrl = url.clone();
+  loginUrl.pathname = loginPath;
   loginUrl.searchParams.set("next", url.pathname + url.search);
   return NextResponse.redirect(loginUrl);
 }
