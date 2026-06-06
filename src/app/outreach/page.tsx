@@ -1735,6 +1735,12 @@ function FlowTab({ rows, sequences, replies, armStats }: {
 }) {
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
   const [openContact, setOpenContact] = useState<string | null>(null);
+  const detailRef = useRef<HTMLDivElement | null>(null);
+  // Scroll the contacts panel into view on node click — it sits below a tall
+  // canvas, so otherwise the click appears to do nothing.
+  useEffect(() => {
+    if (selectedNode) detailRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [selectedNode]);
 
   const { counts, byNode } = useMemo(() => {
     const counts = new Map<string, number>();
@@ -1916,9 +1922,12 @@ function FlowTab({ rows, sequences, replies, armStats }: {
       </div>
 
       {selectedNode ? (
-        <div className="mt-6 rounded-lg border border-[var(--ink)]/12 bg-[var(--cream)] p-5">
+        <div ref={detailRef} className="mt-6 scroll-mt-20 rounded-lg border border-[var(--ink)]/12 bg-[var(--cream)] p-5">
           <div className="flex items-baseline justify-between gap-4">
-            <h3 className="font-display text-2xl italic text-[var(--ink)]">{selectedLabel}</h3>
+            <div>
+              <h3 className="font-display text-2xl italic text-[var(--ink)]">{selectedLabel}</h3>
+              <span className="tabular text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/40">Kontakter i node</span>
+            </div>
             <span className="tabular text-[11px] uppercase tracking-[0.22em] text-[var(--ink)]/45">{selectedRows.length} kontakter her</span>
           </div>
 
