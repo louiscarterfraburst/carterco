@@ -1580,13 +1580,13 @@ function Header({ pushStatus, onEnablePush, onReload, onSignOut, workspaces, act
           {gmailConnected ? (
             <span className="tabular rounded-sm border border-[var(--forest)]/30 bg-[var(--forest)]/10 px-3 py-1.5 text-[10px] uppercase tracking-[0.22em] text-[var(--forest)]"
               title="Email-svar fra prospekter pulles ind i Svar-fanen automatisk">
-              📧 Gmail ✓
+<IconMail className="mr-1.5" />Gmail ✓
             </span>
           ) : (
             <a href="/api/auth/gmail/start"
               className="focus-cream tabular rounded-sm border border-[var(--clay)]/30 bg-[var(--clay)]/10 px-3 py-1.5 text-[10px] uppercase tracking-[0.22em] text-[var(--clay)] hover:bg-[var(--clay)]/20"
               title="Forbind Gmail så email-svar fra prospekter pulles automatisk ind i Svar-fanen">
-              📧 Forbind Gmail
+<IconMail className="mr-1.5" />Forbind Gmail
             </a>
           )}
           <button type="button" onClick={() => void onReload()}
@@ -2519,6 +2519,31 @@ const NAV_GROUP_ORDER = ["Gør nu", "Kontakter", "Indsigt"];
 // strip (staged → invited → accepted → video → reply) + the staged leads.
 // "staged" comes from outreach_leads (pre-invite); the rest from pipeline rows
 // tagged play='hiring_signal'. Phase 3 will generalise this to a play selector.
+// Inline stroke icons. fill=none + stroke=currentColor means each icon inherits
+// the button's text color (clay/forest/ink). These replace the emoji that used
+// to prefix action buttons — DESIGN.md forbids emoji as design elements.
+function IconMail({ className = "" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden className={`inline-block align-[-1px] ${className}`}>
+      <rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3.5 7 8.5 6 8.5-6" />
+    </svg>
+  );
+}
+function IconPhone({ className = "" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden className={`inline-block align-[-1px] ${className}`}>
+      <path d="M5 4h3.5l1.8 4.5-2.3 1.6a11 11 0 0 0 5.1 5.1l1.6-2.3 4.5 1.8V19a2 2 0 0 1-2.2 2A16 16 0 0 1 3 6.2 2 2 0 0 1 5 4Z" />
+    </svg>
+  );
+}
+function IconPen({ className = "" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden className={`inline-block align-[-1px] ${className}`}>
+      <path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+    </svg>
+  );
+}
+
 // Per-lead stage, derived by matching the staged lead to its pipeline row
 // (if invited yet). Drives the row status pill.
 function hiringLeadStage(l: StagedLead, pipe: PipelineRow[]): string {
@@ -3153,9 +3178,9 @@ function IDagTab({ queue, onJumpTo, onCallOutcome, onDraftEmail, onMarkEmailSent
               {row.intent ? <span>· intent: {row.intent}</span> : null}
               <span>· score {row.priority_score}</span>
               {row.phone_direct ? (
-                <span className="text-[var(--clay)]">· 📞 {formatPhone(row.phone_direct)}</span>
+                <span className="text-[var(--clay)]">· <IconPhone className="mx-0.5" />{formatPhone(row.phone_direct)}</span>
               ) : row.phone_office ? (
-                <span className="text-[var(--ink)]/35">· 📞 kontor {formatPhone(row.phone_office)}</span>
+                <span className="text-[var(--ink)]/35">· <IconPhone className="mx-0.5" />kontor {formatPhone(row.phone_office)}</span>
               ) : null}
             </div>
           </div>
@@ -3170,7 +3195,7 @@ function IDagTab({ queue, onJumpTo, onCallOutcome, onDraftEmail, onMarkEmailSent
                   href={`tel:${row.phone_direct || row.phone_office}`}
                   className="rounded border border-[var(--clay)]/40 bg-[var(--clay)]/10 px-3 py-1.5 text-center text-[11px] uppercase tracking-[0.22em] text-[var(--clay)] hover:bg-[var(--clay)]/20"
                 >
-                  📞 Ring
+<IconPhone className="mr-1.5" />Ring
                 </a>
                 <CallOutcomeBar
                   leadId={row.ref_lead_id}
@@ -3194,10 +3219,10 @@ function IDagTab({ queue, onJumpTo, onCallOutcome, onDraftEmail, onMarkEmailSent
   );
 }
 
-// EmailActionBar — two states. needs_draft shows a "✨ Skriv" button that
+// EmailActionBar — two states. needs_draft shows a "Skriv email" button that
 // calls outreach-ai draft_email → fetches subject/body/strategy → opens
-// mailto: with body pre-filled. draft_ready shows subject + a "📧 Åbn"
-// button (re-opens the same mailto) + "✓ Sendt" to stamp sent_at.
+// mailto: with body pre-filled. draft_ready shows subject + an "Åbn i mail"
+// button (re-opens the same mailto) + "Markér sendt" to stamp sent_at.
 function EmailActionBar({ row, onDraft, onSent }: {
   row: ActionQueueRow;
   onDraft: (leadId: string) => Promise<EmailDraft | null>;
@@ -3234,14 +3259,14 @@ function EmailActionBar({ row, onDraft, onSent }: {
     return (
       <>
         <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--forest)]/70">
-          ✨ {draft.strategy} · {draft.language}
+          {draft.strategy} · {draft.language}
         </div>
         <button
           type="button"
           onClick={openMailto}
           className="rounded border border-[var(--forest)]/40 bg-[var(--forest)]/10 px-3 py-1.5 text-center text-[11px] uppercase tracking-[0.22em] text-[var(--forest)] hover:bg-[var(--forest)]/20"
         >
-          📧 Åbn i mail
+<IconMail className="mr-1.5" />Åbn i mail
         </button>
         <button
           type="button"
@@ -3261,7 +3286,7 @@ function EmailActionBar({ row, onDraft, onSent }: {
       disabled={busy}
       className="rounded border border-[var(--forest)]/40 bg-[var(--forest)]/10 px-3 py-1.5 text-center text-[11px] uppercase tracking-[0.22em] text-[var(--forest)] hover:bg-[var(--forest)]/20 disabled:opacity-60"
     >
-      {busy ? "✨ Skriver…" : "✨ Skriv email"}
+      {busy ? <><IconPen className="mr-1.5" />Skriver…</> : <><IconPen className="mr-1.5" />Skriv email</>}
     </button>
   );
 }
@@ -4270,7 +4295,7 @@ function SuggestedReply({ replyId, text, onSend }: {
   return (
     <div className="mt-2 rounded-sm border border-dashed border-[var(--forest)]/30 bg-[var(--forest)]/[0.04] p-3 text-left">
       <div className="tabular flex items-center justify-between gap-2 text-[10px] uppercase tracking-[0.22em] text-[var(--forest)]">
-        <span>{hasSuggestion ? "✦ Foreslået svar" : "Svar direkte"}</span>
+        <span>{hasSuggestion ? "Foreslået svar" : "Svar direkte"}</span>
         <div className="flex gap-1">
           {!editing ? (
             <button type="button" onClick={() => setEditing(true)}
