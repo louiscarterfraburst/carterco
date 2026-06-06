@@ -196,8 +196,20 @@ The cockpit now models `play` as a second scoping axis, orthogonal to workspace
 - **Phase 2b (TODO):** make sequence resolution play-aware and add
   `hiring_signal_v1` (cadence steps 3–6). Until then, hiring leads ride the
   existing video-loop sequences — fine as an interim (the video IS step 2).
-- **Phase 3 (TODO):** play selector in the UI (parallel to the workspace
-  dropdown), scoping Kontakter / Gør nu / Performance.
+- **Phase 3 (partial — lean overview LIVE):** a **Plays** tab in `/outreach`
+  (Indsigt group) showing the hiring-signal funnel (Virksomheder / Staged /
+  Inviteret / Accepteret / Video / Svar) + the staged-lead list. `staged` reads
+  `outreach_leads` (pre-invite); the rest from pipeline rows tagged
+  `play=hiring_signal`. The full play *selector* scoping every view (Kontakter /
+  Gør nu / Performance) is still TODO.
+
+### Operating model (decided 2026-06-06)
+
+- **Scraping is MANUAL, not a cron** — by design until the play proves out.
+  Don't automate a daily scrape for an unproven 4-lead test; cron it once the
+  angle bites. (The daily cron you may recall belongs to the *separate* `/hiring`
+  company-watch tool — `track-job-postings` — not this play.)
+- **Overview = the Plays tab** above.
 
 ## 10. Next steps
 

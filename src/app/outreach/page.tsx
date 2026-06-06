@@ -125,6 +125,7 @@ type PipelineRow = {
   contact_email: string;
   is_cold: boolean | null;
   status: Status;
+  play: string | null;
   video_link: string | null;
   embed_link: string | null;
   thumbnail_url: string | null;
@@ -267,7 +268,18 @@ type Signal = {
   alt_search_status: "pending" | "completed" | "empty" | "failed" | null;
 };
 
-type Tab = "i_dag" | "opgaver" | "signaler" | "inbox" | "replies" | "sent" | "all" | "icp_rejected" | "icp" | "flow" | "kontakter" | "besog";
+type Tab = "i_dag" | "opgaver" | "signaler" | "inbox" | "replies" | "sent" | "all" | "icp_rejected" | "icp" | "flow" | "kontakter" | "besog" | "plays";
+
+// A play-tagged lead staged in outreach_leads, before any invite has fired
+// (so it isn't in outreach_pipeline yet). Powers the Plays overview funnel.
+type StagedLead = {
+  linkedin_url: string;
+  first_name: string | null;
+  last_name: string | null;
+  company: string | null;
+  title: string | null;
+  play: string;
+};
 
 // Returned by outreach-ai draft_email — what the EmailActionBar uses to open mailto.
 type EmailDraft = {
@@ -457,6 +469,7 @@ export default function OutreachPage() {
 
   const [tab, setTab] = useState<Tab>("i_dag");
   const [sequences, setSequences] = useState<SeqLite[]>([]);
+  const [stagedHiring, setStagedHiring] = useState<StagedLead[]>([]);
   const [armStats, setArmStats] = useState<ArmStat[]>([]);
   const [sentEmails, setSentEmails] = useState<EmailRow[]>([]);
   const [engagementActions, setEngagementActions] = useState<ActionRow[]>([]);
@@ -538,6 +551,15 @@ export default function OutreachPage() {
       .in("contact_email", emails.length ? emails : [""]);
     const leadMap = new Map((leads ?? []).map((l) => [l.contact_email, l as LeadEnrich]));
     setRows(((pipe ?? []) as PipelineRow[]).map((r) => ({ ...r, lead: leadMap.get(r.contact_email) })));
+
+    // Play-tagged leads staged in outreach_leads but not yet invited (no
+    // pipeline row). Drives the Plays overview "staged" count.
+    const { data: stagedLeads } = await supabase
+      .from("outreach_leads")
+      .select("linkedin_url, first_name, last_name, company, title, play")
+      .eq("workspace_id", activeWorkspaceId)
+      .neq("play", "video_loop");
+    setStagedHiring((stagedLeads ?? []) as StagedLead[]);
 
     const { data: replyRows } = await supabase
       .from("outreach_replies")
@@ -1365,6 +1387,7 @@ export default function OutreachPage() {
     flow: stats.total,
     kontakter: stats.total,
     besog: unmatchedSignals.length,
+    plays: stagedHiring.length + rows.filter((r) => r.play && r.play !== "video_loop").length,
   };
 
   return (
@@ -1503,6 +1526,8 @@ export default function OutreachPage() {
             onSearchPeople={(id) => void searchSignalPeople(id)}
             onDismiss={(ids) => void markSignalsHandled(ids)}
           />
+        ) : tab === "plays" ? (
+          <PlaysOverview staged={stagedHiring} rows={rows} />
         ) : (
           <AllTab rows={allRecent} />
         )}
@@ -2480,9 +2505,72 @@ function Sparkline({ data }: { data: { day: string; count: number }[] }) {
 type NavCounts = {
   i_dag: number; opgaver: number; signaler: number; inbox: number; replies: number; sent: number; all: number;
   icp_rejected: number; icp_open_proposals: number; flow: number; kontakter: number; besog: number;
+  plays: number;
 };
 type NavItem = { id: Tab; label: string; count: number; accent?: boolean; icpOnly?: boolean; group: string };
 const NAV_GROUP_ORDER = ["Gør nu", "Kontakter", "Indsigt"];
+
+// Lean per-play overview. Today scoped to the hiring-signal play: a funnel
+// strip (staged → invited → accepted → video → reply) + the staged leads.
+// "staged" comes from outreach_leads (pre-invite); the rest from pipeline rows
+// tagged play='hiring_signal'. Phase 3 will generalise this to a play selector.
+function PlaysOverview({ staged, rows }: { staged: StagedLead[]; rows: PipelineRow[] }) {
+  const hiring = staged.filter((l) => l.play === "hiring_signal");
+  const pipe = rows.filter((r) => r.play === "hiring_signal");
+  const funnel: [string, number][] = [
+    ["Virksomheder", new Set(hiring.map((l) => l.company || l.linkedin_url)).size],
+    ["Staged", hiring.length],
+    ["Inviteret", pipe.filter((r) => r.invited_at).length],
+    ["Accepteret", pipe.filter((r) => r.accepted_at).length],
+    ["Video sendt", pipe.filter((r) => r.sent_at).length],
+    ["Svar", pipe.filter((r) => r.last_reply_at).length],
+  ];
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="font-display text-3xl italic leading-tight tracking-[-0.01em] text-[var(--ink)]">Hiring-signal</h2>
+        <p className="mt-1 max-w-xl text-sm text-[var(--ink)]/60">
+          DK-virksomheder der lige har slået en salgsrolle op → deres beslutningstager,
+          staged til outreach. Upload SendPilot-CSV&apos;en for at sende invitationer.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+        {funnel.map(([label, n]) => (
+          <div key={label} className="rounded-md border border-[var(--ink)]/10 bg-[var(--sand)]/40 p-3">
+            <div className="font-display text-2xl italic leading-none text-[var(--ink)]">{n}</div>
+            <div className="tabular mt-1 text-[10px] uppercase tracking-[0.14em] text-[var(--ink)]/50">{label}</div>
+          </div>
+        ))}
+      </div>
+
+      {hiring.length === 0 ? (
+        <p className="text-sm text-[var(--ink)]/50">
+          Ingen hiring-leads endnu. Kør intake + bridge:
+          <code className="ml-1 text-[var(--clay)]">apify_hiring_intake → apify_enrich_brands → hiring_to_outreach_leads</code>.
+        </p>
+      ) : (
+        <ul className="divide-y divide-[var(--ink)]/10 border-t border-[var(--ink)]/10">
+          {hiring.map((l) => (
+            <li key={l.linkedin_url} className="flex items-baseline justify-between gap-3 py-2.5">
+              <div className="min-w-0">
+                <div className="font-display text-lg italic leading-tight text-[var(--ink)]">
+                  {[l.first_name, l.last_name].filter(Boolean).join(" ") || "—"}
+                </div>
+                <div className="tabular truncate text-[11px] text-[var(--ink)]/50">{l.title || "—"}</div>
+              </div>
+              <div className="shrink-0 text-right">
+                <div className="text-sm text-[var(--ink)]">{l.company || "—"}</div>
+                <a href={l.linkedin_url} target="_blank" rel="noreferrer"
+                  className="tabular text-[11px] text-[var(--clay)] hover:underline">LinkedIn ↗</a>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
 
 function buildNavItems(counts: NavCounts, showIcpTabs: boolean): NavItem[] {
   const all: NavItem[] = [
@@ -2495,6 +2583,7 @@ function buildNavItems(counts: NavCounts, showIcpTabs: boolean): NavItem[] {
     { id: "besog", label: "Besøg", count: counts.besog, accent: counts.besog > 0, group: "Gør nu" },
     // Sendt / Alle / ICP-afvist folded into Kontakter as filter chips.
     { id: "kontakter", label: "Kontakter", count: counts.kontakter, group: "Kontakter" },
+    { id: "plays", label: "Plays", count: counts.plays, accent: counts.plays > 0, group: "Indsigt" },
     { id: "flow", label: "Flow", count: counts.flow, group: "Indsigt" },
     { id: "icp", label: "Læring", count: counts.icp_open_proposals, accent: counts.icp_open_proposals > 0, icpOnly: true, group: "Indsigt" },
   ];
