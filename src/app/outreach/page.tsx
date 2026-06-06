@@ -2326,19 +2326,24 @@ function KontakterTab({ rows, replies, emails, actions, signals, sequences, onSe
             return (
               <button key={row.sendpilot_lead_id} type="button"
                 onClick={() => setSelectedId(row.sendpilot_lead_id)}
-                className={`flex w-full flex-col gap-0.5 px-3 py-2 text-left transition ${active ? "bg-[var(--sand)]/60" : "hover:bg-[var(--sand)]/30"}`}>
-                <div className="flex items-baseline justify-between gap-2">
-                  <span className="truncate text-[14px] text-[var(--ink)]">
-                    {warm ? "🔥 " : ""}{name}
+                className={`flex w-full items-center gap-2.5 px-3 py-2 text-left transition ${active ? "bg-[var(--sand)]/60" : "hover:bg-[var(--sand)]/30"}`}>
+                {/* Initial avatar; clay ring = warm (just revisited the site), replacing the
+                    off-brand 🔥 emoji prefix (DESIGN.md forbids emoji as design). */}
+                <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border bg-[var(--cream)] font-display text-[13px] italic leading-none text-[var(--ink)] ${warm ? "border-[var(--clay)]" : "border-[var(--ink)]/15"}`}>
+                  {name.trim().charAt(0).toUpperCase() || "?"}
+                </span>
+                <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <span className="flex items-baseline justify-between gap-2">
+                    <span className="truncate text-[14px] text-[var(--ink)]">{name}</span>
+                    {warm ? <span className="shrink-0 text-[10px] text-[var(--clay)]">besøg</span>
+                      : forgotten ? <span className="shrink-0 text-[10px] text-[var(--clay)]">● glemt?</span>
+                      : nextAt ? <span className="tabular shrink-0 text-[10px] text-[var(--ink)]/40">{fmtWhen(nextAt)}</span> : null}
                   </span>
-                  {warm ? <span className="shrink-0 text-[10px] text-[var(--clay)]">besøg</span>
-                    : forgotten ? <span className="shrink-0 text-[10px] text-[var(--clay)]">● glemt?</span>
-                    : nextAt ? <span className="tabular shrink-0 text-[10px] text-[var(--ink)]/40">{fmtWhen(nextAt)}</span> : null}
-                </div>
-                <div className="flex items-center gap-2">
-                  <StatusBadge status={row.status} intent={row.last_reply_intent} />
-                  <span className="truncate text-[11px] text-[var(--ink)]/45">{row.lead?.company ?? ""}</span>
-                </div>
+                  <span className="flex items-center gap-2">
+                    <StatusBadge status={row.status} intent={row.last_reply_intent} />
+                    <span className="truncate text-[11px] text-[var(--ink)]/45">{row.lead?.company ?? ""}</span>
+                  </span>
+                </span>
               </button>
             );
           })}
@@ -2405,7 +2410,7 @@ function BesogTab({ signals, busyLead, onSearchPeople, onDismiss }: {
             <div className="flex items-baseline justify-between gap-3">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-baseline gap-2">
-                  <span className="truncate text-[15px] text-[var(--ink)]">🔥 {name}</span>
+                  <span className="truncate text-[15px] text-[var(--ink)]">{name}</span>
                   <span className={`tabular shrink-0 rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] ${STATUS_TONE_CLASS[fit.tone]}`}>
                     {fit.label}{s.icp_score != null ? ` · ${s.icp_score}` : ""}
                   </span>
@@ -3644,7 +3649,7 @@ function SignalerTab({ signals, busyLead, identity, leadMatches, altContacts, on
                 ) : null}
                 <div className="tabular mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-[var(--ink)]/55">
                   <span className={isHot ? "font-medium text-[var(--clay)]" : ""}>
-                    {isHot ? "🔥 " : ""}{g.velocityLabel}
+                    {g.velocityLabel}
                   </span>
                   {metaParts.length ? <span className="text-[var(--ink)]/30">·</span> : null}
                   {metaParts.map((p, i) => (
