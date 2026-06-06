@@ -65,6 +65,17 @@ The frankenstein feeling comes from action-surfaces (I dag / Opgaver / Indbakke 
 Svar / Signaler) having accreted as separate tabs when they're one job. Merging
 them is most of the cleanup.
 
+### Play axis — a second scoping dimension (added 2026-06-06)
+
+`/outreach` now runs several outbound **plays** concurrently within a workspace
+(video-loop, hiring-signal, …) — orthogonal to workspace. The axis is live
+(`outreach_pipeline.play`, `outreach_plays` registry; see
+`docs/hiring-signal-play.md` §9). It folds into this IA as a **filter, not new
+tabs** — a play selector parallel to the workspace dropdown, scoping Gør nu /
+Kontakter / Performance, with the timeline tagging each contact's play. That's
+**Phase 3** of the multi-play build (Phases 1 + 2a — schema + intake→pipeline
+bridge — are already live).
+
 ## Phasing (ship value fast, don't disappear for 2 weeks)
 
 1. **Phase 1 — contact timeline primitive.** Build the timeline panel (thread +

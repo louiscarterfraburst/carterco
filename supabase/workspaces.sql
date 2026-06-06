@@ -139,22 +139,28 @@ set search_path = public
 as $$
 declare
     ws_id uuid;
+    lead_play text;
 begin
-    select workspace_id into ws_id
+    -- play rides alongside workspace_id (see 20260606_play_on_leads.sql).
+    select workspace_id, play into ws_id, lead_play
     from public.outreach_leads
     where contact_email = coalesce(nullif(_contact_email, ''), contact_email)
        or sendpilot_lead_id = _lead_id
     limit 1;
 
     insert into public.outreach_pipeline
-        (sendpilot_lead_id, linkedin_url, contact_email, status, invited_at, workspace_id)
+        (sendpilot_lead_id, linkedin_url, contact_email, status, invited_at, workspace_id, play)
     values
-        (_lead_id, _linkedin_url, coalesce(_contact_email, ''), 'invited', _invited_at, ws_id)
+        (_lead_id, _linkedin_url, coalesce(_contact_email, ''), 'invited', _invited_at,
+         ws_id, coalesce(lead_play, 'video_loop'))
     on conflict (sendpilot_lead_id) do update set
         invited_at    = coalesce(public.outreach_pipeline.invited_at, excluded.invited_at),
         linkedin_url  = excluded.linkedin_url,
         contact_email = case when public.outreach_pipeline.contact_email = ''
                               then excluded.contact_email
                               else public.outreach_pipeline.contact_email end,
-        workspace_id  = coalesce(public.outreach_pipeline.workspace_id, excluded.workspace_id);
+        workspace_id  = coalesce(public.outreach_pipeline.workspace_id, excluded.workspace_id),
+        play          = case when public.outreach_pipeline.play = 'video_loop'
+                              then excluded.play
+                              else public.outreach_pipeline.play end;
 end $$;
