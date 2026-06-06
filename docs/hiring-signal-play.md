@@ -41,36 +41,40 @@ the Jina/`find_linkedin_companies` bridge is skipped. Bonus fields captured:
 `domain` (feeds Firecrawl B6), `hiring_contact` (the poster, when LinkedIn
 exposes them).
 
-### Two filters do the real work — the actor's keyword search is junk
+### The source filters server-side (fixed 2026-06-06)
 
-The actor barely applies the search term (querying "salgskonsulent" returns
-chefs, juicers, a bricklayer). So **precision is entirely client-side**, two gates:
+**History:** the original actor (`harvestapi/linkedin-job-search`) ignored the
+keyword — querying "salgskonsulent" returned chefs, juicers, a bricklayer — so we
+sampled a diluted feed blind and concluded "~1-2 DK SDRs/week." That was the tool,
+not the market.
 
-1. **Role gate** (`is_sales_role`) — keep only genuine B2B sales/SDR/BDR/biz-dev
-   titles; drop engineers, ops, retail floor staff.
-2. **ICP gate** (`is_icp_company`) — drop the giants (>1000 emp — Salesforce,
-   Vattenfall, STARK; they *are* the outbound machine) and retail industries.
-   Tunable via `--max-employees` / `--min-employees`.
+Now on `fantastic-jobs/advanced-linkedin-job-search-api`, which **filters at the
+source**: `titleSearch` + `titleExclusionSearch` (hunters in, farming/mgmt out),
+`organizationEmployeesLte` (ICP size), `datePostedAfter` (recency), `locationSearch`
+(DK). It returns `organization_url` (company LinkedIn → enrich handoff),
+`linkedin_org_url` (domain), and `linkedin_org_recruitment_agency_derived` (drop
+recruiter-posted roles). Decided via `/plan-eng-review`: boring/reliable job API
+over a fragile scraper.
 
-### Operating mode — run DAILY, not weekly
+Client-side gates (`is_sales_role` / `is_dk_location` / `is_icp_company`) are kept
+as **belt-and-suspenders** — they now drop ≈0 because the API does the work.
 
-`maxItems` is a *total* run cap (~40 pages), and the DK feed is large + diluted,
-so a single weekly `--posted-limit week` pull only *samples* the week. Run it
-**daily with `--posted-limit 24h`** — fresher signal, less dilution, and you
-reach the buyer the day they post. Accumulate across the week.
+### Operating mode
 
 ```bash
 set -a; source .env.local; set +a
 python3 scripts/lead-enrichment/apify_hiring_intake.py \
   --out clients/carterco/data/hiring_intake_dk.csv \
   --companies-out clients/carterco/data/hiring_companies_dk.csv \
-  --roles "SDR" "sælger" "salgskonsulent" "business development" "account executive" "kundeansvarlig" \
-  --max-items 300 --posted-limit 24h
+  --days 7 --max-items 100
 ```
 
-**Realistic yield:** ~5–15 clean DK ICP targets/week at current thresholds. A
-trickle, but a *high-intent* trickle for a hands-on operation. Lever to widen:
-add Nordic geos (Apollo covers SE/NO/FI) or loosen `--max-employees`.
+`--days` sets the recency window; default roles are the hunter set. Run daily with
+`--days 1` to reach buyers the day they post, or weekly to sweep.
+
+**Real yield:** clean B2B SDR roles do exist — a single 7-day DK pull surfaced
+Sprii (3 open SDR), SecTeer, Quooker, Elis. Lever to widen: add Nordic geos
+(`--location Sweden` etc.; Apollo covers SE/NO/FI).
 
 ## 4. Office-hours pressure-test (read before scaling)
 
