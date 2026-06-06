@@ -1387,7 +1387,7 @@ export default function OutreachPage() {
     flow: stats.total,
     kontakter: stats.total,
     besog: unmatchedSignals.length,
-    plays: stagedHiring.length + rows.filter((r) => r.play && r.play !== "video_loop").length,
+    plays: stagedHiring.length,
   };
 
   return (
@@ -2547,7 +2547,11 @@ function IconPen({ className = "" }: { className?: string }) {
 // Per-lead stage, derived by matching the staged lead to its pipeline row
 // (if invited yet). Drives the row status pill.
 function hiringLeadStage(l: StagedLead, pipe: PipelineRow[]): string {
-  const r = pipe.find((p) => p.linkedin_url === l.linkedin_url);
+  // outreach_leads keeps the raw Apify URL; the pipeline row's URL comes from
+  // SendPilot — normalise both before matching (same reason normLi exists).
+  const norm = (u: string | null) => (u ?? "").replace(/\/+$/, "").split("?")[0].toLowerCase();
+  const key = norm(l.linkedin_url);
+  const r = pipe.find((p) => norm(p.linkedin_url) === key);
   if (!r) return "Staged";
   if (r.last_reply_at) return "Svar";
   if (r.sent_at) return "Video";
@@ -3286,7 +3290,7 @@ function EmailActionBar({ row, onDraft, onSent }: {
       disabled={busy}
       className="rounded border border-[var(--forest)]/40 bg-[var(--forest)]/10 px-3 py-1.5 text-center text-[11px] uppercase tracking-[0.22em] text-[var(--forest)] hover:bg-[var(--forest)]/20 disabled:opacity-60"
     >
-      {busy ? <><IconPen className="mr-1.5" />Skriver…</> : <><IconPen className="mr-1.5" />Skriv email</>}
+      <IconPen className="mr-1.5" />{busy ? "Skriver…" : "Skriv email"}
     </button>
   );
 }
