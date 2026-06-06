@@ -75,14 +75,17 @@ const KNOWN_REPLY_INTENTS = new Set(["interested", "question", "referral", "ooo"
 // Most-advanced-first. Returns the single id (tree node OR outcome) a contact
 // currently sits in.
 export function classifyNode(r: FlowRow): string {
-  if (r.status === "rejected") return "rejected";
-  if (r.status === "rejected_by_icp") return "rejected_by_icp";
-  if (r.status === "failed") return "failed";
-  if (r.sequence_completed_at) return "sequence_completed";
+  // A reply outranks everything: if they engaged, that's where they are — even
+  // if the send was flagged "failed" (a 500 can be a false failure that still
+  // delivered, e.g. they replied to it).
   if (r.last_reply_at) {
     const intent = r.last_reply_intent ?? "other";
     return KNOWN_REPLY_INTENTS.has(intent) ? `reply:${intent}` : "reply:other";
   }
+  if (r.status === "rejected") return "rejected";
+  if (r.status === "rejected_by_icp") return "rejected_by_icp";
+  if (r.status === "failed") return "failed";
+  if (r.sequence_completed_at) return "sequence_completed";
   if (r.sequence_id && r.sequence_step != null) return `seq:${r.sequence_id}:${r.sequence_step}`;
   // An assigned A/B arm (immutable at accept) owns the lead through its whole
   // pre-follow-up life — sent AND pre-send (V3 mid-render etc.) — so arm leads

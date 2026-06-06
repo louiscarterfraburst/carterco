@@ -1957,7 +1957,7 @@ function FlowTab({ rows, sequences, replies, armStats, busyLead, onRetry }: {
                   {r.error ? (
                     <div className="-mt-1 flex items-center gap-2 pb-1">
                       <p className="text-[11px] text-[var(--clay)]">⚠ {r.error}</p>
-                      {r.status === "failed" ? (
+                      {r.status === "failed" && !r.last_reply_at ? (
                         <button type="button" disabled={busyLead === r.sendpilot_lead_id}
                           onClick={() => onRetry(r.sendpilot_lead_id)}
                           className="tabular shrink-0 rounded-full border border-[var(--forest)]/40 px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] text-[var(--forest)] transition hover:border-[var(--forest)]/60 disabled:opacity-50">

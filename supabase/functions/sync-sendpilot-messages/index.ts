@@ -133,11 +133,18 @@ Deno.serve(async (req) => {
   let query = supabase
     .from("outreach_pipeline")
     .select("sendpilot_lead_id, workspace_id, contact_email, linkedin_url, sendpilot_sender_id, sent_at, last_reply_at")
-    .or("sent_at.not.is.null,last_reply_at.not.is.null")
     .not("sendpilot_sender_id", "is", null)
     .not("linkedin_url", "is", null)
     .limit(limit);
-  if (body.leadIds?.length) query = query.in("sendpilot_lead_id", body.leadIds);
+  // Explicit leadIds = caller wants THESE checked regardless of state — needed
+  // to catch false-failures (HTTP 500 that actually delivered, e.g. the lead
+  // replied) where both sent_at and last_reply_at are null and the lead would
+  // otherwise never be synced. Regular runs keep the sent/replied filter.
+  if (body.leadIds?.length) {
+    query = query.in("sendpilot_lead_id", body.leadIds);
+  } else {
+    query = query.or("sent_at.not.is.null,last_reply_at.not.is.null");
+  }
 
   const { data: rows, error: rowsErr } = await query;
   if (rowsErr) return json({ error: rowsErr.message }, 500);
