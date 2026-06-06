@@ -13,6 +13,10 @@
 # testing
 /coverage
 
+# Meta ads — local state manifests (may contain entity ids)
+.meta-upload-manifest.json
+.meta-setup-manifest-*.json
+
 # next.js
 /.next/
 /out/
