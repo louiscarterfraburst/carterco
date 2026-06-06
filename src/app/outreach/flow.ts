@@ -195,20 +195,31 @@ export function buildTreeNodes(sequences: SeqLite[], rows: FlowRow[], armStats: 
     sublabel: "AI-personaliseret 1. DM",
   });
 
-  // Sequence nodes (col 5), grouped under their arm via match_first_dm_variant.
+  // Sequence chains below "Sendt": each sequence is its OWN vertical lane and
+  // its steps chain straight down (col 5 + stepIndex), so follow-ups never run
+  // horizontally. Each sequence gets a lane; steps stack beneath it.
   const seen = new Set<string>();
-  for (const seq of sequences) {
-    seq.steps?.forEach((step, idx) => {
+  const laneOf = new Map<string, number>();
+  const defs = sequences.filter((s) => s.steps?.length);
+  defs.forEach((seq, i) => laneOf.set(seq.id, i));
+  for (const r of rows) {
+    if (r.sequence_id && !laneOf.has(r.sequence_id)) laneOf.set(r.sequence_id, laneOf.size);
+  }
+  const center = (laneOf.size - 1) / 2;
+
+  for (const seq of defs) {
+    const lane = (laneOf.get(seq.id) ?? 0) - center;
+    seq.steps.forEach((step, idx) => {
       const id = `seq:${seq.id}:${idx}`;
       seen.add(id);
       nodes.push({
         id,
         label: step.id || `trin ${idx}`,
-        col: 5,
+        col: 5 + idx,
         tone: "active",
         kind: "sequence",
         sublabel: seq.id,
-        arm: seq.match_first_dm_variant ?? undefined,
+        lane,
       });
     });
   }
@@ -218,7 +229,15 @@ export function buildTreeNodes(sequences: SeqLite[], rows: FlowRow[], armStats: 
       const id = `seq:${r.sequence_id}:${r.sequence_step}`;
       if (!seen.has(id)) {
         seen.add(id);
-        nodes.push({ id, label: `trin ${r.sequence_step}`, col: 5, tone: "active", kind: "sequence", sublabel: r.sequence_id });
+        nodes.push({
+          id,
+          label: `trin ${r.sequence_step}`,
+          col: 5 + r.sequence_step,
+          tone: "active",
+          kind: "sequence",
+          sublabel: r.sequence_id,
+          lane: (laneOf.get(r.sequence_id) ?? 0) - center,
+        });
       }
     }
   }
