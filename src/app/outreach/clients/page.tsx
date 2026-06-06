@@ -185,6 +185,12 @@ export default function ClientsOverviewPage() {
           du redigerer — fil-stier og DB-tabeller står på hvert kort, så du
           rammer det rigtige flow første gang.
         </p>
+        <Link
+          href="/outreach/overview"
+          className="mt-3 inline-block rounded-full border border-[var(--ink)]/15 px-3 py-1 text-[12px] text-[var(--ink)]/70 transition hover:border-[var(--ink)]/35"
+        >
+          → Skal ses på (på tværs af klienter)
+        </Link>
       </header>
 
       {sequencesError ? (
