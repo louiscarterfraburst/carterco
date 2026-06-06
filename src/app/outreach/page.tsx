@@ -176,6 +176,10 @@ type PipelineRow = {
   // Tresyv 3-arm A/B. v1_long / v2_short are text-only (no SendSpark render),
   // v3_video uses the existing video flow. Null for non-Tresyv workspaces.
   first_dm_variant: "v1_long" | "v2_short" | "v3_video" | null;
+  // Thread-trust: set by the sync when our captured message count for this
+  // lead's thread diverges from SendPilot's (see docs/outreach-thread-trust.md).
+  // True means "you may be seeing only part of this conversation".
+  thread_out_of_sync: boolean | null;
   lead?: LeadEnrich;
 };
 
@@ -2065,6 +2069,13 @@ function ContactTimeline({ contact, lead, replies, emails, actions, signals, seq
         <div className="flex flex-col items-end gap-1">
           <StatusBadge status={contact.status} intent={contact.last_reply_intent} />
           <div className="tabular text-[10px] text-[var(--ink)]/40">{seqLabel}</div>
+          {contact.thread_out_of_sync ? (
+            <span
+              title="Vores kopi af tråden matcher ikke SendPilot — du ser måske kun en del af samtalen. Tjek på LinkedIn."
+              className="tabular rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[10px] text-amber-700">
+              ⚠ Tråd ude af sync
+            </span>
+          ) : null}
         </div>
       </div>
 

@@ -346,12 +346,19 @@ Deno.serve(async (request) => {
   try { respBody = await send.json(); } catch { /* ignore */ }
   const success = send.status === 200 || send.status === 201;
 
+  // SendPilot's /inbox/send returns messageId, which IS the conversation id
+  // (verified: Dennis's send messageId == his inbox conversation id). Capturing
+  // it here gives the sync a deterministic key so future thread messages are
+  // never dropped. See docs/outreach-thread-trust.md.
+  const conversationId = (respBody as { messageId?: string } | null)?.messageId ?? null;
+
   await admin.from("outreach_pipeline").update({
     status: success ? "sent" : "failed",
     sent_at: success ? now : null,
     decided_at: now,
     decided_by: email,
     sendpilot_response: respBody,
+    sendpilot_conversation_id: success && conversationId ? conversationId : undefined,
     error: success ? null : `inbox/send HTTP ${send.status}`,
     rendered_message: message,
   }).eq("sendpilot_lead_id", leadId);

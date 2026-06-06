@@ -735,6 +735,19 @@ async function executeAction(
         error: success ? null : `engagement auto_send HTTP ${send.status}`,
     }).eq("sendpilot_lead_id", row.sendpilot_lead_id);
 
+    // Capture the conversation id from the FIRST send only. SendPilot's
+    // /inbox/send returns messageId; for the opening message that equals the
+    // conversation id (seeds the thread), but for follow-ups it's a per-message
+    // id — so only set it when still null. Gives the sync a deterministic key.
+    // See docs/outreach-thread-trust.md.
+    const conversationId = (respBody as { messageId?: string } | null)?.messageId ?? null;
+    if (success && conversationId) {
+        await supabase.from("outreach_pipeline")
+            .update({ sendpilot_conversation_id: conversationId })
+            .eq("sendpilot_lead_id", row.sendpilot_lead_id)
+            .is("sendpilot_conversation_id", null);
+    }
+
     return { dispatched: "auto_send", status: send.status, ok: success };
 }
 

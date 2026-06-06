@@ -42,6 +42,7 @@ type PipelineRow = {
   sendpilot_sender_id: string | null;
   sent_at: string | null;
   last_reply_at: string | null;
+  sendpilot_conversation_id: string | null;
 };
 
 type ConvSummary = {
@@ -132,7 +133,7 @@ Deno.serve(async (req) => {
 
   let query = supabase
     .from("outreach_pipeline")
-    .select("sendpilot_lead_id, workspace_id, contact_email, linkedin_url, sendpilot_sender_id, sent_at, last_reply_at")
+    .select("sendpilot_lead_id, workspace_id, contact_email, linkedin_url, sendpilot_sender_id, sent_at, last_reply_at, sendpilot_conversation_id")
     .not("sendpilot_sender_id", "is", null)
     .not("linkedin_url", "is", null)
     .limit(limit);
@@ -214,23 +215,47 @@ async function syncOne(
   const targetName = normaliseName(fullName);
   const targetLeadId = row.sendpilot_lead_id;
   let convId: string | null = null;
-  for (const c of listBody.conversations ?? []) {
-    for (const p of c.participants ?? []) {
-      const pId = String(p.id ?? p.leadId ?? "");
-      const pUrl = normaliseLinkedinUrl((p.profileUrl ?? p.linkedinUrl ?? "") as string);
-      const pName = normaliseName(p.name ?? "");
-      if (
-        (pId && pId === targetLeadId) ||
-        (targetUrl && pUrl === targetUrl) ||
-        (targetName && pName && pName === targetName)
-      ) {
-        convId = c.id ?? null;
-        break;
-      }
+  let participantUrn: string | null = null;
+  // Deterministic match first: a conversation id stored by the send path or the
+  // backfill (docs/outreach-thread-trust.md) is the reliable key. SendPilot's
+  // participants carry encoded URNs, not our stored vanity URL or lead id, so
+  // the name match below is a fuzzy last resort that silently drops threads.
+  if (row.sendpilot_conversation_id) {
+    const c = (listBody.conversations ?? []).find((x) => x.id === row.sendpilot_conversation_id);
+    convId = row.sendpilot_conversation_id;
+    if (c) {
+      const p = (c.participants ?? []).find((p) => normaliseName(p.name ?? "") === targetName)
+        ?? (c.participants ?? [])[0];
+      participantUrn = (p?.id as string | undefined) ?? null;
     }
-    if (convId) break;
   }
   if (!convId) {
+    for (const c of listBody.conversations ?? []) {
+      for (const p of c.participants ?? []) {
+        const pId = String(p.id ?? p.leadId ?? "");
+        const pUrl = normaliseLinkedinUrl((p.profileUrl ?? p.linkedinUrl ?? "") as string);
+        const pName = normaliseName(p.name ?? "");
+        if (
+          (pId && pId === targetLeadId) ||
+          (targetUrl && pUrl === targetUrl) ||
+          (targetName && pName && pName === targetName)
+        ) {
+          convId = c.id ?? null;
+          participantUrn = (p.id as string | undefined) ?? null;
+          break;
+        }
+      }
+      if (convId) break;
+    }
+  }
+  if (!convId) {
+    // Couldn't even locate the thread — record that the stored state is
+    // unverifiable so the UI can flag it instead of trusting a partial view.
+    if (!dryRun) {
+      await supabase.from("outreach_pipeline")
+        .update({ thread_out_of_sync: true, thread_checked_at: new Date().toISOString() })
+        .eq("sendpilot_lead_id", row.sendpilot_lead_id);
+    }
     return { lead: row.sendpilot_lead_id, skipped: "no_conversation_match", outbound_inserted: 0 };
   }
 
@@ -307,19 +332,22 @@ async function syncOne(
     // fails), and we end up with duplicate inbound bubbles in the Svar tab.
     const messageText = (m.content ?? "").trim().slice(0, 8000);
 
-    // For inbound: legacy rows from sendpilot-webhook lack external_id. Look
-    // for an existing row with the same content first, and if found, just
-    // patch its external_id instead of inserting a duplicate. Outbound rows
-    // are always sync-inserted with external_id set, so the unique index
-    // alone handles their idempotency.
-    if (direction === "inbound") {
-      const { data: existing } = await supabase
+    // Dedupe by content for BOTH directions. Rows inserted outside this sync
+    // lack external_id — inbound from sendpilot-webhook, outbound from the send
+    // path. Match on content and patch external_id instead of inserting a
+    // duplicate bubble. (Outbound was previously NOT deduped — it relied on the
+    // external_id unique index alone — so a send-path outbound row plus this
+    // sync's insert produced duplicate outbound bubbles. See
+    // docs/outreach-thread-trust.md, Michael/Lasse.)
+    {
+      const { data: dupes } = await supabase
         .from("outreach_replies")
         .select("id, external_id")
         .eq("sendpilot_lead_id", row.sendpilot_lead_id)
-        .eq("direction", "inbound")
+        .eq("direction", direction)
         .eq("message", messageText)
-        .maybeSingle();
+        .limit(1);
+      const existing = dupes?.[0];
       if (existing) {
         if (!existing.external_id) {
           await supabase.from("outreach_replies")
@@ -358,12 +386,33 @@ async function syncOne(
     }
   }
 
+  // Reconciliation: stamp the linkage we resolved and compare how many tracked
+  // messages SendPilot has for this thread vs how many we hold. A mismatch means
+  // the stored thread is incomplete — surfaced via thread_out_of_sync so the UI
+  // flags it instead of silently showing half a conversation.
+  const { count: dbCount } = await supabase
+    .from("outreach_replies")
+    .select("id", { count: "exact", head: true })
+    .eq("sendpilot_lead_id", row.sendpilot_lead_id);
+  const spCount = relevant.length;
+  const update: Record<string, unknown> = {
+    thread_sp_count: spCount,
+    thread_db_count: dbCount ?? null,
+    thread_out_of_sync: (dbCount ?? 0) !== spCount,
+    thread_checked_at: new Date().toISOString(),
+  };
+  if (convId && convId !== row.sendpilot_conversation_id) update.sendpilot_conversation_id = convId;
+  if (participantUrn) update.participant_urn = participantUrn;
+  await supabase.from("outreach_pipeline").update(update).eq("sendpilot_lead_id", row.sendpilot_lead_id);
+
   return {
     lead: row.sendpilot_lead_id,
     conv: convId,
     in_thread: relevant.length,
     outbound_inserted: outboundInserted,
     inbound_inserted: inboundInserted,
+    db_count: dbCount ?? null,
+    out_of_sync: (dbCount ?? 0) !== spCount,
   };
 }
 
