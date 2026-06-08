@@ -20,7 +20,7 @@
 // outreach_events, prune the map to the actual strings.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.103.3";
-import { firstNameForGreeting, normalizeCompanyName, normalizeWebsiteUrl } from "../_shared/text.ts";
+import { firstNameForGreeting, humanize, normalizeCompanyName, normalizeWebsiteUrl } from "../_shared/text.ts";
 
 const corsHeaders = {
     "Access-Control-Allow-Origin": "*",
@@ -263,7 +263,10 @@ async function handleRenderReady(evt: SendSparkEvent, email: string, videoLink: 
     // never emits the URL, so we append the link on its own paragraph here.
     // Referral opens keep their own template; no hook => fall back to the static
     // templated message (Bucket-6 website line).
-    const hook = (pipe.personalized_hook ?? "").trim();
+    // humanize() here is the catch-all: any hook (old-prompt rows generated
+    // before the no-dash/no-™ rules, or any path) is cleaned before it's baked
+    // into rendered_message, so CarterCo outbound never ships an em dash or ™.
+    const hook = humanize((pipe.personalized_hook ?? "").trim());
     const message = (!pipe.referred_from_pipeline_lead_id && hook)
         ? `Hej ${firstName}\n\n${hook}\n\n${videoLink}`
         : templated;

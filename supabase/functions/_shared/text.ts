@@ -74,6 +74,23 @@ export function firstNameForGreeting(input: string | null | undefined): string {
   return s.split(/\s+/)[0] ?? "";
 }
 
+// `humanize` makes a generated line read like a person typed it by hand:
+// em/en dashes -> comma, trademark/legal marks dropped, then tidy doubled
+// punctuation/space. Ordinary hyphens ("lead-flow") are left alone. Casing
+// (INTERFACE -> Interface) stays a prompt rule — auto-lowercasing would wreck
+// real acronyms (EOR, GTM, OT). Apply to single-line text (a hook/message
+// body), NOT to text whose newlines are structural — \s collapsing would eat
+// paragraph breaks. CarterCo outbound must never ship em dashes or ™.
+export function humanize(input: string | null | undefined): string {
+  return (input ?? "")
+    .replace(/\s*[—–]\s*/g, ", ")        // em/en dash -> comma
+    .replace(/[™®©℠]/g, "")               // strip trademark/legal marks
+    .replace(/,\s*([:.!?])/g, "$1")       // ", ." / ", :" -> drop the stray comma
+    .replace(/[ \t]{2,}/g, " ")           // collapse doubled spaces (NOT newlines)
+    .replace(/[ \t]+([,.:;!?])/g, "$1")   // no space before punctuation
+    .trim();
+}
+
 // `urlOrigin` returns just the protocol+host of a URL — no path, no query,
 // no hash. Use for the URL pushed to scrapers/screenshot services (e.g.
 // SendSpark `backgroundUrl`) so the upstream scraper hits the bare home
