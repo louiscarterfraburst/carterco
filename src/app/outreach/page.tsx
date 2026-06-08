@@ -1088,6 +1088,27 @@ export default function OutreachPage() {
     return false;
   }
 
+  // (Re)generate an AI reply draft for one inbound reply via ai-triage-reply
+  // (Sonnet + Louis's voice brief + humanize). Returns the freshly stored,
+  // humanized triage_draft so the compose box can show it immediately, without
+  // waiting on a full reload to round-trip through component state.
+  async function generateReply(replyId: string): Promise<string | null> {
+    setErr(null); setInfo(null);
+    const { data, error } = await supabase.functions.invoke("ai-triage-reply", {
+      body: { replyId },
+    });
+    if (error) { setErr(error.message ?? String(error)); return null; }
+    if (data?.error) { setErr(`${data.error}${data.details ? `: ${data.details}` : ""}`); return null; }
+    const { data: row } = await supabase
+      .from("outreach_replies")
+      .select("triage_draft")
+      .eq("id", replyId)
+      .maybeSingle();
+    setInfo("Svar genereret.");
+    await load();
+    return (row?.triage_draft as string | null) ?? null;
+  }
+
   async function overrideIcpRejection(leadId: string) {
     // If the row has unactioned alts surfaced from a prior alt-search, send
     // it BACK to "Vælg rigtig person" instead of pending_pre_render — that
@@ -1510,6 +1531,7 @@ export default function OutreachPage() {
             onMarkHandled={(id) => void markReplyHandled(id)}
             onInviteAlt={(altId, leadId) => void inviteAlt(altId, leadId)}
             onSendReply={sendReply}
+            onGenerateReply={generateReply}
           />
         ) : tab === "sent" ? (
           <SentTab
@@ -4063,13 +4085,14 @@ function SignalerTab({ signals, busyLead, identity, leadMatches, altContacts, on
   );
 }
 
-function RepliesTab({ replies, referralsByLead, busyLead, onMarkHandled, onInviteAlt, onSendReply }: {
+function RepliesTab({ replies, referralsByLead, busyLead, onMarkHandled, onInviteAlt, onSendReply, onGenerateReply }: {
   replies: Reply[];
   referralsByLead: Map<string, AltContact[]>;
   busyLead: string | null;
   onMarkHandled: (id: string) => void;
   onInviteAlt: (altId: string, leadId: string) => void;
   onSendReply: (replyId: string, messageOverride: string) => Promise<boolean>;
+  onGenerateReply: (replyId: string) => Promise<string | null>;
 }) {
   if (replies.length === 0) {
     return (
@@ -4211,7 +4234,7 @@ function RepliesTab({ replies, referralsByLead, busyLead, onMarkHandled, onInvit
                         <p className="tabular mt-1 text-[11px] text-[var(--ink)]/55">AI: {r.reasoning}</p>
                       ) : null}
                       {!isOutbound && r.id === latestInbound.id ? (
-                        <SuggestedReply replyId={r.id} text={r.suggested_reply ?? ""} onSend={onSendReply} />
+                        <SuggestedReply replyId={r.id} text={r.triage_draft ?? r.suggested_reply ?? ""} onSend={onSendReply} onGenerate={onGenerateReply} />
                       ) : null}
                     </div>
                   </li>
@@ -4388,18 +4411,30 @@ function LoginGate({ email, setEmail, token, setToken, sendOtp, verifyOtp, info,
   );
 }
 
-function SuggestedReply({ replyId, text, onSend }: {
+function SuggestedReply({ replyId, text, onSend, onGenerate }: {
   replyId: string;
   text: string;
   onSend: (replyId: string, messageOverride: string) => Promise<boolean>;
+  onGenerate: (replyId: string) => Promise<string | null>;
 }) {
   const hasSuggestion = !!text.trim();
   const [draft, setDraft] = useState(text);
   const [editing, setEditing] = useState(!hasSuggestion); // no AI draft → open compose
   const [sending, setSending] = useState(false);
+  const [generating, setGenerating] = useState(false);
   const [copied, setCopied] = useState(false);
   const [hidden, setHidden] = useState(false);
   if (hidden) return null;
+
+  async function regenerate() {
+    if (generating || sending) return;
+    setGenerating(true);
+    const fresh = await onGenerate(replyId);
+    setGenerating(false);
+    // Fresh draft drops straight into the box, ready to review/edit/send. If
+    // generation failed (null), keep whatever was there.
+    if (fresh) { setDraft(fresh); setEditing(false); }
+  }
 
   async function copy() {
     try {
@@ -4425,6 +4460,10 @@ function SuggestedReply({ replyId, text, onSend }: {
       <div className="tabular flex items-center justify-between gap-2 text-[10px] uppercase tracking-[0.22em] text-[var(--forest)]">
         <span>{hasSuggestion ? "Foreslået svar" : "Svar direkte"}</span>
         <div className="flex gap-1">
+          <button type="button" onClick={() => void regenerate()} disabled={generating || sending}
+            className="focus-cream rounded-sm border border-[var(--forest)]/30 px-2 py-0.5 text-[10px] uppercase tracking-[0.22em] text-[var(--forest)] hover:bg-[var(--forest)]/10 disabled:opacity-40">
+            {generating ? "Genererer…" : hasSuggestion ? "Generér igen" : "Generér svar"}
+          </button>
           {!editing ? (
             <button type="button" onClick={() => setEditing(true)}
               className="focus-cream rounded-sm border border-[var(--ink)]/15 px-2 py-0.5 text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/55 hover:border-[var(--ink)]/35 hover:text-[var(--ink)]/80">
