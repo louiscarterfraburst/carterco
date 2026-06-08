@@ -46,9 +46,11 @@ ACTOR = "harvestapi~linkedin-profile-scraper"
 BASE = "https://api.apify.com/v2"
 
 # Encoded LinkedIn member URL — the form stage 2 emits, the form that doesn't
-# open in a browser. Vanity URLs (linkedin.com/in/rasmus-aadal-49…) are left
-# untouched (already resolvable), so this stage is idempotent.
-ENCODED_RE = re.compile(r"/in/AC[wo]AAA", re.I)
+# open in a browser. The URN starts AC{w,o,q}AA then varies (ACwAAA, ACwAAB,
+# ACwAAC, ACoAAA…) — an earlier `AC[wo]AAA` pattern was too narrow and let
+# ACwAAB/ACwAAC dead links ship as "vanity". Vanity URLs (linkedin.com/in/
+# rasmus-aadal-49…) never start AC{woq}AA, so this stays idempotent.
+ENCODED_RE = re.compile(r"/in/AC[woq]AA", re.I)
 
 
 def norm(s: str) -> str:
