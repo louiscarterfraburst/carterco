@@ -1095,7 +1095,7 @@ export default function Home() {
                     <div className="grid gap-12 sm:grid-cols-12 sm:items-center sm:gap-12">
                     {/* Copy column */}
                     <div
-                      className={`relative ${isReverse ? "sm:col-span-5 sm:col-start-7" : "sm:col-span-5 sm:col-start-2"} flex flex-col ${isSand ? "sand-scope" : ""}`}
+                      className={`relative min-w-0 ${isReverse ? "sm:col-span-5 sm:col-start-7" : "sm:col-span-5 sm:col-start-2"} flex flex-col ${isSand ? "sand-scope" : ""}`}
                     >
                       <div className="flex items-center gap-3">
                         <span aria-hidden className="h-px w-10 bg-[#ff6b2c]" />
@@ -1217,7 +1217,7 @@ export default function Home() {
 
                     {/* Visual column */}
                     <div
-                      className={`relative ${isReverse ? "sm:col-span-6 sm:col-start-1 sm:row-start-1" : "sm:col-span-6 sm:col-start-7"} flex items-start justify-center pt-4`}
+                      className={`relative min-w-0 ${isReverse ? "sm:col-span-6 sm:col-start-1 sm:row-start-1" : "sm:col-span-6 sm:col-start-7"} flex items-start justify-center pt-4`}
                     >
                       {stage.visual === "outbound" && (
                         <div className="relative h-[32rem] w-full max-w-[34rem] sm:h-[34rem]">
