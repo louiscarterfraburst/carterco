@@ -99,7 +99,11 @@ export default function RootLayout({
         <Script id="plausible-init" strategy="afterInteractive">
           {`window.plausible = window.plausible || function() { (window.plausible.q = window.plausible.q || []).push(arguments) }`}
         </Script>
-        <Script id="rb2b" strategy="afterInteractive">
+        {/* beforeInteractive: RB2B must run on page load, not after hydration —
+            with afterInteractive the de-anon script only fired once the visitor
+            scrolled/moved, so bounce traffic was never identified (RB2B's own
+            installer flagged "script only loads after user interaction"). */}
+        <Script id="rb2b" strategy="beforeInteractive">
           {`!function(key){if(window.reb2b)return;window.reb2b={loaded:true};var s=document.createElement("script");s.async=true;s.src="https://ddwl4m2hdecbv.cloudfront.net/b/"+key+"/"+key+".js.gz";document.getElementsByTagName("script")[0].parentNode.insertBefore(s,document.getElementsByTagName("script")[0])}("Q6J2RH2GQ36D");`}
         </Script>
         <PwaRegistrar />
