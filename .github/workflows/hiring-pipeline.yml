@@ -1,0 +1,35 @@
+name: hiring-signal pipeline
+
+# Daily DK hiring-signal run. Scrapes freshly-posted sales roles, finds the
+# commercial buyer, stages + auto-loads net-new into the SendPilot campaign.
+# Idempotent — dedups on linkedin_url, so only new people are ever added.
+#
+# Secrets to add (repo → Settings → Secrets and variables → Actions):
+#   APIFY_API_TOKEN, SENDPILOT_API_KEY, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+# (values are in your local .env.local — copy them in once.)
+
+on:
+  schedule:
+    # 06:00 UTC ≈ 08:00 Europe/Copenhagen in summer (CEST), 07:00 in winter.
+    - cron: '0 6 * * *'
+  workflow_dispatch: {}   # lets you trigger a run by hand from the Actions tab
+
+concurrency:
+  group: hiring-pipeline   # never overlap runs
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run hiring-signal pipeline
+        env:
+          APIFY_API_TOKEN: ${{ secrets.APIFY_API_TOKEN }}
+          SENDPILOT_API_KEY: ${{ secrets.SENDPILOT_API_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: bash scripts/lead-enrichment/run_hiring_pipeline.sh cron
