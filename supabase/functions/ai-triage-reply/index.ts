@@ -19,6 +19,7 @@
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient, SupabaseClient } from "npm:@supabase/supabase-js@2.103.3";
+import { humanize } from "../_shared/text.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -91,7 +92,10 @@ Deno.serve(async (req) => {
       .update({
         triage_priority: PRIORITY_TO_NUMBER[triage.priority],
         triage_action: triage.todo,
-        triage_draft: triage.draft,
+        // humanize(): same human-typed guard as the hooks — no em dashes / ™ in
+        // a draft Louis might send as-is. Newline-safe (collapses spaces, not
+        // paragraph breaks). null stays null.
+        triage_draft: triage.draft ? humanize(triage.draft) : null,
         triage_signals: {
           ...triage.signals,
           priority_bucket: triage.priority,
@@ -196,7 +200,10 @@ async function triageReply(
       "content-type": "application/json",
     },
     body: JSON.stringify({
-      model: "claude-haiku-4-5-20251001",
+      // Sonnet (not Haiku): the draft field carries Louis's voice and a human
+      // would send it near-verbatim, so tone quality matters more than the
+      // per-reply cost. Haiku handles the triage logic fine but flattens voice.
+      model: "claude-sonnet-4-6",
       max_tokens: 1200,
       system: systemPrompt,
       messages: [{ role: "user", content: userPrompt }],
@@ -283,7 +290,13 @@ function buildSystemPrompt(ownerName: string, valueProp: string, today: string):
     "   - **low**: høfligt afvist, lavt signal",
     "   - **done**: klart \"nej\", emoji-respons, eller intet at handle på",
     "",
-    `4. **draft** (string eller null): hvis priority er high og det giver mening at svare, skriv et kort dansk udkast i ${ownerName}'s casual stemme. Ingen pitch-pivot. Hvis intet svar giver mening, return null.`,
+    `4. **draft** (string eller null): hvis priority er high/medium OG et svar giver mening, skriv ${ownerName}'s svar — sådan som HAN ville taste det selv, ikke en sælger. Følg denne stemme PRÆCIST:`,
+    `   - **Svar på det de faktisk spurgte om, først.** Spørger de "hvilke tanker har du om vores setup?", så giv ÉN konkret tanke. Ikke et pitch, ikke en diagnose af deres forretning.`,
+    `   - **Del en pointe ydmygt, fra erfaring.** "Min erfaring er at...", "jeg blev nysgerrig på...", "som jeg nævner i videoen...". Observation og nysgerrighed, ikke "her er hvad I gør forkert".`,
+    `   - **INGEN sales-pivot. Forbudt:** "Vi hjælper typisk teams som jeres...", "vi kan lukke det gap...", "det er præcis det vi gør", "book et møde". ${ownerName} sælger ikke i svaret — han har en samtale mellem to der kender SMB-salg.`,
+    `   - **Slut med ÉT konkret, åbent spørgsmål** der flytter samtalen et skridt ("Hvordan bliver leads fordelt hos jer i dag? Kører de gennem et CRM, eller lander de hos en bestemt person?"). Aldrig "skal vi tage et møde?".`,
+    `   - **Læses som om ${ownerName} har tastet det selv:** INGEN em dashes (—) eller en dashes (–), brug komma/punktum/kolon. INGEN ™/®. INGEN ALL-CAPS brand-staving. Kort, casual dansk. Start med "Hej {fornavn}". Intet "/${ownerName}"-sign-off.`,
+    `   Hvis intet svar giver mening (klart nej, emoji, ren OOO), return null.`,
     "",
     "5. **signals** (object): struktureret data KUN fra eksplicitte mentions i beskeden. Drop felter hvor du ikke har eksplicit data — gæt ikke.",
     "   - **timing**: kort streng hvis prospekten nævnte tid (\"opkald i morgen\", \"efter sommerferien\", \"Q4\"), ellers null",
@@ -366,6 +379,20 @@ function buildSystemPrompt(ownerName: string, valueProp: string, today: string):
     "  \"sequence_decision\": \"pause_until\",",
     "  \"sequence_decision_resume_at\": \"2026-08-15T09:00:00Z\",",
     "  \"sequence_decision_reason\": \"OOO til 15. august\",",
+    "  \"sequence_decision_confidence\": 0.9",
+    "}",
+    "",
+    "Prospect siger (efter at have set videoen): \"Hej - hvilke tanker har du gjort dig omkring vores setup? Det vil jeg gerne høre\"",
+    "→ GULD-eksempel på draft-stemmen (svar på spørgsmålet, ydmyg pointe, ét åbent spørgsmål, intet pitch, ingen em dashes):",
+    "→ {",
+    "  \"todo\": \"Achraf spurgte hvilke tanker du har om deres setup — svar-udkast klar\",",
+    "  \"due_at\": null,",
+    "  \"priority\": \"high\",",
+    "  \"draft\": \"Hej Achraf\\n\\nDen største tanke var egentlig hastigheden på opfølgningen.\\n\\nSom jeg nævner i videoen, prøvede jeg selv at skrive mig op for et par dage siden, og derfor blev jeg nysgerrig på, hvordan henvendelserne bliver håndteret internt hos jer.\\n\\nMin erfaring er, at når nogen aktivt rækker ud, betyder hastigheden på den første kontakt ofte mere end både pris og produkt. Interessen er højest lige dér.\\n\\nHvordan bliver indkommende leads fordelt hos jer i dag? Kører de gennem et CRM, eller lander de hos en bestemt person først?\",",
+    "  \"signals\": { \"timing\": null, \"objections\": [], \"explicit_ask\": \"tanker om deres setup\" },",
+    "  \"sequence_decision\": \"stop\",",
+    "  \"sequence_decision_resume_at\": null,",
+    "  \"sequence_decision_reason\": \"aktiv samtale i gang — operatøren svarer manuelt, motoren skal ikke sende flere automatiske touches\",",
     "  \"sequence_decision_confidence\": 0.9",
     "}",
   ].join("\n");
