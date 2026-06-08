@@ -60,11 +60,22 @@ BASE = "https://api.apify.com/v2"
 # skip "Head of Sales / salgschef" by default: that's a team-build signal, a
 # different pitch than "replace the seat with a system."
 DEFAULT_ROLES = [
+    # Searched as an OR set. The first list was too narrow (7 terms → ~13 DK
+    # companies/mo); adding the AE / rep / inside-sales / opsøgende variants
+    # roughly doubled the real pool to ~28 (proven 2026-06-08). titleSearch is
+    # the dominant input lever — a missing term is a seat we never even query.
     "SDR",
     "BDR",
     "Sales Development Representative",
+    "Account Executive",
+    "sales representative",
+    "salgsrepræsentant",
+    "inside sales",
+    "sales executive",
     "sælger",
     "salgskonsulent",
+    "salgsrådgiver",
+    "opsøgende sælger",
     "business developer",
     "forretningsudvikler",
 ]
