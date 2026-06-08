@@ -116,17 +116,49 @@ def upsert_outreach_leads(rows: list[dict]) -> None:
         sys.exit(f"outreach_leads upsert failed: {e.code} {e.read().decode()[:300]}")
 
 
+def _norm(s: str) -> str:
+    return re.sub(r"[^a-z0-9æøå]", "", (s or "").lower())
+
+
+def clean_role(title: str) -> str:
+    """Posted role title -> short {role} label (mirrors add_to_sendpilot_campaign)."""
+    t = (title or "").lower()
+    if "sdr" in t or "sales development" in t:
+        return "SDR"
+    if "bdr" in t:
+        return "BDR"
+    if "account executive" in t or re.search(r"\bae\b", t):
+        return "Account Executive"
+    if "business develop" in t or "forretningsudvikl" in t:
+        return "Business Developer"
+    if "salgskonsulent" in t:
+        return "salgskonsulent"
+    if "sælger" in t or "saelger" in t:
+        return "sælger"
+    raw = (title or "").strip()
+    return raw if (raw and len(raw) <= 30 and raw.count(" ") <= 3) else "sælger"
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--in", dest="inp", required=True, help="apify_enrich_brands output CSV")
     ap.add_argument("--sendpilot-out", required=True, help="SendPilot-importable CSV")
     ap.add_argument("--play", default="hiring_signal", help="play tag (default hiring_signal)")
+    ap.add_argument("--companies", default="clients/carterco/data/hiring_companies_dk.csv",
+                    help="intake companies file (carries trigger_role for the {role} merge)")
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--dry-run", action="store_true", help="write CSV only, skip the upsert")
     args = ap.parse_args()
 
     enriched = list(csv.DictReader(open(args.inp, encoding="utf-8")))
+    # trigger_role per company → the {role} merge field downstream
+    role_by_co: dict[str, str] = {}
+    try:
+        for c in csv.DictReader(open(args.companies, encoding="utf-8")):
+            role_by_co[_norm(c.get("brand", ""))] = c.get("trigger_role", "")
+    except FileNotFoundError:
+        print(f"note: {args.companies} not found — role will fall back to title")
     found = [r for r in enriched
              if (r.get("status") == "found")
              and (r.get("linkedin_profile_url") or "").strip().startswith("http")]
@@ -189,6 +221,7 @@ def main() -> int:
             "contact_email": synth_email(url),
             "workspace_id": WORKSPACE_ID,
             "play": args.play,
+            "role": clean_role(role_by_co.get(_norm(r.get("brand") or ""), "")),
             # `slug` is set by the outreach_leads_set_slug trigger.
         })
     print(f"upserting {len(rows)} rows into outreach_leads (play={args.play})…")

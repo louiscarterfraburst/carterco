@@ -138,14 +138,15 @@ export function ruleMatches(
     return ageMs >= rule.when.delayHours * 3600_000;
 }
 
-// Substitute {firstName}, {company}, {videoLink} in a template string.
+// Substitute {firstName}, {company}, {role}, {videoLink} in a template string.
 // Missing fields fall back to sensible defaults.
 export function renderTemplate(
     tpl: string,
-    lead: { first_name?: string | null; company?: string | null; video_link?: string | null },
+    lead: { first_name?: string | null; company?: string | null; role?: string | null; video_link?: string | null },
 ): string {
     return tpl
         .replaceAll("{firstName}", firstNameForGreeting(lead.first_name) || "der")
         .replaceAll("{company}",   normalizeCompanyName(lead.company))
+        .replaceAll("{role}",      (lead.role ?? "").trim())
         .replaceAll("{videoLink}", (lead.video_link ?? "").trim());
 }

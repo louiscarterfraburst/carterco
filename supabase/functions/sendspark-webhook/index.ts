@@ -211,13 +211,14 @@ async function handleRenderReady(evt: SendSparkEvent, email: string, videoLink: 
 
     const { data: lead } = await supabase
         .from("outreach_leads")
-        .select("first_name, last_name, company, website")
+        .select("first_name, last_name, company, website, role")
         .eq("contact_email", email)
         .maybeSingle();
 
     const firstName = firstNameForGreeting(lead?.first_name) || "der";
     const company = normalizeCompanyName(lead?.company);
     const website = normalizeWebsiteUrl(lead?.website);
+    const role = ((lead?.role as string | null) ?? "").trim();  // hiring-signal: the posted role, for {role}
 
     // Referral path: when this lead came in via a reply_referral alt_contact,
     // swap the cold opener for a referral-aware template that thanks them for
@@ -253,6 +254,7 @@ async function handleRenderReady(evt: SendSparkEvent, email: string, videoLink: 
         .replaceAll("{referrerFirstName}", referrerFirstName)
         .replaceAll("{company}", company)
         .replaceAll("{website}", website)
+        .replaceAll("{role}", role)
         .replaceAll("{videoLink}", videoLink);
 
     // Becc-bucket personalization (CarterCo): when a body was generated for this

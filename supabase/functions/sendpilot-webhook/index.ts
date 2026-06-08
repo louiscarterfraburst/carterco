@@ -356,7 +356,10 @@ Deno.serve(async (request) => {
     scheduleScoutPhones("pipeline", leadId);
     // CarterCo only: generate the Becc-bucket personalization hook now (async),
     // so it's ready before the render completes and gets baked into the DM.
-    if (workspaceId === CARTERCO_WORKSPACE_ID) scheduleEnrichBuckets(leadId);
+    // EXCEPT the hiring-signal play: it uses its own job-posting DM template
+    // (OUTREACH_TEMPLATE_<campaign>), so we skip the Becc hook to keep
+    // personalized_hook empty and let pickTemplate's template win.
+    if (workspaceId === CARTERCO_WORKSPACE_ID && lead?.play !== "hiring_signal") scheduleEnrichBuckets(leadId);
     return json({ ok: true, recorded: "accepted_pending_pre_render", cold: true, referred_from: referredFrom, variant });
   }
 
