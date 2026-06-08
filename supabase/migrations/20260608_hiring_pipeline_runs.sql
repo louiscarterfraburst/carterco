@@ -21,3 +21,11 @@ create table if not exists public.hiring_pipeline_runs (
 comment on table public.hiring_pipeline_runs is
   'One row per run of the hiring-signal pipeline (run_hiring_pipeline.sh). Read by /outreach Hiring-signal tab to show daily run history + what was added.';
 create index if not exists hiring_pipeline_runs_ran_at_idx on public.hiring_pipeline_runs (ran_at desc);
+
+-- The /outreach page reads this via the authenticated client. Enable RLS and
+-- allow authenticated reads (OTP-gated page; runs are non-sensitive aggregate
+-- counts). The pipeline writes via the service-role key, which bypasses RLS.
+alter table public.hiring_pipeline_runs enable row level security;
+drop policy if exists hiring_pipeline_runs_auth_read on public.hiring_pipeline_runs;
+create policy hiring_pipeline_runs_auth_read
+  on public.hiring_pipeline_runs for select to authenticated using (true);

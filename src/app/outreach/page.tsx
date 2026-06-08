@@ -281,6 +281,21 @@ type StagedLead = {
   play: string;
 };
 
+// One execution of the hiring-signal pipeline (run_hiring_pipeline.sh), cron or
+// manual. Surfaced in the Plays overview so the daily automation is visible.
+type HiringRun = {
+  ran_at: string;
+  trigger: string;
+  companies_found: number | null;
+  decision_makers: number | null;
+  leads_staged: number | null;
+  leads_added_sendpilot: number | null;
+  skipped_existing: number | null;
+  skipped_cross_workspace: number | null;
+  unresolved: number | null;
+  status: string;
+};
+
 // Returned by outreach-ai draft_email — what the EmailActionBar uses to open mailto.
 type EmailDraft = {
   id: string;
@@ -470,6 +485,7 @@ export default function OutreachPage() {
   const [tab, setTab] = useState<Tab>("i_dag");
   const [sequences, setSequences] = useState<SeqLite[]>([]);
   const [stagedHiring, setStagedHiring] = useState<StagedLead[]>([]);
+  const [hiringRuns, setHiringRuns] = useState<HiringRun[]>([]);
   const [armStats, setArmStats] = useState<ArmStat[]>([]);
   const [sentEmails, setSentEmails] = useState<EmailRow[]>([]);
   const [engagementActions, setEngagementActions] = useState<ActionRow[]>([]);
@@ -560,6 +576,15 @@ export default function OutreachPage() {
       .eq("workspace_id", activeWorkspaceId)
       .neq("play", "video_loop");
     setStagedHiring((stagedLeads ?? []) as StagedLead[]);
+
+    // Recent hiring-signal pipeline runs (cron + manual) — drives the daily-run
+    // panel in the Plays overview. Global to CarterCo, not workspace-scoped.
+    const { data: runRows } = await supabase
+      .from("hiring_pipeline_runs")
+      .select("ran_at, trigger, companies_found, decision_makers, leads_staged, leads_added_sendpilot, skipped_existing, skipped_cross_workspace, unresolved, status")
+      .order("ran_at", { ascending: false })
+      .limit(14);
+    setHiringRuns((runRows ?? []) as HiringRun[]);
 
     const { data: replyRows } = await supabase
       .from("outreach_replies")
@@ -1527,7 +1552,7 @@ export default function OutreachPage() {
             onDismiss={(ids) => void markSignalsHandled(ids)}
           />
         ) : tab === "plays" ? (
-          <PlaysOverview staged={stagedHiring} rows={rows} />
+          <PlaysOverview staged={stagedHiring} rows={rows} runs={hiringRuns} />
         ) : (
           <AllTab rows={allRecent} />
         )}
@@ -2617,9 +2642,21 @@ const HIRING_PILL: Record<string, string> = {
   Svar: "border-[var(--clay)] bg-[var(--clay)]/10 text-[var(--clay)]",
 };
 
-function PlaysOverview({ staged, rows }: { staged: StagedLead[]; rows: PipelineRow[] }) {
+// Relative "X siden" for the daily-pipeline panel (Danish, compact).
+function hiringRunAgo(ts: string): string {
+  const diff = Date.now() - new Date(ts).getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return "nu";
+  if (m < 60) return `${m} min siden`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h} t siden`;
+  return `${Math.floor(h / 24)} d siden`;
+}
+
+function PlaysOverview({ staged, rows, runs }: { staged: StagedLead[]; rows: PipelineRow[]; runs: HiringRun[] }) {
   const hiring = staged.filter((l) => l.play === "hiring_signal");
   const pipe = rows.filter((r) => r.play === "hiring_signal");
+  const lastRun = runs[0];
   // Funnel stages, in flow order. Conversion % is shown between stages.
   const stages: [string, number][] = [
     ["Staged", hiring.length],
@@ -2635,8 +2672,8 @@ function PlaysOverview({ staged, rows }: { staged: StagedLead[]; rows: PipelineR
       <div>
         <h2 className="font-display text-3xl italic leading-tight tracking-[-0.01em] text-[var(--ink)]">Hiring-signal</h2>
         <p className="mt-1 max-w-xl text-sm text-[var(--ink)]/60">
-          DK-virksomheder der lige har slået en salgsrolle op → deres beslutningstager,
-          staged til outreach. Upload SendPilot-CSV&apos;en for at sende invitationer.
+          DK-virksomheder der lige har slået en salgsrolle op → deres kommercielle
+          beslutningstager, automatisk fundet, staged og lagt i kampagnen. Kører dagligt.
         </p>
         <p className="tabular mt-2 text-[11px] uppercase tracking-[0.14em] text-[var(--ink)]/40">
           {hiring.length} leads · {companies} virksomheder
@@ -2667,10 +2704,48 @@ function PlaysOverview({ staged, rows }: { staged: StagedLead[]; rows: PipelineR
         })}
       </div>
 
+      {/* Daily pipeline — follow the automation. Each row = one run of
+          run_hiring_pipeline.sh (cron 08:00 or manual). */}
+      <div className="rounded-lg border border-[var(--ink)]/10 bg-[var(--cream)]/40 p-4">
+        <div className="flex items-baseline justify-between">
+          <h3 className="tabular text-[11px] uppercase tracking-[0.18em] text-[var(--ink)]/55">Daglig pipeline</h3>
+          {lastRun ? (
+            <span className="tabular text-[10px] text-[var(--ink)]/45">
+              sidst kørt {hiringRunAgo(lastRun.ran_at)} · {lastRun.trigger === "cron" ? "auto" : "manuelt"}
+            </span>
+          ) : (
+            <span className="tabular text-[10px] text-[var(--ink)]/40">kører dagligt 08:00</span>
+          )}
+        </div>
+        {runs.length === 0 ? (
+          <p className="mt-2 text-xs text-[var(--ink)]/45">Ingen kørsler endnu — første run lægger sig her.</p>
+        ) : (
+          <ul className="mt-3 space-y-1.5">
+            {runs.slice(0, 7).map((r, i) => (
+              <li key={i} className="flex items-center gap-3 text-[12px]">
+                <span className="tabular w-24 shrink-0 text-[var(--ink)]/45">{hiringRunAgo(r.ran_at)}</span>
+                <span className={`tabular shrink-0 rounded-full px-1.5 py-px text-[8px] uppercase tracking-[0.12em] ${r.trigger === "cron" ? "bg-[var(--ink)]/8 text-[var(--ink)]/55" : "bg-[var(--clay)]/12 text-[var(--clay)]"}`}>
+                  {r.trigger === "cron" ? "auto" : "manuel"}
+                </span>
+                <span className="tabular flex-1 text-[var(--ink)]/65">
+                  {r.companies_found ?? 0} virksomheder · {r.decision_makers ?? 0} beslutningstagere
+                </span>
+                <span className="tabular shrink-0 text-[var(--ink)]/70">
+                  {(r.leads_added_sendpilot ?? 0) > 0
+                    ? <span className="text-[var(--clay)]">+{r.leads_added_sendpilot} nye</span>
+                    : <span className="text-[var(--ink)]/40">0 nye</span>}
+                </span>
+                {r.status !== "ok" && <span className="shrink-0 text-[10px] text-red-600">fejl</span>}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
       {hiring.length === 0 ? (
         <p className="text-sm text-[var(--ink)]/50">
-          Ingen hiring-leads endnu. Kør intake + bridge:
-          <code className="ml-1 text-[var(--clay)]">apify_hiring_intake → apify_enrich_brands → hiring_to_outreach_leads</code>.
+          Ingen hiring-leads endnu. Pipelinen kører dagligt — eller kør manuelt:
+          <code className="ml-1 text-[var(--clay)]">scripts/lead-enrichment/run_hiring_pipeline.sh</code>.
         </p>
       ) : (
         <ul className="divide-y divide-[var(--ink)]/10 border-t border-[var(--ink)]/10">
