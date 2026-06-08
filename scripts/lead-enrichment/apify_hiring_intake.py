@@ -78,13 +78,26 @@ DEFAULT_ROLES = [
     "opsøgende sælger",
     "business developer",
     "forretningsudvikler",
+    # 2026-06-08 recall pass — seats we were missing entirely:
+    "Sales Manager",                 # hunter mgr at an SME (≠ account manager)
+    "Business Development Manager",
+    "salgschef",                     # sales LEADERSHIP hire = budget signal (#2)
+    "head of sales",
+    "salgsdirektør",
+    "telefonsælger",                 # pure cold-call seats
+    "telemarketing",
+    "demand generation",
 ]
 
-# titleExclusionSearch — farming / management / partnerships / junior roles that
-# are NOT an outbound-prospecting seat. The API drops these server-side.
+# titleExclusionSearch — farming / partnerships / junior roles that are NOT an
+# outbound-prospecting seat. The API drops these server-side.
+# 2026-06-08 recall pass: dropped the blanket "manager" exclusion (it was killing
+# Sales/BD Managers — hunter seats at SMEs — to dodge account managers; the
+# client-side is_sales_role catches account-manager farming instead) AND the
+# "head of / salgschef / director" exclusion (a first sales-leadership hire IS a
+# budget signal — #2). Account-manager / key-account farming still dropped client-side.
 DEFAULT_TITLE_EXCLUDE = [
-    "manager", "partner", "partnership", "key account", "trainee",
-    "head of", "salgschef", "director",
+    "partner", "partnership", "key account", "trainee",
 ]
 
 # LinkedIn keyword search is loose — "business developer" pulls in engineers,
@@ -92,12 +105,11 @@ DEFAULT_TITLE_EXCLUDE = [
 # title-regex trick from apify_enrich_brands.py: keep a posting only if its
 # title is genuinely a B2B sales / outbound seat (the thing the machine
 # replaces), and drop retail "sales associate"-type roles even when they match.
-# HUNTERS ONLY. The play premise is "they just posted a role whose job IS the
-# outbound prospecting we automate." That's an SDR/BDR/biz-dev/AE/sælger seat —
-# NOT account-manager / key-account / partnerships (farming existing relationships),
-# NOT salgschef / head-of-sales (team-build), NOT trainee (junior). Those farming
-# roles were what contaminated the first batch (Eneba partnerships, OOONO key
-# account, Nobel partner manager, TDC salgstrainee) — they're in DROP below.
+# Keep a posting if its title is a B2B sales seat OR a sales-LEADERSHIP hire.
+# Hunter ICs (SDR/BDR/biz-dev/AE/sælger) AND the first salgschef/Head of Sales/
+# Sales Manager are all budget-attached buying signals (#2, 2026-06-08). Still
+# NOT: account-manager / key-account / partnerships (farming), trainee (junior)
+# — those are in DROP below. Account MANAGER ≠ Sales MANAGER: the latter hunts.
 SALES_ROLE_KEEP = [
     re.compile(r"\b(sdr|bdr)\b", re.I),
     re.compile(r"sales develop", re.I),
@@ -108,12 +120,19 @@ SALES_ROLE_KEEP = [
     re.compile(r"\bsales (rep|representative|consultant|specialist|executive)\b", re.I),
     re.compile(r"new business|demand generation", re.I),
     re.compile(r"cold call|koldkald|telefonsælg|telesælg|telemarketing", re.I),
+    # hunter managers (NOT account/key-account manager — those stay in DROP):
+    re.compile(r"\b(sales|business development|commercial)\s+manager\b", re.I),
+    # sales leadership = the company is investing in a sales motion (budget signal):
+    re.compile(r"head of (sales|commercial|revenue|growth|new business)", re.I),
+    re.compile(r"\b(salgschef|salgsdirektør|salgsleder|kommerciel chef|kommerciel direktør)\b", re.I),
 ]
 SALES_ROLE_DROP = [
     re.compile(r"sales associate|sales assistant|part[- ]?time sales|retail|\bshop\b|\bstore\b|butik|ekspedient|kassemedarbejder", re.I),
     re.compile(r"\bengineer\b|developer\b|\btechnician\b|udvikler\b", re.I),  # not "business developer" (caught by KEEP first)
-    # farming / management / partnerships / junior — not an outbound-prospecting seat
-    re.compile(r"account manager|key account|kundeansvarlig|kundechef|partner\s*manager|partnerchef|partnership|trainee|\belev\b|head of|salgschef|salgsdirektør", re.I),
+    # farming / partnerships / junior — not an outbound-prospecting seat.
+    # NB (2026-06-08): salgschef/salgsdirektør/head-of REMOVED — sales leadership
+    # is now a counted signal (#2). Account-manager / key-account farming stays.
+    re.compile(r"account manager|key account|kundeansvarlig|kundechef|partner\s*manager|partnerchef|partnership|trainee|\belev\b", re.I),
 ]
 
 
@@ -381,7 +400,9 @@ def main() -> int:
                     help="ICP gate: drop retail/building-materials + out-of-band sizes")
     ap.add_argument("--recruiters", action=argparse.BooleanOptionalAction, default=False,
                     help="include recruiter-agency-posted roles (default: drop them)")
-    ap.add_argument("--min-employees", type=int, default=5)
+    ap.add_argument("--min-employees", type=int, default=2,
+                    help="floor lowered 5→2 (2026-06-08): a 2–4 person company "
+                         "hiring sales is the most founder-led signal there is")
     ap.add_argument("--max-employees", type=int, default=1000,
                     help="server-side organizationEmployeesLte + client-side gate")
     ap.add_argument("--poll-interval", type=float, default=10.0)
