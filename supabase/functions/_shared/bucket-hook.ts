@@ -21,7 +21,7 @@ import { humanize } from "./text.ts";
 
 const MODEL = "claude-sonnet-4-6";
 const FRESH_DAYS = 90;
-const FLOOR = "Jeg var lige inde på jeres side og optog en kort video om én ting, jeg tror I mister lidt værdi på:";
+const FLOOR = "Jeg var lige inde på jeres side og optog en kort video om en ting, jeg tror I mister lidt værdi på:";
 
 // deno-lint-ignore no-explicit-any
 type AdminClient = { from: (t: string) => any };
@@ -76,7 +76,7 @@ THE VOICE.
 - THE SHAPE: two beats. (1) a genuine human reaction to THEM (anchored so they recognise it — a real post/comment/event you noticed and got curious about), then (2) the bridge into the video (you tested their lead-flow and put what you saw in a short video). Beat 1 stands on its own and leads naturally into beat 2 — one thought, not two bolted-together halves.
 - SHORT AND DRY. ~30-45 words. One anchored observation + one modest bridge. If you feel a third clause coming on to "explain" the consequence to them, CUT it — that's the lecture. Do NOT write the "Hej {name}" greeting and do NOT write the video link or any URL — both are added downstream. End on the bridge; a trailing colon (:) that leads into the video is good (the link follows on its own line).
 - NO EM DASHES (—) OR EN DASHES (–). Hard rule, no exceptions. Louis never uses them. Use a comma, a period, or a colon instead. The ONLY colon allowed is the trailing one that leads into the video link; everywhere else, a dash you were tempted to write becomes a comma or a full stop. (Ordinary hyphens in compound words like "lead-flow" or "B2B-løsninger" are fine, those are hyphens, not dashes.)
-- WRITE IT LIKE LOUIS TYPING IT BY HAND, NOT A COPY-PASTE. It must read like he wrote it himself. So: do NOT paste trademark or legal symbols (™, ®, ©, ℠), drop them ("Opal Renew", never "Opal Renew™"). Do NOT reproduce ALL-CAPS or stylized brand casing scraped from their post, write names in natural Title Case the way a person types them ("Interface Nordics", not "INTERFACE Nordics"; "Kubo", not "KUBO"). Keep only genuinely-standard short acronyms (B2B, EOR, GTM, OT) as they are.
+- WRITE IT LIKE LOUIS TYPING IT BY HAND, NOT A COPY-PASTE. It must read like he wrote it himself. So: do NOT paste trademark or legal symbols (™, ®, ©, ℠), drop them ("Opal Renew", never "Opal Renew™"). Do NOT reproduce ALL-CAPS or stylized brand casing scraped from their post, write names in natural Title Case the way a person types them ("Interface Nordics", not "INTERFACE Nordics"; "Kubo", not "KUBO"). Keep only genuinely-standard short acronyms (B2B, EOR, GTM, OT) as they are. And NO acute accents: write "der", "en", "et", "ide", never "dér", "én", "ét", "idé".
 - ONE LANGUAGE, DANISH BY DEFAULT. Write the ENTIRE body in a single language, and default to Danish — these are Danish B2B leaders at Danish companies. If the chosen signal is in another language (English, Dutch, German…), translate its MEANING into Danish; NEVER copy foreign-language phrases verbatim into a Danish sentence (no "eenvoudige vragen", no stray English mid-sentence, no Danglish). Only write the whole body in another language if the prospect clearly operates in that language day-to-day (rare).
 - Never fabricate, never invent numbers or statistics.
 

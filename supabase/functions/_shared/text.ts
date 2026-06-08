@@ -85,6 +85,7 @@ export function humanize(input: string | null | undefined): string {
   return (input ?? "")
     .replace(/\s*[—–]\s*/g, ", ")        // em/en dash -> comma
     .replace(/[™®©℠]/g, "")               // strip trademark/legal marks
+    .replace(/é/g, "e").replace(/É/g, "E") // no acute-e: Louis types "der", not "dér"
     .replace(/,\s*([:.!?])/g, "$1")       // ", ." / ", :" -> drop the stray comma
     .replace(/[ \t]{2,}/g, " ")           // collapse doubled spaces (NOT newlines)
     .replace(/[ \t]+([,.:;!?])/g, "$1")   // no space before punctuation
