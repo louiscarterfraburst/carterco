@@ -41,6 +41,7 @@ DECISION_MAKER_PATTERNS = [
     re.compile(r"\b(co-?founder|stifter|grundlægger|gründer)\b", re.I),
     re.compile(r"\b(founder|owner|ejer|indehaver)\b", re.I),
     re.compile(r"\b(ceo|adm\.?\s*direktør|administrerende\s*direktør|managing director|md|daglig leder)\b", re.I),
+    re.compile(r"\b(cro|cco|chief revenue|chief commercial|chief sales)\b", re.I),
     re.compile(r"\b(partner|chairman|formand|president)\b", re.I),
     re.compile(r"\b(director|direktør|vp|vice president)\b", re.I),
     re.compile(r"\b(head of (sales|growth|commercial|marketing|business))\b", re.I),
@@ -56,12 +57,61 @@ DM_JOB_TITLES = [
 ]
 
 
+# Function awareness for the hiring-signal play. The buyer of an outbound
+# REVENUE system is the COMMERCIAL owner — so a sales/commercial title floats to
+# the top, and a purely TECHNICAL leader (even a co-founder — see Weply, whose
+# CTO co-founder out-ranked the CEO under the old founder-first scoring) sinks
+# below any commercial alternative at the same company.
+COMMERCIAL_RE = re.compile(
+    r"\b(cro|chief revenue|chief commercial|cco|commercial|sales|salg\w*|"
+    r"revenue|go.?to.?market|gtm|growth|marketing)\b", re.I)
+TECHNICAL_RE = re.compile(
+    r"\b(cto|cpo|cio|ciso|chief technolog|chief product|chief information|"
+    r"engineer|engineering|technical|teknisk|udvikler|developer|architect|"
+    r"devops|data scien|machine learning)\b", re.I)
+# Recruiter / talent markers — used to decide whether a job's posted contact is
+# the hiring MANAGER (usable) or just the agency/TA who posted it (ignore).
+RECRUITER_RE = re.compile(
+    r"recruit|talent|staffing|\bhr\b|human resources|people\s*(&|and)?\s*culture|"
+    r"people ops|peopleops", re.I)
+
+
 def score_person(title: str) -> tuple[int, str]:
+    """Lower score = better fit. Base rank comes from DECISION_MAKER_PATTERNS;
+    then we make it function-aware for a SALES-hire pitch: commercial titles get
+    promoted, technical-only leaders get demoted below any commercial peer."""
+    t = title or ""
+    base, label = 99, ""
     for i, pat in enumerate(DECISION_MAKER_PATTERNS):
-        m = pat.search(title or "")
+        m = pat.search(t)
         if m:
-            return (i, m.group(1) or m.group(0))
-    return (99, "")
+            base, label = i, (m.group(1) or m.group(0))
+            break
+    if base == 99:
+        return (99, "")  # not a leader at all — no commercial/technical nudge
+    is_comm = bool(COMMERCIAL_RE.search(t))
+    is_tech = bool(TECHNICAL_RE.search(t))
+    score = base
+    if is_comm:
+        score -= 10           # commercial owner — strongest fit, floats to top
+    if is_tech and not is_comm:
+        score += 50           # technical-only — sinks below any commercial peer
+    return (score, label)
+
+
+def parse_contact(raw: str) -> tuple[str, str]:
+    """'Name <url>' or 'Name' → (name, url). Empty parts when absent."""
+    raw = (raw or "").strip()
+    if not raw:
+        return ("", "")
+    m = re.match(r"^(.*?)\s*<([^>]*)>\s*$", raw)
+    return (m.group(1).strip(), m.group(2).strip()) if m else (raw, "")
+
+
+def contact_is_recruiter(name: str, url: str, title: str = "") -> bool:
+    """True if the job's posted contact is a recruiter/TA rather than the buyer."""
+    return bool(RECRUITER_RE.search(name) or RECRUITER_RE.search(url)
+                or RECRUITER_RE.search(title))
 
 
 def http_json(method: str, url: str, body: dict | None = None, timeout: int = 60) -> dict:
@@ -298,6 +348,18 @@ def main() -> int:
         scored = sorted([(score_person(_title(p)), p) for p in people], key=lambda x: x[0][0])
         best_rank, best_label = scored[0][0]
         best = scored[0][1]
+        # #3 hiring_contact tiebreaker: if the JOB's posted contact is an internal
+        # decision-maker (matches a scraped employee, NOT a recruiter/TA, NOT a
+        # technical-only title), prefer them — they own the seat. Most posted
+        # contacts are agency/TA recruiters and get ignored here.
+        cn_name, cn_url = parse_contact(b.get("trigger_contact", ""))
+        if cn_name and not contact_is_recruiter(cn_name, cn_url):
+            cn = _norm(cn_name)
+            for (sc, lbl), p in scored:
+                if sc < 99 and _norm(_name(p)) == cn and not TECHNICAL_RE.search(_title(p)):
+                    best_rank, best_label, best = sc, lbl, p
+                    print(f"     ↳ used job contact (hiring mgr): {cn_name}")
+                    break
         title = _title(best)
         name = _name(best)
         prof_url = best.get("publicIdentifier") or best.get("profileUrl") or best.get("linkedinUrl") or ""
