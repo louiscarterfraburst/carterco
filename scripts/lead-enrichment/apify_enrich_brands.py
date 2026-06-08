@@ -40,10 +40,10 @@ BASE = "https://api.apify.com/v2"
 DECISION_MAKER_PATTERNS = [
     re.compile(r"\b(co-?founder|stifter|grundlægger|gründer)\b", re.I),
     re.compile(r"\b(founder|owner|ejer|indehaver)\b", re.I),
-    re.compile(r"\b(ceo|adm\.?\s*direktør|administrerende\s*direktør|managing director|md|daglig leder)\b", re.I),
+    re.compile(r"\b(ceo|chief executive|adm\.?\s*direktør|administrerende\s*direktør|managing director|md|daglig leder)\b", re.I),
     re.compile(r"\b(cro|cco|cso|chief revenue|chief commercial|chief sales)\b", re.I),
     # "partner" = a firm Partner, NOT "Partner Marketing" / "Partnerships Mgr"
-    re.compile(r"\b(partner(?!\s+marketing)|chairman|formand|president)\b", re.I),
+    re.compile(r"\b(partner(?!\s+(marketing|manager))|chairman|formand|president)\b", re.I),
     re.compile(r"\b(director|direktør|vp|vice president)\b", re.I),
     re.compile(r"\b(head of (sales|growth|commercial|marketing|business|outreach|revenue|gtm))\b", re.I),
     re.compile(r"\b(salgschef|salgsdirektør|kommerciel chef)\b", re.I),
@@ -77,9 +77,9 @@ TECHNICAL_RE = re.compile(
 # Recruiter / talent markers — used to decide whether a job's posted contact is
 # the hiring MANAGER (usable) or just the agency/TA who posted it (ignore).
 RECRUITER_RE = re.compile(
-    r"recruit|talent|staffing|headhunt|executive search|search\s*&\s*selection|"
-    r"\bhr\b|human resources|people\s*(&|and)?\s*culture|people ops|peopleops|"
-    r"people business partner|hr business partner|\bpeople\b|"
+    r"recruit|rekrut|talent|staffing|bemanding|headhunt|executive search|"
+    r"search\s*&\s*selection|\bhr\b|human resources|people\s*(&|and)?\s*culture|"
+    r"people ops|peopleops|people business partner|hr business partner|\bpeople\b|"
     r"employee experience|employer brand|building (global )?teams", re.I)
 
 
