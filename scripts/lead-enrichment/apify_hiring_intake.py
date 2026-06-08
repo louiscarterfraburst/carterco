@@ -313,9 +313,13 @@ def flatten(job: dict) -> dict:
     if smin or smax:
         rng = f"{smin}-{smax}" if (smin and smax) else str(smin or smax)
         salary = f"{rng} {job.get('ai_salary_currency') or ''}/{job.get('ai_salary_unittext') or ''}".strip().rstrip("/").strip()
-    # contact: the recruiter who posted, else the AI-extracted hiring manager
+    # contact: LinkedIn's "Posted by" person (recruiter_* fields). Carry the
+    # TITLE too — it's the signal that separates a TA/recruiter (ignore) from a
+    # commercial leader who posted their own hire (the single best target, e.g.
+    # Sprii's CSO, Clerk.io's Head of Outreach). enrich uses it to decide.
     rec_name = (job.get("recruiter_name") or "").strip()
     rec_url = (job.get("recruiter_url") or "").strip()
+    rec_title = (job.get("recruiter_title") or "").strip()
     contact = f"{rec_name} <{rec_url}>".strip() if (rec_name or rec_url) else (job.get("ai_hiring_manager_name") or "").strip()
     emp_type = job.get("employment_type")
     if isinstance(emp_type, list):
@@ -335,6 +339,7 @@ def flatten(job: dict) -> dict:
         "employment_type": emp_type or "",
         "workplace_type": job.get("ai_work_arrangement") or "",
         "hiring_contact": contact,
+        "hiring_contact_title": rec_title,
         "recruiter_agency": "yes" if job.get("linkedin_org_recruitment_agency_derived") else "",
         "job_url": job.get("url") or "",
         "apply_url": job.get("external_apply_url") or job.get("url") or "",
@@ -345,8 +350,8 @@ def flatten(job: dict) -> dict:
 POSTING_FIELDS = [
     "company", "company_linkedin_url", "domain", "role_title", "salary",
     "posted_date", "location", "employee_count", "industries", "applicants",
-    "employment_type", "workplace_type", "hiring_contact", "recruiter_agency",
-    "fit_tier", "job_url", "apply_url", "jd_text",
+    "employment_type", "workplace_type", "hiring_contact", "hiring_contact_title",
+    "recruiter_agency", "fit_tier", "job_url", "apply_url", "jd_text",
 ]
 
 
@@ -471,11 +476,13 @@ def main() -> int:
                 "trigger_salary": r["salary"],
                 "trigger_posted": r["posted_date"],
                 "trigger_contact": r["hiring_contact"],
+                "trigger_contact_title": r.get("hiring_contact_title", ""),
                 "trigger_job_url": r["job_url"],
             }
         cfields = ["brand", "brand_clean", "vertical", "fit_tier", "country", "domain",
                    "linkedin_url", "trigger_role", "trigger_salary",
-                   "trigger_posted", "trigger_contact", "trigger_job_url"]
+                   "trigger_posted", "trigger_contact", "trigger_contact_title",
+                   "trigger_job_url"]
         cout = Path(args.companies_out)
         cout.parent.mkdir(parents=True, exist_ok=True)
         with open(cout, "w", newline="", encoding="utf-8") as f:

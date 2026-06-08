@@ -41,10 +41,11 @@ DECISION_MAKER_PATTERNS = [
     re.compile(r"\b(co-?founder|stifter|grundlægger|gründer)\b", re.I),
     re.compile(r"\b(founder|owner|ejer|indehaver)\b", re.I),
     re.compile(r"\b(ceo|adm\.?\s*direktør|administrerende\s*direktør|managing director|md|daglig leder)\b", re.I),
-    re.compile(r"\b(cro|cco|chief revenue|chief commercial|chief sales)\b", re.I),
-    re.compile(r"\b(partner|chairman|formand|president)\b", re.I),
+    re.compile(r"\b(cro|cco|cso|chief revenue|chief commercial|chief sales)\b", re.I),
+    # "partner" = a firm Partner, NOT "Partner Marketing" / "Partnerships Mgr"
+    re.compile(r"\b(partner(?!\s+marketing)|chairman|formand|president)\b", re.I),
     re.compile(r"\b(director|direktør|vp|vice president)\b", re.I),
-    re.compile(r"\b(head of (sales|growth|commercial|marketing|business))\b", re.I),
+    re.compile(r"\b(head of (sales|growth|commercial|marketing|business|outreach|revenue|gtm))\b", re.I),
     re.compile(r"\b(salgschef|salgsdirektør|kommerciel chef)\b", re.I),
 ]
 
@@ -62,9 +63,13 @@ DM_JOB_TITLES = [
 # the top, and a purely TECHNICAL leader (even a co-founder — see Weply, whose
 # CTO co-founder out-ranked the CEO under the old founder-first scoring) sinks
 # below any commercial alternative at the same company.
+# Sales/commercial markers get the promotion. NB: "marketing" is deliberately
+# NOT here — for an SDR/outbound-hire pitch the buyer is sales leadership; a
+# marketing IC/head shouldn't out-rank a CEO. It still matches "head of
+# marketing" as a low-priority fallback via DECISION_MAKER_PATTERNS.
 COMMERCIAL_RE = re.compile(
-    r"\b(cro|chief revenue|chief commercial|cco|commercial|sales|salg\w*|"
-    r"revenue|go.?to.?market|gtm|growth|marketing)\b", re.I)
+    r"\b(cro|cso|chief revenue|chief commercial|cco|commercial|sales|salg\w*|"
+    r"revenue|outreach|go.?to.?market|gtm|growth)\b", re.I)
 TECHNICAL_RE = re.compile(
     r"\b(cto|cpo|cio|ciso|chief technolog|chief product|chief information|"
     r"engineer|engineering|technical|teknisk|udvikler|developer|architect|"
@@ -72,8 +77,10 @@ TECHNICAL_RE = re.compile(
 # Recruiter / talent markers — used to decide whether a job's posted contact is
 # the hiring MANAGER (usable) or just the agency/TA who posted it (ignore).
 RECRUITER_RE = re.compile(
-    r"recruit|talent|staffing|\bhr\b|human resources|people\s*(&|and)?\s*culture|"
-    r"people ops|peopleops", re.I)
+    r"recruit|talent|staffing|headhunt|executive search|search\s*&\s*selection|"
+    r"\bhr\b|human resources|people\s*(&|and)?\s*culture|people ops|peopleops|"
+    r"people business partner|hr business partner|\bpeople\b|"
+    r"employee experience|employer brand|building (global )?teams", re.I)
 
 
 def score_person(title: str) -> tuple[int, str]:
@@ -112,6 +119,31 @@ def contact_is_recruiter(name: str, url: str, title: str = "") -> bool:
     """True if the job's posted contact is a recruiter/TA rather than the buyer."""
     return bool(RECRUITER_RE.search(name) or RECRUITER_RE.search(url)
                 or RECRUITER_RE.search(title))
+
+
+def poster_as_buyer(contact: str, contact_title: str):
+    """If the job's LinkedIn poster is the COMMERCIAL buyer — a sales/commercial
+    leader or owner who posted their own hire — return them as a contact dict.
+    That's the strongest signal there is: they self-identified as owning this
+    hire. Returns None for recruiters/TA/headhunters and technical/non-leader
+    posters, so the caller falls back to the function-aware company scrape."""
+    name, url = parse_contact(contact)
+    if not name:
+        return None
+    title = (contact_title or "").strip()
+    if contact_is_recruiter(name, url, title):
+        return None
+    rank, label = score_person(title)
+    if rank >= 99:
+        return None                       # title isn't a decision-maker (or absent)
+    if TECHNICAL_RE.search(title) and not COMMERCIAL_RE.search(title):
+        return None                       # technical poster — scrape the company
+    # Normalise the country subdomain (dk./lv.linkedin.com → www.) for consistency
+    # with resolved vanity URLs downstream.
+    url = re.sub(r"://[a-z]{2}\.linkedin\.com", "://www.linkedin.com", url, flags=re.I)
+    first, last = _split(name)
+    return {"name": name, "url": url, "title": title, "label": label,
+            "first": first, "last": last, "rank": rank}
 
 
 def http_json(method: str, url: str, body: dict | None = None, timeout: int = 60) -> dict:
@@ -340,6 +372,29 @@ def main() -> int:
         # so brand_clean would mismatch (e.g. "scancoffeegroupt" vs "scancoffee").
         brand_norm = _norm(raw)
         people = by_brand_key.get(brand_norm, [])
+
+        # PREFER THE JOB POSTER when they're the commercial buyer — they posted
+        # their own hire, the strongest signal there is (e.g. Sprii's CSO,
+        # Clerk.io's Head of Outreach). Works even if the employee scrape came
+        # back empty. Recruiters/TA/headhunters/technical posters → None, and we
+        # fall back to the scraped, function-aware pick below.
+        poster = poster_as_buyer(b.get("trigger_contact", ""),
+                                 b.get("trigger_contact_title", ""))
+        if poster:
+            found += 1
+            print(f"  ✓ {raw:30s} | POSTER | high   | {poster['name']} → {poster['title'][:46]}")
+            out_rows.append({
+                "brand": raw, "brand_clean": b.get("brand_clean", ""),
+                "vertical": b.get("vertical", ""), "country": b.get("country", "DK"),
+                "domain": b.get("domain", ""), "linkedin_company_url": b.get("linkedin_url", ""),
+                "first_name": poster["first"], "last_name": poster["last"],
+                "title": poster["title"], "linkedin_profile_url": poster["url"],
+                "matched_role_pattern": poster["label"], "confidence": "high",
+                "status": "found", "source": "poster",
+                "company_returned": raw, "total_in_company": len(people),
+            })
+            continue
+
         if not people:
             empty += 1
             print(f"  ⊘ {raw:30s} | no employees returned")
@@ -348,18 +403,6 @@ def main() -> int:
         scored = sorted([(score_person(_title(p)), p) for p in people], key=lambda x: x[0][0])
         best_rank, best_label = scored[0][0]
         best = scored[0][1]
-        # #3 hiring_contact tiebreaker: if the JOB's posted contact is an internal
-        # decision-maker (matches a scraped employee, NOT a recruiter/TA, NOT a
-        # technical-only title), prefer them — they own the seat. Most posted
-        # contacts are agency/TA recruiters and get ignored here.
-        cn_name, cn_url = parse_contact(b.get("trigger_contact", ""))
-        if cn_name and not contact_is_recruiter(cn_name, cn_url):
-            cn = _norm(cn_name)
-            for (sc, lbl), p in scored:
-                if sc < 99 and _norm(_name(p)) == cn and not TECHNICAL_RE.search(_title(p)):
-                    best_rank, best_label, best = sc, lbl, p
-                    print(f"     ↳ used job contact (hiring mgr): {cn_name}")
-                    break
         title = _title(best)
         name = _name(best)
         prof_url = best.get("publicIdentifier") or best.get("profileUrl") or best.get("linkedinUrl") or ""
@@ -391,6 +434,7 @@ def main() -> int:
             "matched_role_pattern": best_label,
             "confidence": conf,
             "status": status,
+            "source": "scrape",
             "company_returned": _co_name(best),
             "total_in_company": len(people),
         })
@@ -400,7 +444,7 @@ def main() -> int:
     fields = ["brand", "brand_clean", "vertical", "country", "domain",
               "linkedin_company_url", "first_name", "last_name", "title",
               "linkedin_profile_url", "matched_role_pattern", "confidence",
-              "status", "company_returned", "total_in_company"]
+              "status", "source", "company_returned", "total_in_company"]
     with open(out, "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=fields)
         w.writeheader()
