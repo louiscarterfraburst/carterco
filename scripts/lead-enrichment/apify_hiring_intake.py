@@ -140,28 +140,29 @@ def is_dk_location(loc: str) -> bool:
     return bool(DK_LOC.search(loc or ""))
 
 
-# Offer-fit TIERING on the COMPANY (not the role). CarterCo's offer is an
+# Offer-fit SEGMENT on the COMPANY (not the role). CarterCo's offer is an
 # automated outbound revenue system, so "fit" = does that machine structurally
-# apply here? We go WIDE — keep all B2B — and only hard-drop Tier C, where the
-# offer cannot apply (B2C/retail floor sales, used-car lots, in-store/part-time
-# seats). Every kept row is TAGGED with its tier so enrichment prioritises A→B
-# instead of treating a tiny SaaS and a 300-person wholesaler identically.
+# apply here? We go WIDE — keep all B2B — and only hard-drop the B2C/retail
+# segment where the offer cannot apply.
 #
-#   Tier A — offer fully applies: software/SaaS/IT/security/fintech/martech/
-#            telecom/B2B-services — a digital, automatable outbound motion.
-#   Tier B — offer partially applies (default for unknown B2B): manufacturing,
-#            B2B-wholesale, energy, logistics, professional/industrial. Outbound
-#            applies but is more field/relationship-led. KEPT, ranked below A.
-#   Tier C — DROP: B2C/retail/consumer/hospitality/automotive-retail industries,
-#            OR a shop-floor / part-time / in-store / used-car sales SEAT. The
-#            role is a person on a floor or a route, not an automatable pipeline.
-FIT_A_INDUSTRY = re.compile(
+# FLATTENED 2026-06-08 (Louis's call): SaaS and traditional SME are COEQUAL
+# keeps, NOT a priority order. A traditional SME hiring a salgskonsulent has no
+# RevOps / outbound system at all — a bigger, less-saturated gap to fill than a
+# SaaS that already runs the playbook. The label is descriptive only (saas vs
+# sme), kept for analytics/segmentation — it never reorders or caps anything.
+#
+#   "saas" — software/SaaS/IT/security/fintech/martech/B2B-services
+#   "sme"  — every other B2B (manufacturing, wholesale, energy, services, …):
+#            the un-saturated sweet spot for this play. Default for unknown B2B.
+#   "drop" — B2C/retail/consumer/hospitality industries, OR a shop-floor /
+#            part-time / in-store / used-car SEAT. Not an automatable pipeline.
+SAAS_INDUSTRY = re.compile(
     r"software|saas|information technology|\bit\b|computer|internet|"
     r"information services|data infra|fintech|financial technolog|"
     r"security|cyber|telecommunication|martech|marketing|advertising|"
     r"business consulting|professional services|staffing|recruit", re.I)
 
-FIT_C_INDUSTRY = re.compile(
+DROP_INDUSTRY = re.compile(
     r"retail|apparel|fashion|supermarket|grocer|restaurant|hospitality|"
     r"food.*beverage|consumer goods|leisure|sporting goods|recreation|"
     r"wellness|fitness|cosmetic|furniture|"
@@ -171,39 +172,42 @@ FIT_C_INDUSTRY = re.compile(
 # hard-drop the automotive/motor-vehicle INDUSTRY — that cut legit B2B suppliers
 # who SELL TO the automotive sector (e.g. Brdr. Plagborg, workshop-gear project
 # sales). B2C car sales is caught at the SEAT level instead (used cars,
-# bilforhandler, bilsælger) — see FIT_C_TITLE. Trade-off: a pure car dealer with
-# a generic "salgskonsulent" title can slip to Tier B; accepted for the reach.
+# bilforhandler, bilsælger) — see DROP_TITLE. Trade-off: a pure car dealer with
+# a generic "salgskonsulent" title can slip into "sme"; accepted for the reach.
 
-# Title markers that force Tier C regardless of industry — a shop-floor / used-
+# Title markers that force "drop" regardless of industry — a shop-floor / used-
 # car / part-time / in-store SEAT is not an automatable outbound role even at an
 # otherwise-B2B company. (NB: "kørende"/field sales is NOT here — that's still a
-# real B2B outbound seat, just relationship-led → stays Tier B.)
-FIT_C_TITLE = re.compile(
+# real B2B outbound seat, just relationship-led → stays "sme".)
+DROP_TITLE = re.compile(
     r"used cars|\bbiler\b|bilforhandler|bilsælg|automobilforhandler|deltid|"
     r"part[- ]?time|butik|in[- ]?store|\bstore\b|\bshop\b|ekspedient|"
     r"kassemedarbejder", re.I)
 
 
 def fit_tier(row: dict) -> tuple[str, str]:
-    """Classify a posting's COMPANY into offer-fit tier A/B/C. Returns
-    (tier, reason). Title-level C markers win over a friendly industry."""
+    """Classify a posting's COMPANY into offer segment: saas | sme | drop.
+    saas and sme are COEQUAL keeps (this is a label, not a priority); only
+    'drop' is filtered out. Title-level drop markers win over a friendly
+    industry. (Function name kept for the `fit_tier` output column.)"""
     inds = (row.get("industries") or "").strip()
     title = row.get("role_title") or ""
-    if FIT_C_TITLE.search(title):
-        return ("C", f"seat:{title[:22]}")
-    if FIT_C_INDUSTRY.search(inds):
-        return ("C", f"industry:{inds[:22]}")
-    if FIT_A_INDUSTRY.search(inds):
-        return ("A", inds[:24] or "b2b-tech")
-    return ("B", inds[:24] or "b2b-default")  # unknown/other B2B → keep, rank below A
+    if DROP_TITLE.search(title):
+        return ("drop", f"seat:{title[:22]}")
+    if DROP_INDUSTRY.search(inds):
+        return ("drop", f"industry:{inds[:22]}")
+    if SAAS_INDUSTRY.search(inds):
+        return ("saas", inds[:24] or "saas")
+    return ("sme", inds[:24] or "b2b-sme")  # every other B2B — coequal keep
 
 
 def is_icp_company(row: dict, min_emp: int, max_emp: int) -> tuple[bool, str]:
-    """Return (keep, reason-if-dropped). Drops Tier C + out-of-band sizes; keeps
-    A and B (wide). Missing employee_count → keep (don't punish missing data)."""
-    tier, why = fit_tier(row)
-    if tier == "C":
-        return (False, f"tier-C:{why}")
+    """Return (keep, reason-if-dropped). Drops only the 'drop' segment (B2C/
+    retail) + out-of-band sizes; keeps saas AND sme equally (wide). Missing
+    employee_count → keep (don't punish missing data)."""
+    seg, why = fit_tier(row)
+    if seg == "drop":
+        return (False, f"drop:{why}")
     ec = row.get("employee_count")
     try:
         n = int(ec)
