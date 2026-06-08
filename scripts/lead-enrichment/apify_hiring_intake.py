@@ -129,22 +129,70 @@ def is_dk_location(loc: str) -> bool:
     return bool(DK_LOC.search(loc or ""))
 
 
-# ICP gate on the COMPANY (not the role). The foot-in-the-door play targets
-# mid-market B2B building an outbound function — not the giants who ARE the
-# outbound machine (Salesforce, Google, IFS) nor retailers hiring floor staff
-# (STARK). employee_count + industries are already on every row.
-ICP_EXCLUDE_INDUSTRY = re.compile(
+# Offer-fit TIERING on the COMPANY (not the role). CarterCo's offer is an
+# automated outbound revenue system, so "fit" = does that machine structurally
+# apply here? We go WIDE — keep all B2B — and only hard-drop Tier C, where the
+# offer cannot apply (B2C/retail floor sales, used-car lots, in-store/part-time
+# seats). Every kept row is TAGGED with its tier so enrichment prioritises A→B
+# instead of treating a tiny SaaS and a 300-person wholesaler identically.
+#
+#   Tier A — offer fully applies: software/SaaS/IT/security/fintech/martech/
+#            telecom/B2B-services — a digital, automatable outbound motion.
+#   Tier B — offer partially applies (default for unknown B2B): manufacturing,
+#            B2B-wholesale, energy, logistics, professional/industrial. Outbound
+#            applies but is more field/relationship-led. KEPT, ranked below A.
+#   Tier C — DROP: B2C/retail/consumer/hospitality/automotive-retail industries,
+#            OR a shop-floor / part-time / in-store / used-car sales SEAT. The
+#            role is a person on a floor or a route, not an automatable pipeline.
+FIT_A_INDUSTRY = re.compile(
+    r"software|saas|information technology|\bit\b|computer|internet|"
+    r"information services|data infra|fintech|financial technolog|"
+    r"security|cyber|telecommunication|martech|marketing|advertising|"
+    r"business consulting|professional services|staffing|recruit", re.I)
+
+FIT_C_INDUSTRY = re.compile(
     r"retail|apparel|fashion|supermarket|grocer|restaurant|hospitality|"
-    r"food.*beverage|consumer goods|leisure|"
-    r"building material|byggemarked|byggecenter|trælast|home improvement", re.I)
+    r"food.*beverage|consumer goods|leisure|sporting goods|recreation|"
+    r"wellness|fitness|cosmetic|furniture|"
+    r"building material|byggemarked|byggecenter|trælast|"
+    r"home improvement|travel|tourism", re.I)
+# NB on automotive (decided 2026-06-08, "go wider"): we deliberately do NOT
+# hard-drop the automotive/motor-vehicle INDUSTRY — that cut legit B2B suppliers
+# who SELL TO the automotive sector (e.g. Brdr. Plagborg, workshop-gear project
+# sales). B2C car sales is caught at the SEAT level instead (used cars,
+# bilforhandler, bilsælger) — see FIT_C_TITLE. Trade-off: a pure car dealer with
+# a generic "salgskonsulent" title can slip to Tier B; accepted for the reach.
+
+# Title markers that force Tier C regardless of industry — a shop-floor / used-
+# car / part-time / in-store SEAT is not an automatable outbound role even at an
+# otherwise-B2B company. (NB: "kørende"/field sales is NOT here — that's still a
+# real B2B outbound seat, just relationship-led → stays Tier B.)
+FIT_C_TITLE = re.compile(
+    r"used cars|\bbiler\b|bilforhandler|bilsælg|automobilforhandler|deltid|"
+    r"part[- ]?time|butik|in[- ]?store|\bstore\b|\bshop\b|ekspedient|"
+    r"kassemedarbejder", re.I)
+
+
+def fit_tier(row: dict) -> tuple[str, str]:
+    """Classify a posting's COMPANY into offer-fit tier A/B/C. Returns
+    (tier, reason). Title-level C markers win over a friendly industry."""
+    inds = (row.get("industries") or "").strip()
+    title = row.get("role_title") or ""
+    if FIT_C_TITLE.search(title):
+        return ("C", f"seat:{title[:22]}")
+    if FIT_C_INDUSTRY.search(inds):
+        return ("C", f"industry:{inds[:22]}")
+    if FIT_A_INDUSTRY.search(inds):
+        return ("A", inds[:24] or "b2b-tech")
+    return ("B", inds[:24] or "b2b-default")  # unknown/other B2B → keep, rank below A
 
 
 def is_icp_company(row: dict, min_emp: int, max_emp: int) -> tuple[bool, str]:
-    """Return (keep, reason-if-dropped). Missing employee_count → keep (don't
-    punish missing data), but flag it."""
-    inds = row.get("industries") or ""
-    if ICP_EXCLUDE_INDUSTRY.search(inds):
-        return (False, f"industry:{inds[:30]}")
+    """Return (keep, reason-if-dropped). Drops Tier C + out-of-band sizes; keeps
+    A and B (wide). Missing employee_count → keep (don't punish missing data)."""
+    tier, why = fit_tier(row)
+    if tier == "C":
+        return (False, f"tier-C:{why}")
     ec = row.get("employee_count")
     try:
         n = int(ec)
@@ -178,6 +226,10 @@ def fire_actor(actor_id: str, titles: list[str], title_excludes: list[str],
     body: dict = {
         "titleSearch": titles,
         "locationSearch": [location],
+        # fantastic-jobs caps results at `limit` (default 10!). `maxItems` is
+        # NOT a recognised input key — sending only that silently capped every
+        # scrape at 10. Set both; `limit` is the one the actor honours.
+        "limit": max_items,
         "maxItems": max_items,
     }
     if title_excludes:
@@ -283,7 +335,7 @@ POSTING_FIELDS = [
     "company", "company_linkedin_url", "domain", "role_title", "salary",
     "posted_date", "location", "employee_count", "industries", "applicants",
     "employment_type", "workplace_type", "hiring_contact", "recruiter_agency",
-    "job_url", "apply_url", "jd_text",
+    "fit_tier", "job_url", "apply_url", "jd_text",
 ]
 
 
@@ -342,6 +394,8 @@ def main() -> int:
 
     rows = [flatten(j) for j in jobs]
     rows = [r for r in rows if r["company_linkedin_url"]]  # need the URL to act on it
+    for r in rows:  # tag offer-fit tier on every row up front (A/B kept, C dropped)
+        r["fit_tier"], _ = fit_tier(r)
 
     dropped_role = dropped_icp = dropped_loc = dropped_rec = 0
     if not args.recruiters:
@@ -398,6 +452,7 @@ def main() -> int:
                 "brand": r["company"],
                 "brand_clean": r["company"],
                 "vertical": r["industries"],
+                "fit_tier": r.get("fit_tier", ""),
                 "country": "DK",
                 "domain": r["domain"],
                 "linkedin_url": r["company_linkedin_url"],
@@ -407,7 +462,7 @@ def main() -> int:
                 "trigger_contact": r["hiring_contact"],
                 "trigger_job_url": r["job_url"],
             }
-        cfields = ["brand", "brand_clean", "vertical", "country", "domain",
+        cfields = ["brand", "brand_clean", "vertical", "fit_tier", "country", "domain",
                    "linkedin_url", "trigger_role", "trigger_salary",
                    "trigger_posted", "trigger_contact", "trigger_job_url"]
         cout = Path(args.companies_out)
