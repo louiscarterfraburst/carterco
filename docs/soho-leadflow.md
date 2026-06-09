@@ -373,4 +373,34 @@ ad `fbclid` → landing captures it (§3) → stored on lead → Nexudus booking
 `146975948684005` (same Meta-access ask as the spend side, §3/§10). Blocked until
 the landing page (fbclid), Nexudus trigger, and Meta token all exist.
 
+### Status 2026-06-09 — CAPI connection LIVE + verified
+
+The hardest, most-blocked link is done. The send pipe to Soho's dataset works
+end-to-end (HTTP 200 / `events_received: 1`, verified from both our server and
+Meta's Graph API Explorer).
+
+- **Canonical dataset = `2094557531307172`** ("SOHO | New web 27/3-26", Soho biz
+  `1902356403310858`). NOT `146975948684005` — that was a Leads-Center `asset_id`;
+  the dataset's connected ad account is `1902358339977331`. Created by **Martin
+  Juul**, Mar 27. Receives **PageView only** today (6.1/10 EMQ) — no Lead/booket/
+  rented events yet. That pageview-only state IS the problem we're fixing.
+- **Token:** reused the existing **"Conversions API System User"** (`6157644164555558`),
+  assigned the live dataset (it was wired only to old/DELETE datasets — fixed).
+  Stored in `.env.local` as `META_CAPI_ACCESS_TOKEN_SOHO` + `META_CAPI_DATASET_ID_SOHO`
+  (per-tenant keys so they never collide with CarterCo's `META_CAPI_*`). Not yet
+  pushed to Supabase secrets — only needed when the deployed sender fires on real
+  outcomes.
+- **Smoke test:** `scripts/soho/test_capi_event.mjs <TEST_CODE>` — sends one
+  `Schedule` event into Events Manager → Test events (counts toward nothing).
+- **Template:** `supabase/functions/meta-capi-conversion` (CarterCo, CRM model,
+  hashed em + `lead_id` match). Soho sender still to build: a `public.leads`
+  sibling firing `booket`/rented, per-workspace dataset/token routing.
+
+> ⚠️ **Dataset swamp — top meeting item.** Soho has ~7 datasets with near-identical
+> names ("New web" = live; "New website" = empty duplicate; two `** DELETE …`;
+> "Old old"; "MAYA Pixel"; "Nomads pixel"). We proved `2094557531307172` receives
+> events + accepts CAPI — but must confirm with Martin **which dataset the
+> Mødelokaler campaigns actually optimize against.** If it's a different one, we
+> re-point one env var. Also: consolidate/kill the duplicates.
+
 Sources: Meta CAPI docs (graph.facebook.com `/events`), fbp/fbc parameters.
