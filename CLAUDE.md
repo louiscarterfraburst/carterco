@@ -38,6 +38,22 @@ Using `npm install` updates only the (ignored) npm lock, leaving
 `pnpm-lock.yaml` stale → Vercel fails the deploy with
 `ERR_PNPM_OUTDATED_LOCKFILE`.
 
+## Testing
+
+```bash
+pnpm test   # vitest, runs src/**/*.test.{ts,tsx}
+```
+
+Tests live next to the code they test; see TESTING.md for layers and
+conventions. Expectations:
+
+- 100% test coverage is the goal — tests make vibe coding safe
+- When writing new functions, write a corresponding test
+- When fixing a bug, write a regression test
+- When adding error handling, write a test that triggers the error
+- When adding a conditional (if/else, switch), write tests for BOTH paths
+- Never commit code that makes existing tests fail
+
 ## Skill routing
 
 When the user's request matches an available skill, invoke it via the Skill tool. When in doubt, invoke the skill.

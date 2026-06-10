@@ -1,3 +1,6 @@
 allowBuilds:
-  sharp: set this to true or false
-  unrs-resolver: set this to true or false
+  # Both ship prebuilt binaries; their postinstall build scripts are optional
+  # and were never running anyway (pnpm blocked them with a placeholder here).
+  # false = skip silently so install exits 0 instead of ERR_PNPM_IGNORED_BUILDS.
+  sharp: false
+  unrs-resolver: false
