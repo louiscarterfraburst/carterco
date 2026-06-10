@@ -13,9 +13,14 @@ What it does, safely enough to run unattended on a cron:
        - other workspace    → SKIP, never clobber a client's lead. The plain
                               upsert below can't touch them because they're
                               excluded from the staged set entirely.
-  4. INSERTs net-new into outreach_leads (play=hiring_signal + {role} merge).
-  5. Optionally POSTs net-new to a SendPilot campaign (--sendpilot-campaign).
-  6. Writes one public.hiring_pipeline_runs record (counts + per-company detail)
+  4. Dialogue guard: net-new buyers whose COMPANY has an active dialogue
+     (inbound reply <90d, live /leads row, or open deal) are HELD — not
+     staged, not loaded. Same person twice is blocked by the URL dedupe;
+     a different person at the same company is fine, but never while a
+     colleague is mid-conversation.
+  5. INSERTs net-new into outreach_leads (play=hiring_signal + {role} merge).
+  6. Optionally POSTs net-new to a SendPilot campaign (--sendpilot-campaign).
+  7. Writes one public.hiring_pipeline_runs record (counts + per-company detail)
      so /outreach can show what the run did without reading CI logs.
 
 Usage:
@@ -37,10 +42,12 @@ import sys
 import urllib.error
 import urllib.parse
 import urllib.request
+from datetime import datetime, timedelta, timezone
 
 WORKSPACE_ID = "1e067f9a-d453-41a7-8bc4-9fdb5644a5fa"  # CarterCo (louis@carterco.dk)
 ENCODED_RE = re.compile(r"/in/AC[woq]AA", re.I)
 SLUG_RE = re.compile(r"[^a-z0-9-]+")
+DIALOGUE_REPLY_WINDOW_DAYS = 90  # inbound replies older than this no longer block
 
 SB = os.environ.get("SUPABASE_URL") or os.environ.get("NEXT_PUBLIC_SUPABASE_URL") \
     or sys.exit("SUPABASE_URL required")
@@ -94,6 +101,14 @@ def clean_role(title: str) -> str:
     return raw if (raw and len(raw) <= 30 and raw.count(" ") <= 3) else "sælger"
 
 
+def _domain(url: str) -> str:
+    raw = (url or "").strip().lower()
+    if not raw:
+        return ""
+    netloc = urllib.parse.urlparse(raw if "://" in raw else "https://" + raw).netloc or raw
+    return netloc.removeprefix("www.")
+
+
 def sb(method: str, path: str, body=None, prefer=None):
     headers = {"apikey": KEY, "Authorization": f"Bearer {KEY}", "Content-Type": "application/json"}
     if prefer:
@@ -103,6 +118,44 @@ def sb(method: str, path: str, body=None, prefer=None):
     with urllib.request.urlopen(req, timeout=60) as f:
         txt = f.read().decode()
         return json.loads(txt) if txt else []
+
+
+def dialogue_companies() -> tuple[set[str], set[str]]:
+    """Companies (normalized names, domains) with an ACTIVE dialogue in the
+    CarterCo workspace. A company qualifies when any of:
+      - someone there sent an inbound reply within DIALOGUE_REPLY_WINDOW_DAYS
+      - someone there has a live /leads row (not draft, not dead outcome)
+      - there's an open deal on the company
+    Cold-contacting a different person at such a company is what the guard
+    prevents; companies merely sitting staged/invited do NOT block.
+    """
+    names: set[str] = set()
+    domains: set[str] = set()
+
+    since = (datetime.now(timezone.utc) - timedelta(days=DIALOGUE_REPLY_WINDOW_DAYS)).isoformat()
+    replies = sb("GET", f"outreach_replies?direction=eq.inbound&workspace_id=eq.{WORKSPACE_ID}"
+                        f"&received_at=gte.{urllib.parse.quote(since)}&select=linkedin_url")
+    urls = sorted({r["linkedin_url"] for r in replies if r.get("linkedin_url")})
+    if urls:
+        inlist = ",".join('"%s"' % u for u in urls)
+        for x in sb("GET", f"outreach_leads?linkedin_url=in.({urllib.parse.quote(inlist)})"
+                           "&select=company,website"):
+            names.add(_norm(x.get("company") or ""))
+            domains.add(_domain(x.get("website") or ""))
+
+    for x in sb("GET", f"leads?workspace_id=eq.{WORKSPACE_ID}&is_draft=not.is.true"
+                       "&select=company,outcome"):
+        if (x.get("outcome") or "") not in ("not_interested", "unqualified"):
+            names.add(_norm(x.get("company") or ""))
+
+    for x in sb("GET", f"deals?workspace_id=eq.{WORKSPACE_ID}&stage=neq.lost"
+                       "&select=company_name,company_domain"):
+        names.add(_norm(x.get("company_name") or ""))
+        domains.add(_domain(x.get("company_domain") or ""))
+
+    names.discard("")
+    domains.discard("")
+    return names, domains
 
 
 def main() -> int:
@@ -145,6 +198,20 @@ def main() -> int:
         else:
             skipped_other += 1
 
+    # Dialogue guard (company level): hold net-new buyers whose company has an
+    # active conversation going — never open a second cold thread into it.
+    held = []
+    if netnew:
+        dlg_names, dlg_domains = dialogue_companies()
+        clear = []
+        for r in netnew:
+            co, dom = _norm(r.get("brand", "")), _domain(r.get("domain", ""))
+            if (co and co in dlg_names) or (dom and dom in dlg_domains):
+                held.append(r)
+            else:
+                clear.append(r)
+        netnew = clear
+
     # Build + stage net-new rows. Dedupe by linkedin_url WITHIN the batch: the
     # same person can be matched to two companies in one run (e.g. a buyer who
     # is the poster on one role and a commercial lead on another), which would
@@ -173,6 +240,11 @@ def main() -> int:
         })
         detail.append({"company": brand, "name": f"{first} {last}".strip(),
                        "title": (r.get("title") or "")[:60], "source": r.get("source", "")})
+    for r in held:
+        detail.append({"company": (r.get("brand") or "").strip(),
+                       "name": f"{(r.get('first_name') or '').strip()} {(r.get('last_name') or '').strip()}".strip(),
+                       "title": (r.get("title") or "")[:60], "source": r.get("source", ""),
+                       "held": "company_in_dialogue"})
     if staged_rows:
         sb("POST", "outreach_leads?on_conflict=linkedin_url", body=staged_rows,
            prefer="resolution=merge-duplicates,return=minimal")
@@ -206,6 +278,7 @@ def main() -> int:
         "decision_makers": len(rows), "leads_staged": len(staged_rows),
         "leads_added_sendpilot": added_sp, "skipped_existing": skipped_cc,
         "skipped_cross_workspace": skipped_other, "unresolved": len(unresolved),
+        "held_company_dialogue": len(held),
         "status": "ok", "detail": detail,
     }
     if not args.no_record:
@@ -213,7 +286,8 @@ def main() -> int:
 
     print(json.dumps({k: v for k, v in summary.items() if k != "detail"}, ensure_ascii=False))
     print(f"  staged {len(staged_rows)} net-new | sendpilot +{added_sp} | "
-          f"skipped {skipped_cc} dup / {skipped_other} other-ws | {len(unresolved)} unresolved held")
+          f"skipped {skipped_cc} dup / {skipped_other} other-ws | "
+          f"held {len(held)} company-dialogue | {len(unresolved)} unresolved held")
     return 0
 
 
