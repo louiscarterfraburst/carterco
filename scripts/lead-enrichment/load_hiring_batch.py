@@ -145,10 +145,19 @@ def main() -> int:
         else:
             skipped_other += 1
 
-    # Build + stage net-new rows.
+    # Build + stage net-new rows. Dedupe by linkedin_url WITHIN the batch: the
+    # same person can be matched to two companies in one run (e.g. a buyer who
+    # is the poster on one role and a commercial lead on another), which would
+    # put the same conflict key twice in the on_conflict upsert and trip
+    # Postgres' "ON CONFLICT DO UPDATE cannot affect row a second time". Keep
+    # the first occurrence.
     staged_rows, detail = [], []
+    seen_urls: set[str] = set()
     for r in netnew:
         url = r["linkedin_profile_url"].strip()
+        if url in seen_urls:
+            continue
+        seen_urls.add(url)
         first = (r.get("first_name") or "").strip()
         last = (r.get("last_name") or "").strip()
         brand = (r.get("brand") or "").strip()
