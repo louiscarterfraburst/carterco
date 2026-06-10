@@ -135,6 +135,43 @@ begin
     where pl.id = new.play
       and (pl.workspace_id is null or pl.workspace_id = new.workspace_id)
   ) then
+    -- Upsert escape: BEFORE INSERT fires before ON CONFLICT resolution, so an
+    -- INSERT ... ON CONFLICT that would conflict-update an existing legacy row
+    -- re-presents that row's unregistered play here as a fresh INSERT — the
+    -- UPDATE no-op guard above never gets a chance and the whole webhook write
+    -- fails. Escape ONLY when the row this insert would conflict with (matched
+    -- by the table's conflict keys, not by play value alone — a (play,
+    -- workspace) match would let one legacy row keep an unregistered play
+    -- alive for unrelated net-new rows) already carries this same play. A
+    -- genuinely new unregistered play (typo, unseeded registry) is rejected.
+    if tg_op = 'INSERT' then
+      declare
+        legacy boolean := false;
+      begin
+        if tg_table_name = 'outreach_pipeline' then
+          select exists(
+            select 1 from public.outreach_pipeline t
+            where (t.sendpilot_lead_id = new.sendpilot_lead_id or t.linkedin_url = new.linkedin_url)
+              and t.play is not distinct from new.play
+          ) into legacy;
+        elsif tg_table_name = 'outreach_leads' then
+          select exists(
+            select 1 from public.outreach_leads t
+            where (t.linkedin_url = new.linkedin_url or t.contact_email = new.contact_email)
+              and t.play is not distinct from new.play
+          ) into legacy;
+        elsif tg_table_name = 'lead_inbox' then
+          select exists(
+            select 1 from public.lead_inbox t
+            where t.linkedin_url = new.linkedin_url
+              and t.play is not distinct from new.play
+          ) into legacy;
+        end if;
+        if legacy then
+          return new;
+        end if;
+      end;
+    end if;
     raise exception 'unknown play "%" — register it in outreach_plays first', new.play;
   end if;
   return new;
