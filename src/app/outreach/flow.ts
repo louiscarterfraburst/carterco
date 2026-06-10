@@ -92,6 +92,8 @@ export function classifyNode(r: FlowRow): string {
   // don't scatter across render/approve status nodes.
   if (r.first_dm_variant) return `arm:${r.first_dm_variant}`;
   if (r.status === "sent") return "sent";
+  // 'sending' = the drainer claimed the row seconds ago; bucket with the queue.
+  if (r.status === "approved_queued" || r.status === "sending") return "approved_queued";
   if (r.status === "pending_approval") return "pending_approval";
   if (r.status === "pending_alt_review") return "pending_alt_review";
   if (r.status === "rendered") return "rendered";
@@ -186,6 +188,7 @@ export function buildTreeNodes(sequences: SeqLite[], rows: FlowRow[], armStats: 
     { id: "rendering", label: STATUS_LABELS.rendering, col: 3, tone: "neutral", kind: "status" },
     { id: "rendered", label: STATUS_LABELS.rendered, col: 3, tone: "neutral", kind: "status" },
     { id: "pending_approval", label: STATUS_LABELS.pending_approval, col: 3, tone: "active", kind: "status" },
+    { id: "approved_queued", label: STATUS_LABELS.approved_queued, col: 4, tone: "active", kind: "status", sublabel: "drip-kø" },
   ];
 
   // "Sendt" — the AI-personalised first DM (this branch only runs when there
@@ -193,7 +196,7 @@ export function buildTreeNodes(sequences: SeqLite[], rows: FlowRow[], armStats: 
   nodes.push({
     id: "sent",
     label: STATUS_LABELS.sent,
-    col: 4,
+    col: 5,
     tone: "active",
     kind: "status",
     sublabel: "AI-personaliseret 1. DM",
@@ -219,7 +222,7 @@ export function buildTreeNodes(sequences: SeqLite[], rows: FlowRow[], armStats: 
       nodes.push({
         id,
         label: step.id || `trin ${idx}`,
-        col: 5 + idx,
+        col: 6 + idx,
         tone: "active",
         kind: "sequence",
         sublabel: seq.id,
@@ -236,7 +239,7 @@ export function buildTreeNodes(sequences: SeqLite[], rows: FlowRow[], armStats: 
         nodes.push({
           id,
           label: `trin ${r.sequence_step}`,
-          col: 5 + r.sequence_step,
+          col: 6 + r.sequence_step,
           tone: "active",
           kind: "sequence",
           sublabel: r.sequence_id,
@@ -281,8 +284,11 @@ export function buildTreeEdges(nodes: NodeDef[], sequences: SeqLite[]): EdgeDef[
   add("rendered", "pending_approval");
   add("pending_ai_draft", "pending_approval");
 
-  // First-DM fork: approval dispatches into "Sendt" + each arm.
-  for (const n of nodes.filter((x) => x.col === 4)) add("pending_approval", n.id);
+  // Approval → drip queue → first DM. Approving never sends directly: the
+  // DM sits in the drip queue (approved_queued) until outreach-send-queue
+  // drains it at human cadence.
+  add("pending_approval", "approved_queued");
+  add("approved_queued", "sent");
 
   // Each first-DM node flows into its matched follow-up sequences.
   for (const seq of sequences) {
@@ -309,6 +315,8 @@ export const STATUS_LABELS: Record<string, string> = {
   rendering: "Renderer",
   rendered: "Renderet",
   pending_approval: "Til godkendelse",
+  approved_queued: "I sende-kø",
+  sending: "Sender",
   sent: "Sendt",
 };
 

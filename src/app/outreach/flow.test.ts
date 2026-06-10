@@ -7,8 +7,6 @@ import {
   lookupSeqStep,
   nodeLabel,
   OUTCOME_DEFS,
-  playStats,
-  resolvePlays,
   type FlowRow,
   type NodeDef,
   type SeqLite,
@@ -123,7 +121,7 @@ const ARM_SEQUENCES: SeqLite[] = [
 describe("classifyNode (terminal + pre-send statuses)", () => {
   it("gives every pre-send status its own tree node", () => {
     for (const status of [
-      "sent", "pending_approval", "pending_alt_review", "rendered", "rendering",
+      "sent", "approved_queued", "pending_approval", "pending_alt_review", "rendered", "rendering",
       "pending_pre_render", "pending_ai_draft", "pre_connected", "accepted",
     ]) {
       expect(classifyNode(row({ status }))).toBe(status);
@@ -159,12 +157,15 @@ describe("buildTreeNodes", () => {
   it("builds the non-arm spine with each sequence chained below Sendt", () => {
     const nodes = buildTreeNodes(SEQUENCES, [row()], []);
     const byId = new Map(nodes.map((n) => [n.id, n]));
-    for (const id of ["invited", "accepted", "pending_approval", "sent"]) {
+    for (const id of ["invited", "accepted", "pending_approval", "approved_queued", "sent"]) {
       expect(byId.has(id)).toBe(true);
     }
-    // Steps stack straight down their own lane: col 5 + stepIndex.
-    expect(byId.get("seq:hiring_signal_v1:0")).toMatchObject({ col: 5, kind: "sequence", label: "opfolgning_1" });
-    expect(byId.get("seq:hiring_signal_v1:1")).toMatchObject({ col: 6, label: "opfolgning_2" });
+    // The drip queue sits between approval (col 3) and Sendt (col 5).
+    expect(byId.get("approved_queued")).toMatchObject({ col: 4, kind: "status" });
+    expect(byId.get("sent")).toMatchObject({ col: 5 });
+    // Steps stack straight down their own lane: col 6 + stepIndex.
+    expect(byId.get("seq:hiring_signal_v1:0")).toMatchObject({ col: 6, kind: "sequence", label: "opfolgning_1" });
+    expect(byId.get("seq:hiring_signal_v1:1")).toMatchObject({ col: 7, label: "opfolgning_2" });
   });
 
   it("synthesizes a node for rows at a step with no loaded definition, but not for completed ones", () => {
@@ -174,7 +175,7 @@ describe("buildTreeNodes", () => {
     ];
     const nodes = buildTreeNodes([], rows, []);
     const ghost = nodes.find((n) => n.id === "seq:ghost_seq:2");
-    expect(ghost).toMatchObject({ label: "trin 2", col: 7, kind: "sequence" });
+    expect(ghost).toMatchObject({ label: "trin 2", col: 8, kind: "sequence" });
     expect(nodes.some((n) => n.id.startsWith("seq:done_seq"))).toBe(false);
   });
 
@@ -218,7 +219,10 @@ describe("buildTreeEdges", () => {
     const ids = buildTreeEdges(nodes, SEQUENCES).map((e) => e.id);
     expect(ids).toContain("invited=>accepted");
     expect(ids).toContain("rendered=>pending_approval");
-    expect(ids).toContain("pending_approval=>sent");
+    // Approval never sends directly anymore — it flows through the drip queue.
+    expect(ids).toContain("pending_approval=>approved_queued");
+    expect(ids).toContain("approved_queued=>sent");
+    expect(ids).not.toContain("pending_approval=>sent");
     expect(ids).toContain("sent=>seq:hiring_signal_v1:0");
     expect(ids).toContain("seq:hiring_signal_v1:0=>seq:hiring_signal_v1:1");
   });
@@ -290,45 +294,6 @@ describe("nodeLabel ↔ buildTreeNodes sync", () => {
   });
 });
 
-describe("resolvePlays", () => {
-  const global = { id: "video_loop", workspace_id: null, position: 100, label: "Global" };
-  const override = { id: "video_loop", workspace_id: "ws-1", position: 100, label: "Override" };
-  const hiring = { id: "hiring_signal", workspace_id: null, position: 50, label: "Hiring" };
-
-  it("lets a workspace row override the global with the same id, in either arrival order", () => {
-    expect(resolvePlays([global, override]).map((p) => p.label)).toEqual(["Override"]);
-    expect(resolvePlays([override, global]).map((p) => p.label)).toEqual(["Override"]);
-  });
-
-  it("sorts the resolved set by position", () => {
-    expect(resolvePlays([global, hiring]).map((p) => p.id)).toEqual(["hiring_signal", "video_loop"]);
-  });
-});
-
-describe("playStats", () => {
-  const statRow = (overrides: Partial<FlowRow> & { play: string | null }) => ({
-    ...row(), ...overrides,
-  });
-
-  it("counts a replied contact as svar but not aktiv", () => {
-    const rows = [statRow({ play: "p1", sent_at: "2026-06-01T00:00:00Z", last_reply_at: "2026-06-02T00:00:00Z" })];
-    expect(playStats(["p1"], rows).get("p1")).toMatchObject({ sent: 1, replied: 1, active: 0 });
-  });
-
-  it("excludes terminal and sequence-completed rows from aktiv", () => {
-    const rows = [
-      statRow({ play: "p1", status: "rejected" }),
-      statRow({ play: "p1", status: "failed" }),
-      statRow({ play: "p1", status: "sent", sequence_completed_at: "2026-06-01T00:00:00Z" }),
-      statRow({ play: "p1", status: "pending_approval" }),
-    ];
-    expect(playStats(["p1"], rows).get("p1")).toMatchObject({ active: 1 });
-  });
-
-  it("drops rows whose play is not in the requested set", () => {
-    const rows = [statRow({ play: "ghost_play", status: "sent" })];
-    const m = playStats(["p1"], rows);
-    expect(m.get("p1")).toMatchObject({ pipe: [], active: 0 });
-    expect(m.has("ghost_play")).toBe(false);
-  });
-});
+// resolvePlays + playStats suites live in play-stats.test.ts (the more
+// thorough home — adds null-play, zeroed-bucket and no-downgrade cases).
+// Keep them in one place so the counting rules can't drift.

@@ -68,6 +68,8 @@ type Status =
   | "rendering"
   | "rendered"
   | "pending_approval"
+  | "approved_queued"
+  | "sending"
   | "sent"
   | "rejected"
   | "rejected_by_icp"
@@ -142,6 +144,7 @@ type PipelineRow = {
   rendered_at: string | null;
   sent_at: string | null;
   queued_at: string | null;
+  scheduled_send_at: string | null;
   decided_at: string | null;
   decided_by: string | null;
   last_reply_at: string | null;
@@ -926,7 +929,7 @@ export default function OutreachPage() {
   }
 
   // ---------- approval flow ----------
-  async function decide(leadId: string, decision: "approve" | "reject" | "render", messageOverride?: string) {
+  async function decide(leadId: string, decision: "approve" | "reject" | "render" | "unqueue", messageOverride?: string) {
     setBusyLead(leadId); setErr(null);
     const { data, error } = await supabase.functions.invoke("outreach-approve", {
       body: { leadId, decision, ...(messageOverride ? { messageOverride } : {}) },
@@ -949,7 +952,7 @@ export default function OutreachPage() {
     }
     setBulkProgress(null);
     setSelected(new Set());
-    setInfo(`${decision === "approve" ? "Godkendt" : "Afvist"}: ${succeeded}/${ids.length}.`);
+    setInfo(`${decision === "approve" ? "Lagt i sende-kø" : "Afvist"}: ${succeeded}/${ids.length}.`);
     await load();
   }
 
@@ -957,8 +960,17 @@ export default function OutreachPage() {
     const message = editing?.leadId === r.sendpilot_lead_id ? editing.message : undefined;
     const ok = await decide(r.sendpilot_lead_id, decision, message);
     if (ok) {
-      setInfo(decision === "approve" ? "Sendt." : "Afvist.");
+      setInfo(decision === "approve" ? "Lagt i sende-kø — driper ud automatisk." : "Afvist.");
       setEditing(null);
+      await load();
+    }
+  }
+
+  // Pull a queued DM back to the approval gate before the drainer sends it.
+  async function unqueueLead(r: PipelineRow) {
+    const ok = await decide(r.sendpilot_lead_id, "unqueue");
+    if (ok) {
+      setInfo("Taget ud af køen — ligger under Afventer igen.");
       await load();
     }
   }
@@ -1341,7 +1353,7 @@ export default function OutreachPage() {
   // Besøg: site visitors who AREN'T already a contact, ranked by ICP fit — warm
   // inbound to pursue. (Matched visitors land on their contact's timeline.)
   const unmatchedSignals = useMemo(() => {
-    const normLi = (u: string) => u.replace(/\/+$/, "").split("?")[0].toLowerCase();
+    const normLi = normLinkedinUrl;
     const liSet = new Set<string>();
     const emailSet = new Set<string>();
     for (const r of rows) {
@@ -1390,6 +1402,13 @@ export default function OutreachPage() {
     [rows],
   );
 
+  // Drip queue: approved DMs waiting for their send slot, soonest first.
+  const queuedSends = useMemo(
+    () => rows.filter((r) => r.status === "approved_queued").sort((a, b) =>
+      (a.scheduled_send_at ?? "").localeCompare(b.scheduled_send_at ?? "")),
+    [rows],
+  );
+
   // Accepted-but-no-approved-video: leads we know accepted, including the
   // pre-render review queue plus failed/stuck renders that need attention.
   const accepted = useMemo(() => {
@@ -1402,7 +1421,7 @@ export default function OutreachPage() {
         // override button on the ICP-afvist tab, which flips back to
         // pending_pre_render and lands the row here.
         const off: PipelineRow["status"][] = [
-          "pending_approval", "sent", "rejected",
+          "pending_approval", "approved_queued", "sent", "rejected",
           "rejected_by_icp", "pending_alt_review", "failed",
         ];
         return !off.includes(r.status);
@@ -1547,6 +1566,7 @@ export default function OutreachPage() {
         ) : tab === "inbox" ? (
           <InboxTab
             pendingRows={pending}
+            queuedRows={queuedSends}
             acceptedRows={accepted}
             altReviewRows={altReview}
             altsByLead={altByLead}
@@ -1567,6 +1587,7 @@ export default function OutreachPage() {
             onRender={(id) => void renderLead(id)}
             onUseOriginal={(id) => void useOriginal(id)}
             onInviteAlt={(altId, leadId) => void inviteAlt(altId, leadId)}
+            onUnqueue={(r) => void unqueueLead(r)}
           />
         ) : tab === "replies" ? (
           <RepliesTab
@@ -2181,6 +2202,7 @@ const STATUS_META: Record<string, { label: string; tone: "wait" | "go" | "act" |
   rendering: { label: "Renderer", tone: "wait" },
   rendered: { label: "Renderet", tone: "go" },
   pending_approval: { label: "Til godkendelse", tone: "act" },
+  approved_queued: { label: "I sende-kø", tone: "go" },
   pending_alt_review: { label: "Alt-review", tone: "act" },
   sent: { label: "Sendt", tone: "go" },
   pre_connected: { label: "Pre-forbundet", tone: "wait" },
@@ -2399,7 +2421,7 @@ function KontakterTab({ rows, replies, emails, actions, signals, sequences, play
   // Match inbound signals (RB2B site visits etc.) to contacts by LinkedIn URL or
   // email, so a known contact revisiting your site lands on their timeline + warm.
   const signalsByLead = useMemo(() => {
-    const normLi = (u: string) => u.replace(/\/+$/, "").split("?")[0].toLowerCase();
+    const normLi = normLinkedinUrl;
     const byLi = new Map<string, string>();
     const byEmail = new Map<string, string>();
     for (const r of rows) {
@@ -2767,8 +2789,6 @@ function IconPen({ className = "" }: { className?: string }) {
   );
 }
 
-// outreach_leads keeps the raw Apify URL; the pipeline row's URL comes from
-// SendPilot — normalise both before matching (same reason normLi exists).
 const STAGE_PILL: Record<string, string> = {
   Klargjort: "border-[var(--ink)]/20 text-[var(--ink)]/45",
   Inviteret: "border-[var(--clay)]/40 text-[var(--clay)]",
@@ -4807,6 +4827,8 @@ function StatusPill({ status }: { status: Status }) {
     rendering: { label: "Render", bg: "rgb(0 0 0 / .06)", fg: "rgb(0 0 0 / .55)" },
     rendered: { label: "Klar", bg: "rgb(0 0 0 / .06)", fg: "rgb(0 0 0 / .55)" },
     pending_approval: { label: "Afventer", bg: "rgba(185,112,65,0.14)", fg: "var(--clay)" },
+    approved_queued: { label: "I kø", bg: "rgba(35,90,67,0.10)", fg: "var(--forest)" },
+    sending: { label: "Sender", bg: "rgba(35,90,67,0.10)", fg: "var(--forest)" },
     sent: { label: "Sendt", bg: "rgba(35,90,67,0.14)", fg: "var(--forest)" },
     rejected: { label: "Afvist", bg: "rgb(0 0 0 / .06)", fg: "rgb(0 0 0 / .45)" },
     rejected_by_icp: { label: "ICP-afvist", bg: "rgb(0 0 0 / .06)", fg: "rgb(0 0 0 / .50)" },
@@ -4951,6 +4973,7 @@ function arrayBuffersEqual(left: ArrayBuffer | null | undefined, right: Uint8Arr
 
 function InboxTab(props: {
   pendingRows: PipelineRow[];
+  queuedRows: PipelineRow[];
   acceptedRows: PipelineRow[];
   altReviewRows: PipelineRow[];
   altsByLead: Map<string, AltContact[]>;
@@ -4968,9 +4991,10 @@ function InboxTab(props: {
   onRender: (id: string) => void;
   onUseOriginal: (id: string) => void;
   onInviteAlt: (altId: string, leadId: string) => void;
+  onUnqueue: (r: PipelineRow) => void;
 }) {
-  const { pendingRows, acceptedRows, altReviewRows, altsByLead, ...rest } = props;
-  const total = pendingRows.length + acceptedRows.length + altReviewRows.length;
+  const { pendingRows, queuedRows, acceptedRows, altReviewRows, altsByLead, ...rest } = props;
+  const total = pendingRows.length + queuedRows.length + acceptedRows.length + altReviewRows.length;
 
   if (total === 0) {
     return (
@@ -4999,6 +5023,41 @@ function InboxTab(props: {
             onApproveOne={rest.onApproveOne} onRejectOne={rest.onRejectOne}
             onBulkApprove={rest.onBulkApprove} onBulkReject={rest.onBulkReject}
           />
+        </InboxSection>
+      ) : null}
+
+      {queuedRows.length > 0 ? (
+        <InboxSection
+          label="Sende-kø"
+          hint="Godkendte DMs driper ud automatisk (6-10 min mellemrum, hverdage 08-18) — fortryd indtil de er sendt."
+          count={queuedRows.length}
+        >
+          <ul className="divide-y divide-[var(--ink)]/10 border-t border-[var(--ink)]/10">
+            {queuedRows.map((r) => {
+              const name = [r.lead?.first_name, r.lead?.last_name].filter(Boolean).join(" ") || r.contact_email || "—";
+              const eta = r.scheduled_send_at
+                ? new Date(r.scheduled_send_at).toLocaleString("da-DK", {
+                    timeZone: "Europe/Copenhagen", weekday: "short", hour: "2-digit", minute: "2-digit",
+                  })
+                : "—";
+              return (
+                <li key={r.sendpilot_lead_id} className="flex items-center gap-3 py-2.5 text-[12px]">
+                  <div className="min-w-0 flex-1">
+                    <span className="text-[var(--ink)]">{name}</span>
+                    <span className="tabular ml-2 text-[11px] text-[var(--ink)]/50">{r.lead?.company ?? ""}</span>
+                  </div>
+                  <span className="tabular shrink-0 text-[11px] text-[var(--forest)]">sendes {eta}</span>
+                  <button
+                    onClick={() => props.onUnqueue(r)}
+                    disabled={rest.busyLead === r.sendpilot_lead_id}
+                    className="tabular shrink-0 rounded border border-[var(--ink)]/20 px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] text-[var(--ink)]/60 hover:border-[var(--clay)] hover:text-[var(--clay)] disabled:opacity-40"
+                  >
+                    Fortryd
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
         </InboxSection>
       ) : null}
 
