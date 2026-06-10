@@ -65,12 +65,15 @@ Columns, left to right:
 2. **Accept branch** — `pending_pre_render` (cold video / CarterCo) ·
    `pending_ai_draft` (OdaGroup text) · `pre_connected` (already connected)
 3. **Render & approve** — `rendering` · `rendered` · `pending_approval`
-4. **Sent** — `sent` (sent, not yet enrolled / baseline)
-5. **Sequence** (engagement fork, labels live from `outreach_sequences`):
+4. **Drip queue** — `approved_queued` (approving never sends directly; the DM
+   waits here until the `outreach-send-queue` cron drains it. The transient
+   `sending` status — drainer claimed the row seconds ago — buckets here too.)
+5. **Sent** — `sent` (sent, not yet enrolled / baseline)
+6. **Sequence** (engagement fork, labels live from `outreach_sequences`):
    - watched → `watched_followup_v1` step 0 (nysgerrig) → step 1 (kalender)
    - unwatched → `unwatched_followup_v1` step 0 (qualifier) → step 1 (graceful_exit)
-6. **Reply** (intent fork) — interested · question · decline · ooo · referral
-7. **Terminal** — `sequence_completed` · `rejected` · `rejected_by_icp` · `failed`
+7. **Reply** (intent fork) — interested · question · decline · ooo · referral
+8. **Terminal** — `sequence_completed` · `rejected` · `rejected_by_icp` · `failed`
 
 ### classifyNode precedence (current position, most-advanced first)
 
@@ -79,9 +82,10 @@ Columns, left to right:
 3. `last_reply_at` not null → reply node by `last_reply_intent`
 4. `sequence_id` not null and not completed → sequence step node
 5. `status` in (sent) → `sent`
-6. `status` in render/approve set → that status node
-7. `status` in accept-branch set → that status node
-8. else → `invited`
+6. `status` in (approved_queued, sending) → `approved_queued` (drip queue)
+7. `status` in render/approve set → that status node
+8. `status` in accept-branch set → that status node
+9. else → `invited`
 
 This guarantees the counts sum to the workspace's live contact total, so the
 map reads as "everyone is somewhere."

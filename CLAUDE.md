@@ -41,7 +41,7 @@ Using `npm install` updates only the (ignored) npm lock, leaving
 ## Testing
 
 ```bash
-pnpm test   # vitest, runs src/**/*.test.{ts,tsx}
+pnpm test   # vitest, runs src/**/*.test.{ts,tsx} + supabase/functions/_shared/**/*.test.ts
 ```
 
 Tests live next to the code they test; see TESTING.md for layers and
