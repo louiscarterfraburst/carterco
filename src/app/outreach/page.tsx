@@ -34,11 +34,18 @@ import {
   buildTreeEdges,
   classifyNode,
   lookupSeqStep,
+  nodeLabel,
+  playStats,
+  resolvePlays,
+  flowTimeAgo,
+  normLinkedinUrl,
+  stagedLeadStage,
   type ArmStat,
   type FlowTone,
   type NodeDef,
   type SeqLite,
 } from "./flow";
+import { PlayPills } from "./playUi";
 import {
   buildThread,
   projectUpcoming,
@@ -270,6 +277,20 @@ type Signal = {
 
 type Tab = "i_dag" | "opgaver" | "signaler" | "inbox" | "replies" | "sent" | "all" | "icp_rejected" | "icp" | "flow" | "kontakter" | "besog" | "plays";
 
+// One play from the outreach_plays registry, resolved for the active workspace
+// (a workspace-specific row overrides the global with the same id — same
+// resolution as outreach_sequences). The registry is the ONLY source of play
+// names in the UI; nothing renders from a hardcoded play id.
+type Play = {
+  id: string;
+  workspace_id: string | null;
+  label: string;
+  description: string;
+  status: "active" | "paused";
+  position: number;
+  is_default: boolean;
+};
+
 // A play-tagged lead staged in outreach_leads, before any invite has fired
 // (so it isn't in outreach_pipeline yet). Powers the Plays overview funnel.
 type StagedLead = {
@@ -293,6 +314,7 @@ type HiringRun = {
   skipped_existing: number | null;
   skipped_cross_workspace: number | null;
   unresolved: number | null;
+  held_company_dialogue: number | null;
   status: string;
 };
 
@@ -484,7 +506,11 @@ export default function OutreachPage() {
 
   const [tab, setTab] = useState<Tab>("i_dag");
   const [sequences, setSequences] = useState<SeqLite[]>([]);
-  const [stagedHiring, setStagedHiring] = useState<StagedLead[]>([]);
+  const [plays, setPlays] = useState<Play[]>([]);
+  // Active play scope for Flow + Kontakter ("all" = no filter). Lifted here so
+  // the Plays tab can deep-link into a filtered Flow tree / contact list.
+  const [playFilter, setPlayFilter] = useState<string>("all");
+  const [stagedPlays, setStagedPlays] = useState<StagedLead[]>([]);
   const [hiringRuns, setHiringRuns] = useState<HiringRun[]>([]);
   const [armStats, setArmStats] = useState<ArmStat[]>([]);
   const [sentEmails, setSentEmails] = useState<EmailRow[]>([]);
@@ -506,6 +532,7 @@ export default function OutreachPage() {
 
   function chooseWorkspace(id: string) {
     setSelectedWorkspaceId(id);
+    setPlayFilter("all"); // plays are workspace-scoped; a stale filter would blank the views
     if (typeof window !== "undefined") {
       window.localStorage.setItem("outreach_workspace_id", id);
     }
@@ -568,20 +595,38 @@ export default function OutreachPage() {
     const leadMap = new Map((leads ?? []).map((l) => [l.contact_email, l as LeadEnrich]));
     setRows(((pipe ?? []) as PipelineRow[]).map((r) => ({ ...r, lead: leadMap.get(r.contact_email) })));
 
+    // Play registry — global + workspace rows, workspace override wins by id
+    // (mirrors the outreach_sequences resolution below). Drives the Plays tab
+    // and the play filter on Flow/Kontakter.
+    const { data: playRows } = await supabase
+      .from("outreach_plays")
+      .select("id, workspace_id, label, description, status, position, is_default")
+      .or(`workspace_id.is.null,workspace_id.eq.${activeWorkspaceId}`)
+      .order("position", { ascending: true });
+    const resolvedPlays = resolvePlays((playRows ?? []) as Play[]);
+    setPlays(resolvedPlays);
+
     // Play-tagged leads staged in outreach_leads but not yet invited (no
-    // pipeline row). Drives the Plays overview "staged" count.
-    const { data: stagedLeads } = await supabase
-      .from("outreach_leads")
-      .select("linkedin_url, first_name, last_name, company, title, play")
-      .eq("workspace_id", activeWorkspaceId)
-      .neq("play", "video_loop");
-    setStagedHiring((stagedLeads ?? []) as StagedLead[]);
+    // pipeline row). Drives the Plays overview "staged" count. The default
+    // play's "staged" set is the whole lead universe (every imported CSV row),
+    // so only non-default plays get one — which play is default comes from the
+    // registry, not a literal.
+    const defaultPlayId = resolvedPlays.find((p) => p.is_default)?.id ?? null;
+    const { data: stagedLeads } = defaultPlayId
+      ? await supabase
+          .from("outreach_leads")
+          .select("linkedin_url, first_name, last_name, company, title, play")
+          .eq("workspace_id", activeWorkspaceId)
+          .neq("play", defaultPlayId)
+          .limit(1000)
+      : { data: [] as StagedLead[] };
+    setStagedPlays((stagedLeads ?? []) as StagedLead[]);
 
     // Recent hiring-signal pipeline runs (cron + manual) — drives the daily-run
     // panel in the Plays overview. Global to CarterCo, not workspace-scoped.
     const { data: runRows } = await supabase
       .from("hiring_pipeline_runs")
-      .select("ran_at, trigger, companies_found, decision_makers, leads_staged, leads_added_sendpilot, skipped_existing, skipped_cross_workspace, unresolved, status")
+      .select("ran_at, trigger, companies_found, decision_makers, leads_staged, leads_added_sendpilot, skipped_existing, skipped_cross_workspace, unresolved, held_company_dialogue, status")
       .order("ran_at", { ascending: false })
       .limit(14);
     setHiringRuns((runRows ?? []) as HiringRun[]);
@@ -1433,7 +1478,7 @@ export default function OutreachPage() {
     flow: stats.total,
     kontakter: stats.total,
     besog: unmatchedSignals.length,
-    plays: stagedHiring.length,
+    plays: stagedPlays.length,
   };
 
   return (
@@ -1553,6 +1598,7 @@ export default function OutreachPage() {
           />
         ) : tab === "flow" ? (
           <FlowTab rows={rows} sequences={sequences} replies={replies} armStats={armStats}
+            plays={plays} playFilter={playFilter} onPlayFilter={setPlayFilter}
             busyLead={busyLead}
             onRetry={(id) => void decide(id, "approve").then((ok) => { if (ok) { setInfo("Sendt — prøvede igen."); void load(); } })} />
         ) : tab === "kontakter" ? (
@@ -1563,6 +1609,9 @@ export default function OutreachPage() {
             actions={engagementActions}
             signals={signals}
             sequences={sequences}
+            plays={plays}
+            playFilter={playFilter}
+            onPlayFilter={setPlayFilter}
             onSetOutcome={(id, o) => void setOutcome(id, o)}
             onOverrideIcp={(id) => void overrideIcpRejection(id)}
           />
@@ -1574,7 +1623,15 @@ export default function OutreachPage() {
             onDismiss={(ids) => void markSignalsHandled(ids)}
           />
         ) : tab === "plays" ? (
-          <PlaysOverview staged={stagedHiring} rows={rows} runs={hiringRuns} />
+          <PlaysOverview
+            plays={plays}
+            staged={stagedPlays}
+            rows={rows}
+            runs={hiringRuns}
+            sequences={sequences}
+            onOpenFlow={(playId) => { setPlayFilter(playId); setTab("flow"); }}
+            onOpenContacts={(playId) => { setPlayFilter(playId); setTab("kontakter"); }}
+          />
         ) : (
           <AllTab rows={allRecent} />
         )}
@@ -1665,16 +1722,6 @@ type FunnelStats = {
 // tree. Click any node/outcome for its message blueprint + the contacts in it;
 // click a contact for their actual text.
 
-function flowTimeAgo(iso: string | null): string {
-  if (!iso) return "";
-  const ms = Date.now() - new Date(iso).getTime();
-  const min = Math.round(ms / 60000);
-  if (min < 60) return `${Math.max(0, min)} min`;
-  const hrs = Math.round(min / 60);
-  if (hrs < 24) return `${hrs} t`;
-  return `${Math.round(hrs / 24)} d`;
-}
-
 const FLOW_TONE_CLASS: Record<FlowTone, { card: string; bar: string }> = {
   neutral: { card: "border-[var(--ink)]/15 bg-[var(--cream)]", bar: "var(--ink)" },
   active: { card: "border-[var(--forest)]/35 bg-[var(--cream)]", bar: "var(--forest)" },
@@ -1690,6 +1737,11 @@ type FlowNodeData = {
   sublabel?: string;
   isSelected: boolean;
   armStat?: ArmStat | null;
+  // Age of the longest-waiting contact in this node ("6 d") — surfaces stuck
+  // leads directly on the tree instead of only inside the contact list.
+  // Hidden under 1 h; oldestStale tints it clay at ≥5 days.
+  oldestAgo?: string | null;
+  oldestStale?: boolean;
 };
 
 // React Flow custom node — a tone-tinted card with label, live count, optional
@@ -1709,6 +1761,11 @@ function FlowCardNode({ data }: NodeProps) {
       </div>
       {d.sublabel ? (
         <div className="tabular mt-0.5 truncate text-[9px] uppercase tracking-[0.14em] text-[var(--ink)]/35">{d.sublabel}</div>
+      ) : null}
+      {d.count > 0 && d.oldestAgo ? (
+        <div className={`tabular mt-0.5 text-[9px] tracking-[0.1em] ${d.oldestStale ? "text-[var(--clay)]" : "text-[var(--ink)]/40"}`}>
+          ældste {d.oldestAgo}
+        </div>
       ) : null}
       {d.armStat ? (
         <div className="mt-1.5 flex items-baseline gap-2 border-t border-[var(--ink)]/10 pt-1.5">
@@ -1805,11 +1862,18 @@ function ContactMessages({ row, reply }: { row: PipelineRow; reply: Reply | null
   );
 }
 
-function FlowTab({ rows, sequences, replies, armStats, busyLead, onRetry }: {
+// Play scope pills shared by Flow and Kontakter. Rendered when the workspace
+// runs more than one play OR a filter is active — an active filter must
+// always be visible and clearable, even in a single-play workspace (the
+// Plays tab's deep-links set it unconditionally).
+function FlowTab({ rows, sequences, replies, armStats, plays, playFilter, onPlayFilter, busyLead, onRetry }: {
   rows: PipelineRow[];
   sequences: SeqLite[];
   replies: Reply[];
   armStats: ArmStat[];
+  plays: Play[];
+  playFilter: string;
+  onPlayFilter: (playId: string) => void;
   busyLead: string | null;
   onRetry: (leadId: string) => void;
 }) {
@@ -1822,17 +1886,32 @@ function FlowTab({ rows, sequences, replies, armStats, busyLead, onRetry }: {
     if (selectedNode) detailRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [selectedNode]);
 
-  const { counts, byNode } = useMemo(() => {
+  // Play scope: the tree shows one play's contacts at a time (or all). With
+  // several plays running concurrently in one workspace, an unfiltered tree
+  // interleaves their contacts and can't answer "which contacts are in which
+  // flow" — the pills make the play axis a first-class view.
+  const scopedRows = useMemo(
+    () => (playFilter === "all" ? rows : rows.filter((r) => (r.play ?? "") === playFilter)),
+    [rows, playFilter],
+  );
+
+  const { counts, byNode, oldestByNode } = useMemo(() => {
     const counts = new Map<string, number>();
     const byNode = new Map<string, PipelineRow[]>();
-    for (const r of rows) {
+    const oldestByNode = new Map<string, string>();
+    for (const r of scopedRows) {
       const id = classifyNode(r);
       counts.set(id, (counts.get(id) ?? 0) + 1);
       const list = byNode.get(id);
       if (list) list.push(r); else byNode.set(id, [r]);
+      const when = r.last_engagement_at ?? r.last_reply_at ?? r.sent_at ?? r.updated_at;
+      // Compare as dates, not strings — mixed-offset ISO timestamps ("+02:00"
+      // vs "Z") sort wrong lexicographically.
+      const prev = oldestByNode.get(id);
+      if (when && (!prev || Date.parse(when) < Date.parse(prev))) oldestByNode.set(id, when);
     }
-    return { counts, byNode };
-  }, [rows]);
+    return { counts, byNode, oldestByNode };
+  }, [scopedRows]);
 
   // replies arrive newest-first; keep the first seen per lead.
   const replyByLead = useMemo(() => {
@@ -1856,8 +1935,19 @@ function FlowTab({ rows, sequences, replies, armStats, busyLead, onRetry }: {
     return best;
   }, [armStats]);
 
-  const treeDefs = useMemo(() => buildTreeNodes(sequences, rows, armStats), [sequences, rows, armStats]);
+  const treeDefs = useMemo(() => buildTreeNodes(sequences, scopedRows, armStats), [sequences, scopedRows, armStats]);
   const treeEdges = useMemo(() => buildTreeEdges(treeDefs, sequences), [treeDefs, sequences]);
+
+  // Pill counts: live pipeline rows per play (unscoped, so the numbers don't
+  // change as you click through plays).
+  const playCounts = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const r of rows) {
+      const p = r.play ?? "";
+      m.set(p, (m.get(p) ?? 0) + 1);
+    }
+    return m;
+  }, [rows]);
 
   // Workspace-aware visibility: always keep the universal spine + any arm node,
   // and any node that actually holds contacts. Empty side-branches a workspace
@@ -1897,20 +1987,29 @@ function FlowTab({ rows, sequences, replies, armStats, busyLead, onRetry }: {
           id: n.id,
           type: "flowCard",
           position: { x, y: col * LEVEL_H },
-          data: {
-            label: n.label,
-            count: counts.get(n.id) ?? 0,
-            tone: n.tone,
-            sublabel: n.sublabel,
-            isSelected: n.id === selectedNode,
-            armStat: arm,
-          },
+          data: (() => {
+            // Wait info is a STUCK signal, not ambient metadata: hide it for
+            // young nodes (<1 h — "ældste 0 min" is noise) and tint it clay
+            // once the oldest contact has sat ≥5 days.
+            const oldest = oldestByNode.get(n.id) ?? null;
+            const ageMs = oldest ? Date.now() - Date.parse(oldest) : 0;
+            return {
+              label: n.label,
+              count: counts.get(n.id) ?? 0,
+              tone: n.tone,
+              sublabel: n.sublabel,
+              isSelected: n.id === selectedNode,
+              armStat: arm,
+              oldestAgo: ageMs >= 60 * 60_000 ? flowTimeAgo(oldest) || null : null,
+              oldestStale: ageMs >= 5 * 24 * 60 * 60_000,
+            };
+          })(),
           draggable: false,
         });
       });
     }
     return out;
-  }, [treeDefs, visibleIds, counts, selectedNode, armByVariant]);
+  }, [treeDefs, visibleIds, counts, oldestByNode, selectedNode, armByVariant]);
 
   const rfEdges = useMemo<RFEdge[]>(() =>
     treeEdges
@@ -1929,10 +2028,12 @@ function FlowTab({ rows, sequences, replies, armStats, busyLead, onRetry }: {
     return OUTCOME_DEFS.find((o) => o.id === selectedNode)?.label ?? selectedNode;
   }, [selectedNode, treeDefs]);
 
-  const arms = activeArms(sequences, rows, armStats);
+  const arms = activeArms(sequences, scopedRows, armStats);
 
   return (
     <div>
+      <PlayPills plays={plays} value={playFilter} onChange={onPlayFilter}
+        countFor={(id) => id === "all" ? rows.length : (playCounts.get(id) ?? 0)} />
       {arms.length ? (
         <div className="mb-5 rounded-lg border border-[var(--ink)]/12 bg-[var(--cream)] p-4">
           <div className="tabular text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/40">A/B-test · første DM</div>
@@ -2255,19 +2356,29 @@ const KONTAKTER_SCOPES: { id: "all" | "sent" | "forgotten" | "icp_rejected"; lab
   { id: "icp_rejected", label: "ICP-afvist" },
 ];
 
-function KontakterTab({ rows, replies, emails, actions, signals, sequences, onSetOutcome, onOverrideIcp }: {
+function KontakterTab({ rows, replies, emails, actions, signals, sequences, plays, playFilter, onPlayFilter, onSetOutcome, onOverrideIcp }: {
   rows: PipelineRow[];
   replies: Reply[];
   emails: EmailRow[];
   actions: ActionRow[];
   signals: Signal[];
   sequences: SeqLite[];
+  plays: Play[];
+  playFilter: string;
+  onPlayFilter: (playId: string) => void;
   onSetOutcome: (leadId: string, outcome: Outcome | null) => void;
   onOverrideIcp: (leadId: string) => void;
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [scope, setScope] = useState<"all" | "sent" | "forgotten" | "icp_rejected">("all");
+
+  // Play scope — same axis as the Flow tree's pills, so a node count over
+  // there and this list are two views of the same query.
+  const scopedRows = useMemo(
+    () => (playFilter === "all" ? rows : rows.filter((r) => (r.play ?? "") === playFilter)),
+    [rows, playFilter],
+  );
 
   const repliesByLead = useMemo(() => {
     const m = new Map<string, Reply[]>();
@@ -2306,7 +2417,7 @@ function KontakterTab({ rows, replies, emails, actions, signals, sequences, onSe
 
   // Warm (just revisited your site) first, then at-risk (forgotten), then recent.
   const enriched = useMemo(() => {
-    return rows.map((r) => {
+    return scopedRows.map((r) => {
       const up = projectUpcoming(r as unknown as TimelineContact, sequences);
       return {
         row: r,
@@ -2319,7 +2430,7 @@ function KontakterTab({ rows, replies, emails, actions, signals, sequences, onSe
       if (a.forgotten !== b.forgotten) return a.forgotten ? -1 : 1;
       return new Date(b.row.updated_at).getTime() - new Date(a.row.updated_at).getTime();
     });
-  }, [rows, sequences, signalsByLead]);
+  }, [scopedRows, sequences, signalsByLead]);
 
   const filtered = useMemo(() => {
     const byScope = enriched.filter(({ row, forgotten }) =>
@@ -2338,11 +2449,24 @@ function KontakterTab({ rows, replies, emails, actions, signals, sequences, onSe
   }, [enriched, query, scope]);
 
   const forgottenCount = enriched.filter((e) => e.forgotten).length;
-  const selected = selectedId ? rows.find((r) => r.sendpilot_lead_id === selectedId) ?? null : null;
+  // Resolve against scopedRows so flipping the play pill can't leave a
+  // now-hidden contact's timeline open next to a list it isn't in.
+  const selected = selectedId ? scopedRows.find((r) => r.sendpilot_lead_id === selectedId) ?? null : null;
+
+  const playCounts = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const r of rows) {
+      const p = r.play ?? "";
+      m.set(p, (m.get(p) ?? 0) + 1);
+    }
+    return m;
+  }, [rows]);
 
   return (
     <div className="grid gap-5 lg:grid-cols-[340px_minmax(0,1fr)]">
       <div>
+        <PlayPills plays={plays} value={playFilter} onChange={onPlayFilter}
+          countFor={(id) => id === "all" ? rows.length : (playCounts.get(id) ?? 0)} />
         <div className="mb-2 flex flex-wrap gap-1.5">
           {KONTAKTER_SCOPES.map((s) => (
             <button key={s.id} type="button" onClick={() => setScope(s.id)}
@@ -2388,6 +2512,13 @@ function KontakterTab({ rows, replies, emails, actions, signals, sequences, onSe
                   </span>
                   <span className="flex items-center gap-2">
                     <StatusBadge status={row.status} intent={row.last_reply_intent} />
+                    {/* Current flow position (sequence step / arm) — the same
+                        label the Flow tree uses, so list and tree line up. */}
+                    {row.sequence_id && row.sequence_step != null && !row.sequence_completed_at ? (
+                      <span className="tabular shrink-0 text-[10px] text-[var(--ink)]/50">
+                        {nodeLabel(classifyNode(row), sequences)}
+                      </span>
+                    ) : null}
                     <span className="truncate text-[11px] text-[var(--ink)]/45">{row.lead?.company ?? ""}</span>
                   </span>
                 </span>
@@ -2611,10 +2742,6 @@ type NavCounts = {
 type NavItem = { id: Tab; label: string; count: number; accent?: boolean; icpOnly?: boolean; group: string };
 const NAV_GROUP_ORDER = ["Gør nu", "Kontakter", "Indsigt"];
 
-// Lean per-play overview. Today scoped to the hiring-signal play: a funnel
-// strip (staged → invited → accepted → video → reply) + the staged leads.
-// "staged" comes from outreach_leads (pre-invite); the rest from pipeline rows
-// tagged play='hiring_signal'. Phase 3 will generalise this to a play selector.
 // Inline stroke icons. fill=none + stroke=currentColor means each icon inherits
 // the button's text color (clay/forest/ink). These replace the emoji that used
 // to prefix action buttons — DESIGN.md forbids emoji as design elements.
@@ -2640,24 +2767,10 @@ function IconPen({ className = "" }: { className?: string }) {
   );
 }
 
-// Per-lead stage, derived by matching the staged lead to its pipeline row
-// (if invited yet). Drives the row status pill.
-function hiringLeadStage(l: StagedLead, pipe: PipelineRow[]): string {
-  // outreach_leads keeps the raw Apify URL; the pipeline row's URL comes from
-  // SendPilot — normalise both before matching (same reason normLi exists).
-  const norm = (u: string | null) => (u ?? "").replace(/\/+$/, "").split("?")[0].toLowerCase();
-  const key = norm(l.linkedin_url);
-  const r = pipe.find((p) => norm(p.linkedin_url) === key);
-  if (!r) return "Staged";
-  if (r.last_reply_at) return "Svar";
-  if (r.sent_at) return "Video";
-  if (r.accepted_at) return "Accepteret";
-  if (r.invited_at) return "Inviteret";
-  return "Staged";
-}
-
-const HIRING_PILL: Record<string, string> = {
-  Staged: "border-[var(--ink)]/20 text-[var(--ink)]/45",
+// outreach_leads keeps the raw Apify URL; the pipeline row's URL comes from
+// SendPilot — normalise both before matching (same reason normLi exists).
+const STAGE_PILL: Record<string, string> = {
+  Klargjort: "border-[var(--ink)]/20 text-[var(--ink)]/45",
   Inviteret: "border-[var(--clay)]/40 text-[var(--clay)]",
   Accepteret: "border-[var(--forest)]/40 text-[var(--forest)]",
   Video: "border-[var(--clay)]/40 text-[var(--clay)]",
@@ -2675,33 +2788,147 @@ function hiringRunAgo(ts: string): string {
   return `${Math.floor(h / 24)} d siden`;
 }
 
-function PlaysOverview({ staged, rows, runs }: { staged: StagedLead[]; rows: PipelineRow[]; runs: HiringRun[] }) {
-  const hiring = staged.filter((l) => l.play === "hiring_signal");
-  const pipe = rows.filter((r) => r.play === "hiring_signal");
-  const lastRun = runs[0];
-  // Funnel stages, in flow order. Conversion % is shown between stages.
-  const stages: [string, number][] = [
-    ["Staged", hiring.length],
-    ["Inviteret", pipe.filter((r) => r.invited_at).length],
-    ["Accepteret", pipe.filter((r) => r.accepted_at).length],
-    ["Video", pipe.filter((r) => r.sent_at).length],
-    ["Svar", pipe.filter((r) => r.last_reply_at).length],
-  ];
-  const companies = new Set(hiring.map((l) => l.company || l.linkedin_url)).size;
+// The Plays tab: one row per play from the outreach_plays registry —
+// ActiveCampaign-automations-list shaped. Status pill, live counts, reply rate,
+// and a per-play detail (funnel, intake runs, contact roster) that used to be
+// the hiring-signal-only layout. Play rows render purely from the registry —
+// new plays appear the moment their row exists (one exception: the intake-runs
+// panel in PlayDetail is keyed to the hiring play until hiring_pipeline_runs
+// grows a play column).
+function PlaysOverview({ plays, staged, rows, runs, sequences, onOpenFlow, onOpenContacts }: {
+  plays: Play[];
+  staged: StagedLead[];
+  rows: PipelineRow[];
+  runs: HiringRun[];
+  sequences: SeqLite[];
+  onOpenFlow: (playId: string) => void;
+  onOpenContacts: (playId: string) => void;
+}) {
+  const [openPlay, setOpenPlay] = useState<string | null>(null);
+
+  // Counting rules live (tested) in flow.ts playStats; staged leads group here.
+  const statsByPlay = useMemo(() => {
+    const m = playStats(plays.map((p) => p.id), rows) as Map<string, {
+      pipe: PipelineRow[]; stagedLeads: StagedLead[];
+      active: number; sent: number; replied: number;
+    }>;
+    for (const s of m.values()) s.stagedLeads = [];
+    for (const l of staged) m.get(l.play)?.stagedLeads.push(l);
+    return m;
+  }, [plays, rows, staged]);
 
   return (
     <div className="space-y-7">
       <div>
-        <h2 className="font-display text-3xl italic leading-tight tracking-[-0.01em] text-[var(--ink)]">Hiring-signal</h2>
+        <h2 className="font-display text-3xl italic leading-tight tracking-[-0.01em] text-[var(--ink)]">Plays</h2>
         <p className="mt-1 max-w-xl text-sm text-[var(--ink)]/60">
-          DK-virksomheder der lige har slået en salgsrolle op → deres kommercielle
-          beslutningstager, automatisk fundet, staged og lagt i kampagnen. Kører dagligt.
-        </p>
-        <p className="tabular mt-2 text-[11px] uppercase tracking-[0.14em] text-[var(--ink)]/40">
-          {hiring.length} leads · {companies} virksomheder
+          De outbound-spor dette workspace kører samtidig. Hver kontakt der
+          arbejdes på, hører til præcis ét play — tallene her og Flow-træet er
+          to visninger af samme data.
         </p>
       </div>
 
+      <ul className="divide-y divide-[var(--ink)]/10 border-y border-[var(--ink)]/10">
+        {plays.map((p) => {
+          const s = statsByPlay.get(p.id) ?? { pipe: [], stagedLeads: [], active: 0, sent: 0, replied: 0 };
+          const replyPct = s.sent > 0 ? Math.round((s.replied / s.sent) * 100) : null;
+          const open = openPlay === p.id;
+          return (
+            <li key={p.id} className="py-4">
+              <div className="flex flex-wrap items-center gap-3">
+                <button type="button" onClick={() => setOpenPlay(open ? null : p.id)}
+                  aria-expanded={open}
+                  className="focus-cream flex min-w-0 flex-1 items-baseline gap-3 text-left">
+                  {/* Disclosure affordance — the row expands into the detail panel. */}
+                  <span aria-hidden className={`tabular shrink-0 text-[11px] text-[var(--ink)]/40 transition-transform ${open ? "rotate-90" : ""}`}>›</span>
+                  <span className="font-display text-xl italic leading-tight text-[var(--ink)]">{p.label}</span>
+                  <span className={`tabular shrink-0 rounded-full border px-2 py-0.5 text-[9px] uppercase tracking-[0.14em] ${
+                    p.status === "active"
+                      ? "border-[var(--forest)]/40 text-[var(--forest)]"
+                      : "border-[var(--ink)]/20 text-[var(--ink)]/45"
+                  }`}>
+                    {p.status === "active" ? "Aktiv" : "På pause"}
+                  </span>
+                  {p.is_default ? (
+                    <span className="tabular shrink-0 text-[9px] uppercase tracking-[0.14em] text-[var(--ink)]/35">standard</span>
+                  ) : null}
+                </button>
+                <div className="tabular flex shrink-0 items-baseline gap-4 text-[12px] text-[var(--ink)]/65">
+                  {s.stagedLeads.length ? <span>{s.stagedLeads.length} klargjort</span> : null}
+                  <span><span className="text-[var(--ink)]">{s.active}</span> aktive</span>
+                  <span>{s.sent} sendt</span>
+                  <span>
+                    {s.replied} svar
+                    {replyPct != null ? <span className="text-[var(--forest)]"> · {replyPct}%</span> : null}
+                  </span>
+                </div>
+                <div className="flex shrink-0 gap-2">
+                  <button type="button" onClick={() => onOpenFlow(p.id)}
+                    className="focus-cream tabular rounded-full border border-[var(--ink)]/20 px-2.5 py-1 text-[10px] uppercase tracking-[0.12em] text-[var(--ink)]/70 transition hover:border-[var(--ink)]/40">
+                    Flow →
+                  </button>
+                  <button type="button" onClick={() => onOpenContacts(p.id)}
+                    className="focus-cream tabular rounded-full border border-[var(--ink)]/20 px-2.5 py-1 text-[10px] uppercase tracking-[0.12em] text-[var(--ink)]/70 transition hover:border-[var(--ink)]/40">
+                    Kontakter →
+                  </button>
+                </div>
+              </div>
+              {p.description ? (
+                <p className="mt-1 max-w-2xl text-[12px] leading-relaxed text-[var(--ink)]/50">{p.description}</p>
+              ) : null}
+              {open ? (
+                <PlayDetail play={p} pipe={s.pipe} stagedLeads={s.stagedLeads}
+                  runs={runs} sequences={sequences} onOpenContacts={onOpenContacts} />
+              ) : null}
+            </li>
+          );
+        })}
+        {plays.length === 0 ? (
+          <li className="py-4 text-sm text-[var(--ink)]/50">
+            Ingen plays registreret — tilføj rækker i <code className="text-[var(--clay)]">outreach_plays</code>.
+          </li>
+        ) : null}
+      </ul>
+    </div>
+  );
+}
+
+function PlayDetail({ play, pipe, stagedLeads, runs, sequences, onOpenContacts }: {
+  play: Play;
+  pipe: PipelineRow[];
+  stagedLeads: StagedLead[];
+  runs: HiringRun[];
+  sequences: SeqLite[];
+  onOpenContacts: (playId: string) => void;
+}) {
+  const lastRun = runs[0];
+  // Intake-run panel: hiring_pipeline_runs is the hiring-signal play's intake
+  // infrastructure (run_hiring_pipeline.sh). Keyed on the play id here because
+  // the runs table has no play column yet — generalising intake runs to other
+  // plays means adding one and dropping this check.
+  const showRuns = play.id === "hiring_signal";
+
+  // Funnel stages in flow order; "Klargjort" only exists for plays whose
+  // intake pre-stages leads (the default play's universe is every imported
+  // lead).
+  const stages: [string, number][] = [
+    ...(stagedLeads.length || !play.is_default ? [["Klargjort", stagedLeads.length] as [string, number]] : []),
+    ["Inviteret", pipe.filter((r) => r.invited_at).length],
+    ["Accepteret", pipe.filter((r) => r.accepted_at).length],
+    ["Sendt", pipe.filter((r) => r.sent_at).length],
+    ["Svar", pipe.filter((r) => r.last_reply_at).length],
+  ];
+
+  // One normalized-URL map instead of a pipe-scan per staged lead — the
+  // staged list grows with every intake run and pipe is up to 1000 rows.
+  const pipeByUrl = useMemo(() => {
+    const m = new Map<string, PipelineRow>();
+    for (const r of pipe) m.set(normLinkedinUrl(r.linkedin_url), r);
+    return m;
+  }, [pipe]);
+
+  return (
+    <div className="mt-4 space-y-5">
       {/* Funnel as a flow: stages with conversion % between them; spent stages
           accented in clay, stages not yet reached dimmed. Reads left-to-right. */}
       <div className="flex items-end overflow-x-auto border-y border-[var(--ink)]/10 py-4">
@@ -2726,54 +2953,57 @@ function PlaysOverview({ staged, rows, runs }: { staged: StagedLead[]; rows: Pip
         })}
       </div>
 
-      {/* Daily pipeline — follow the automation. Each row = one run of
-          run_hiring_pipeline.sh (cron 08:00 or manual). */}
-      <div className="rounded-lg border border-[var(--ink)]/10 bg-[var(--cream)]/40 p-4">
-        <div className="flex items-baseline justify-between">
-          <h3 className="tabular text-[11px] uppercase tracking-[0.18em] text-[var(--ink)]/55">Daglig pipeline</h3>
-          {lastRun ? (
-            <span className="tabular text-[10px] text-[var(--ink)]/45">
-              sidst kørt {hiringRunAgo(lastRun.ran_at)} · {lastRun.trigger === "cron" ? "auto" : "manuelt"}
-            </span>
+      {showRuns ? (
+        /* Daily pipeline — follow the automation. Each row = one run of
+           run_hiring_pipeline.sh (cron 08:00 or manual). */
+        <div className="rounded-lg border border-[var(--ink)]/10 bg-[var(--cream)]/40 p-4">
+          <div className="flex items-baseline justify-between">
+            <h3 className="tabular text-[11px] uppercase tracking-[0.18em] text-[var(--ink)]/55">Daglig pipeline</h3>
+            {lastRun ? (
+              <span className="tabular text-[10px] text-[var(--ink)]/45">
+                sidst kørt {hiringRunAgo(lastRun.ran_at)} · {lastRun.trigger === "cron" ? "auto" : "manuelt"}
+              </span>
+            ) : (
+              <span className="tabular text-[10px] text-[var(--ink)]/40">kører dagligt 08:00</span>
+            )}
+          </div>
+          {runs.length === 0 ? (
+            <p className="mt-2 text-xs text-[var(--ink)]/45">Ingen kørsler endnu — første run lægger sig her.</p>
           ) : (
-            <span className="tabular text-[10px] text-[var(--ink)]/40">kører dagligt 08:00</span>
+            <ul className="mt-3 space-y-1.5">
+              {runs.slice(0, 7).map((r, i) => (
+                <li key={i} className="flex items-center gap-3 text-[12px]">
+                  <span className="tabular w-24 shrink-0 text-[var(--ink)]/45">{hiringRunAgo(r.ran_at)}</span>
+                  <span className={`tabular shrink-0 rounded-full px-1.5 py-px text-[8px] uppercase tracking-[0.12em] ${r.trigger === "cron" ? "bg-[var(--ink)]/8 text-[var(--ink)]/55" : "bg-[var(--clay)]/12 text-[var(--clay)]"}`}>
+                    {r.trigger === "cron" ? "auto" : "manuel"}
+                  </span>
+                  <span className="tabular flex-1 text-[var(--ink)]/65">
+                    {r.companies_found ?? 0} virksomheder · {r.decision_makers ?? 0} beslutningstagere
+                  </span>
+                  <span className="tabular shrink-0 text-[var(--ink)]/70">
+                    {(r.leads_added_sendpilot ?? 0) > 0
+                      ? <span className="text-[var(--clay)]">+{r.leads_added_sendpilot} nye</span>
+                      : <span className="text-[var(--ink)]/40">0 nye</span>}
+                  </span>
+                  {(r.held_company_dialogue ?? 0) > 0 && (
+                    <span className="tabular shrink-0 text-[10px] text-[var(--ink)]/50">{r.held_company_dialogue} holdt · dialog</span>
+                  )}
+                  {r.status !== "ok" && <span className="shrink-0 text-[10px] text-[var(--clay)]">fejl</span>}
+                </li>
+              ))}
+            </ul>
           )}
         </div>
-        {runs.length === 0 ? (
-          <p className="mt-2 text-xs text-[var(--ink)]/45">Ingen kørsler endnu — første run lægger sig her.</p>
-        ) : (
-          <ul className="mt-3 space-y-1.5">
-            {runs.slice(0, 7).map((r, i) => (
-              <li key={i} className="flex items-center gap-3 text-[12px]">
-                <span className="tabular w-24 shrink-0 text-[var(--ink)]/45">{hiringRunAgo(r.ran_at)}</span>
-                <span className={`tabular shrink-0 rounded-full px-1.5 py-px text-[8px] uppercase tracking-[0.12em] ${r.trigger === "cron" ? "bg-[var(--ink)]/8 text-[var(--ink)]/55" : "bg-[var(--clay)]/12 text-[var(--clay)]"}`}>
-                  {r.trigger === "cron" ? "auto" : "manuel"}
-                </span>
-                <span className="tabular flex-1 text-[var(--ink)]/65">
-                  {r.companies_found ?? 0} virksomheder · {r.decision_makers ?? 0} beslutningstagere
-                </span>
-                <span className="tabular shrink-0 text-[var(--ink)]/70">
-                  {(r.leads_added_sendpilot ?? 0) > 0
-                    ? <span className="text-[var(--clay)]">+{r.leads_added_sendpilot} nye</span>
-                    : <span className="text-[var(--ink)]/40">0 nye</span>}
-                </span>
-                {r.status !== "ok" && <span className="shrink-0 text-[10px] text-red-600">fejl</span>}
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+      ) : null}
 
-      {hiring.length === 0 ? (
-        <p className="text-sm text-[var(--ink)]/50">
-          Ingen hiring-leads endnu. Pipelinen kører dagligt — eller kør manuelt:
-          <code className="ml-1 text-[var(--clay)]">scripts/lead-enrichment/run_hiring_pipeline.sh</code>.
-        </p>
-      ) : (
+      {/* Roster. Plays with pre-staged intake list the staged universe (the
+          stage pill tracks each lead into the pipeline); the default play
+          lists its live pipeline contacts with their current flow position. */}
+      {stagedLeads.length > 0 ? (
         <ul className="divide-y divide-[var(--ink)]/10 border-t border-[var(--ink)]/10">
-          {hiring.map((l) => {
+          {stagedLeads.slice(0, 100).map((l) => {
             const name = [l.first_name, l.last_name].filter(Boolean).join(" ") || "—";
-            const stage = hiringLeadStage(l, pipe);
+            const stage = stagedLeadStage(l, pipeByUrl);
             const initial = (l.first_name || l.company || "?").trim().charAt(0).toUpperCase();
             return (
               <li key={l.linkedin_url} className="flex items-center gap-3 py-3">
@@ -2786,7 +3016,7 @@ function PlaysOverview({ staged, rows, runs }: { staged: StagedLead[]; rows: Pip
                     {[l.title, l.company].filter(Boolean).join(" · ") || "—"}
                   </div>
                 </div>
-                <span className={`tabular shrink-0 rounded-full border px-2 py-0.5 text-[9px] uppercase tracking-[0.14em] ${HIRING_PILL[stage] ?? HIRING_PILL.Staged}`}>
+                <span className={`tabular shrink-0 rounded-full border px-2 py-0.5 text-[9px] uppercase tracking-[0.14em] ${STAGE_PILL[stage] ?? STAGE_PILL.Klargjort}`}>
                   {stage}
                 </span>
                 <a href={l.linkedin_url} target="_blank" rel="noreferrer"
@@ -2794,7 +3024,40 @@ function PlaysOverview({ staged, rows, runs }: { staged: StagedLead[]; rows: Pip
               </li>
             );
           })}
+          {stagedLeads.length > 100 ? (
+            <li className="py-3">
+              <button type="button" onClick={() => onOpenContacts(play.id)}
+                className="focus-cream tabular text-[12px] text-[var(--clay)] hover:underline">
+                +{stagedLeads.length - 100} flere — åbn Kontakter →
+              </button>
+            </li>
+          ) : null}
         </ul>
+      ) : pipe.length > 0 ? (
+        <ul className="divide-y divide-[var(--ink)]/10 border-t border-[var(--ink)]/10">
+          {pipe.slice(0, 100).map((r) => {
+            const name = `${r.lead?.first_name ?? ""} ${r.lead?.last_name ?? ""}`.trim() || r.contact_email || r.sendpilot_lead_id;
+            const when = r.last_engagement_at ?? r.last_reply_at ?? r.sent_at ?? r.updated_at;
+            return (
+              <li key={r.sendpilot_lead_id} className="flex items-baseline gap-3 py-2.5">
+                <span className="min-w-0 flex-1 truncate text-[14px] text-[var(--ink)]">{name}</span>
+                <span className="max-w-[180px] shrink-0 truncate text-[12px] text-[var(--ink)]/45">{r.lead?.company ?? ""}</span>
+                <span className="tabular shrink-0 text-[11px] text-[var(--ink)]/55">{nodeLabel(classifyNode(r), sequences)}</span>
+                <span className="tabular w-14 shrink-0 text-right text-[11px] text-[var(--ink)]/40">{flowTimeAgo(when)}</span>
+              </li>
+            );
+          })}
+          {pipe.length > 100 ? (
+            <li className="py-3">
+              <button type="button" onClick={() => onOpenContacts(play.id)}
+                className="focus-cream tabular text-[12px] text-[var(--clay)] hover:underline">
+                +{pipe.length - 100} flere — åbn Kontakter →
+              </button>
+            </li>
+          ) : null}
+        </ul>
+      ) : (
+        <p className="text-sm text-[var(--ink)]/50">Ingen kontakter i dette play endnu.</p>
       )}
     </div>
   );
