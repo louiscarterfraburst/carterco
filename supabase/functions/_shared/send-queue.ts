@@ -52,9 +52,13 @@ export function nextSendSlot(
     const day = cphDayKey(slot);
     const used = claims.filter((c) => cphDayKey(c.at) === day).length;
     if (used < QUEUE_DAILY_CAP) return slot;
-    const nextDay = new Date(slot.getTime() + 24 * 3600_000);
+    // Advance one CPH day: +24h keeps the same Copenhagen wall-clock (±1h on
+    // a DST boundary, which clampToWindow absorbs). NEVER floor to UTC
+    // midnight here — the cap counter (cphDayKey) is Copenhagen-keyed, and
+    // mixing a UTC day boundary into the walk mis-meters the cap around
+    // midnight and DST transitions.
     slot = clampToWindow(
-      new Date(nextDay.setUTCHours(0, 0, 0, 0) + jitter()),
+      new Date(slot.getTime() + 24 * 3600_000 + jitter()),
       QUEUE_WINDOW_START_HOUR,
       QUEUE_WINDOW_END_HOUR,
     );

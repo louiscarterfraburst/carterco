@@ -157,6 +157,34 @@ export function playPaused(lookup: PlayLookup): boolean {
     return lookup.config?.status === "paused";
 }
 
+// Cache-BYPASSING pause check for the one place where stale config is unsafe:
+// the send drainer. The per-isolate 60s TTL cache means a pause flipped in
+// the registry isn't seen by warm isolates for up to a minute — fine for
+// hook/render gating, not fine for the kill switch in front of irreversible
+// DM sends. One cheap SELECT per drained row. Fails OPEN like playPaused
+// (same rationale: a registry blip must not stall every play), but logs.
+export async function playPausedLive(
+    supabase: SupabaseClient,
+    playId: string | null | undefined,
+    workspaceId: string | null | undefined,
+): Promise<boolean> {
+    const id = (playId ?? "").trim();
+    const ws = workspaceId ?? null;
+    if (!id || !SAFE_PLAY_ID.test(id) || (ws && !SAFE_UUID.test(ws))) return false;
+    const { data, error } = await supabase
+        .from("outreach_plays")
+        .select("status, workspace_id")
+        .eq("id", id)
+        .or(ws ? `workspace_id.eq.${ws},workspace_id.is.null` : "workspace_id.is.null");
+    if (error) {
+        console.error("playPausedLive query failed — failing open", { id, ws, error: error.message });
+        return false;
+    }
+    const rows = (data ?? []) as { status: string; workspace_id: string | null }[];
+    const row = rows.find((r) => r.workspace_id !== null) ?? rows.find((r) => r.workspace_id === null);
+    return row?.status === "paused";
+}
+
 // The play tag to stamp on an outreach_pipeline upsert, derived from the
 // enrichment row. Spread into the upsert payload:
 //

@@ -266,16 +266,30 @@ Deno.serve(async (request) => {
     if (pipe.status !== "approved_queued") {
       return json({ error: `lead is in status '${pipe.status}', not approved_queued` }, 409);
     }
-    await admin.from("outreach_pipeline").update({
+    // Compare-and-swap on status: the drainer may have claimed this row
+    // (status='sending') between our read above and this write. 0 rows
+    // affected = the DM is being sent or already went — surface that instead
+    // of silently flipping a delivered DM back to pending_approval (which
+    // would invite a second approval → double DM).
+    const { data: unqueued } = await admin.from("outreach_pipeline").update({
       status: "pending_approval",
       scheduled_send_at: null,
       decided_at: now,
       decided_by: email,
-    }).eq("sendpilot_lead_id", leadId);
+    }).eq("sendpilot_lead_id", leadId).eq("status", "approved_queued")
+      .select("sendpilot_lead_id");
+    if (!unqueued || unqueued.length === 0) {
+      return json({ error: "too late — the drainer claimed this DM (it is sending or sent)" }, 409);
+    }
     return json({ ok: true, decision: "unqueued" });
   }
 
-  if (pipe.status !== "pending_approval") {
+  // pending_approval is the normal approve gate. 'rendered' is the
+  // fallback-background park (sendspark-webhook detected the wrong site as
+  // the video backdrop and kept the row out of the queue) — approving from
+  // there is the operator's explicit "send despite the fallback" override,
+  // the only exit that doesn't force a re-render loop.
+  if (pipe.status !== "pending_approval" && pipe.status !== "rendered") {
     return json({ error: `lead is in status '${pipe.status}', not pending_approval` }, 409);
   }
 
@@ -383,15 +397,20 @@ Deno.serve(async (request) => {
   // the slot's CPH day). The drainer (outreach-send-queue) re-runs the live
   // reply check at SEND time, so a reply arriving while queued still aborts.
   const since48h = new Date(Date.now() - 48 * 3600_000).toISOString();
+  // Claims are keyed on queue_sender_id — the canonical sender persisted at
+  // enqueue and used by the drainer to actually send. Filtering on the
+  // per-lead sendpilot_sender_id (which is often null or a different
+  // connection id) would count a different population than the one the
+  // spacing/daily-cap is supposed to meter.
   const { data: claimRows, error: claimErr } = await admin
     .from("outreach_pipeline")
     .select("status, scheduled_send_at, sent_at")
-    .eq("sendpilot_sender_id", resolvedSenderId)
-    .or(`status.eq.approved_queued,and(status.eq.sent,sent_at.gte.${since48h})`);
+    .eq("queue_sender_id", resolvedSenderId)
+    .or(`status.in.(approved_queued,sending),and(status.eq.sent,sent_at.gte.${since48h})`);
   if (claimErr) return json({ error: "db fetch queue claims", details: claimErr.message }, 500);
   const claims: SlotClaim[] = (claimRows ?? [])
     .map((r) => {
-      const at = r.status === "approved_queued" ? r.scheduled_send_at : r.sent_at;
+      const at = r.status === "sent" ? r.sent_at : r.scheduled_send_at;
       return at ? { at: new Date(at as string) } : null;
     })
     .filter((c): c is SlotClaim => c !== null);
@@ -400,6 +419,7 @@ Deno.serve(async (request) => {
   await admin.from("outreach_pipeline").update({
     status: "approved_queued",
     scheduled_send_at: slot.toISOString(),
+    queue_sender_id: resolvedSenderId,
     decided_at: now,
     decided_by: email,
     rendered_message: message,

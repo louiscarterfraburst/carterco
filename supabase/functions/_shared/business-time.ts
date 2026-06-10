@@ -149,25 +149,26 @@ function isBusinessDay(p: CphParts): boolean {
     return !isWeekend(p) && !isDkHoliday(p);
 }
 
-// Slide d forward to the start of the next business-hours window if it's
-// outside one. If d is already within 09:00–17:00 CPH on a business day,
-// returns d unchanged.
-export function clampToBusinessTime(d: Date): Date {
+// Slide d forward to the start of the next window (startHour–endHour CPH on
+// a business day) if it's outside one. If d is already inside, returns d
+// unchanged. The send queue uses a wider window (08–18) than the sequence
+// engine's default (09–17), hence the parameters.
+export function clampToWindow(d: Date, startHour: number, endHour: number): Date {
     let cur = d;
     for (let i = 0; i < 30; i++) {
         const p = getCphParts(cur);
         if (!isBusinessDay(p)) {
-            cur = cphLocalToUtc(p.y, p.m, p.day, BUSINESS_START_HOUR, 0);
+            cur = cphLocalToUtc(p.y, p.m, p.day, startHour, 0);
             cur = new Date(cur.getTime() + DAY_MS);
             continue;
         }
-        if (p.hour < BUSINESS_START_HOUR) {
-            cur = cphLocalToUtc(p.y, p.m, p.day, BUSINESS_START_HOUR, 0);
+        if (p.hour < startHour) {
+            cur = cphLocalToUtc(p.y, p.m, p.day, startHour, 0);
             continue;
         }
-        if (p.hour >= BUSINESS_END_HOUR) {
+        if (p.hour >= endHour) {
             const tomorrow = new Date(
-                cphLocalToUtc(p.y, p.m, p.day, BUSINESS_START_HOUR, 0).getTime() + DAY_MS,
+                cphLocalToUtc(p.y, p.m, p.day, startHour, 0).getTime() + DAY_MS,
             );
             cur = tomorrow;
             continue;
@@ -175,6 +176,20 @@ export function clampToBusinessTime(d: Date): Date {
         return cur;
     }
     return cur;
+}
+
+// Slide d forward to the start of the next business-hours window if it's
+// outside one. If d is already within 09:00–17:00 CPH on a business day,
+// returns d unchanged.
+export function clampToBusinessTime(d: Date): Date {
+    return clampToWindow(d, BUSINESS_START_HOUR, BUSINESS_END_HOUR);
+}
+
+// Calendar-day key (YYYY-MM-DD) as seen in Copenhagen — the send queue's
+// daily cap counts sends per CPH day, not per UTC day.
+export function cphDayKey(d: Date): string {
+    const p = getCphParts(d);
+    return `${p.y}-${String(p.m).padStart(2, "0")}-${String(p.day).padStart(2, "0")}`;
 }
 
 // Advance d by exactly one business day in CPH: +24h, then keep adding 24h
