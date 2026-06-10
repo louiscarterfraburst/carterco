@@ -438,6 +438,13 @@ verify_jwt = false
 [functions.outreach-send-queue]
 verify_jwt = false
 
+# DB trigger (outreach_replies_triage_trg) fires this on reply INSERT without
+# a JWT; the operator's "Generér svar" button also calls it. Idempotent,
+# service-role internals. MUST stay false — the 2026-06-08 CLI deploy flipped
+# it to true (missing entry here) and killed auto-triage for two days.
+[functions.ai-triage-reply]
+verify_jwt = false
+
 # User-triggered ICP tuning loop. Generates a proposal from outcomes;
 # apply promotes a proposal to a new active icp_version.
 # verify_jwt=true (default) — both validate the bearer manually inside.

@@ -51,6 +51,7 @@ import {
   type SeqLite,
 } from "./flow";
 import { PlayPills } from "./playUi";
+import { resolveGenerateOutcome, type GenerateReplyResult } from "./suggested-reply";
 import {
   buildThread,
   projectUpcoming,
@@ -1154,22 +1155,25 @@ export default function OutreachPage() {
   // (Re)generate an AI reply draft for one inbound reply via ai-triage-reply
   // (Sonnet + Louis's voice brief + humanize). Returns the freshly stored,
   // humanized triage_draft so the compose box can show it immediately, without
-  // waiting on a full reload to round-trip through component state.
-  async function generateReply(replyId: string): Promise<string | null> {
+  // waiting on a full reload to round-trip through component state. draft can
+  // legitimately be null (hard decline → no reply warranted) — the action
+  // field lets the compose box explain that inline instead of going silent.
+  async function generateReply(replyId: string): Promise<GenerateReplyResult> {
     setErr(null); setInfo(null);
     const { data, error } = await supabase.functions.invoke("ai-triage-reply", {
       body: { replyId },
     });
-    if (error) { setErr(error.message ?? String(error)); return null; }
-    if (data?.error) { setErr(`${data.error}${data.details ? `: ${data.details}` : ""}`); return null; }
+    if (error) { setErr(error.message ?? String(error)); return { ok: false, draft: null, action: null }; }
+    if (data?.error) { setErr(`${data.error}${data.details ? `: ${data.details}` : ""}`); return { ok: false, draft: null, action: null }; }
     const { data: row } = await supabase
       .from("outreach_replies")
-      .select("triage_draft")
+      .select("triage_draft, triage_action")
       .eq("id", replyId)
       .maybeSingle();
-    setInfo("Svar genereret.");
+    const draft = (row?.triage_draft as string | null) ?? null;
+    setInfo(draft ? "Svar genereret." : "Triage kørt: AI'en foreslår intet svar her.");
     await load();
-    return (row?.triage_draft as string | null) ?? null;
+    return { ok: true, draft, action: (row?.triage_action as string | null) ?? null };
   }
 
   async function overrideIcpRejection(leadId: string) {
@@ -4427,7 +4431,7 @@ function RepliesTab({ replies, referralsByLead, busyLead, onMarkHandled, onInvit
   onMarkHandled: (id: string) => void;
   onInviteAlt: (altId: string, leadId: string) => void;
   onSendReply: (replyId: string, messageOverride: string) => Promise<boolean>;
-  onGenerateReply: (replyId: string) => Promise<string | null>;
+  onGenerateReply: (replyId: string) => Promise<GenerateReplyResult>;
 }) {
   if (replies.length === 0) {
     return (
@@ -4750,13 +4754,14 @@ function SuggestedReply({ replyId, text, onSend, onGenerate }: {
   replyId: string;
   text: string;
   onSend: (replyId: string, messageOverride: string) => Promise<boolean>;
-  onGenerate: (replyId: string) => Promise<string | null>;
+  onGenerate: (replyId: string) => Promise<GenerateReplyResult>;
 }) {
   const hasSuggestion = !!text.trim();
   const [draft, setDraft] = useState(text);
   const [editing, setEditing] = useState(!hasSuggestion); // no AI draft → open compose
   const [sending, setSending] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [notice, setNotice] = useState<{ kind: "no_draft" | "error"; text: string } | null>(null);
   const [copied, setCopied] = useState(false);
   const [hidden, setHidden] = useState(false);
   if (hidden) return null;
@@ -4764,11 +4769,21 @@ function SuggestedReply({ replyId, text, onSend, onGenerate }: {
   async function regenerate() {
     if (generating || sending) return;
     setGenerating(true);
-    const fresh = await onGenerate(replyId);
-    setGenerating(false);
-    // Fresh draft drops straight into the box, ready to review/edit/send. If
-    // generation failed (null), keep whatever was there.
-    if (fresh) { setDraft(fresh); setEditing(false); }
+    setNotice(null);
+    try {
+      const outcome = resolveGenerateOutcome(await onGenerate(replyId));
+      if (outcome.kind === "draft") {
+        // Fresh draft drops straight into the box, ready to review/edit/send.
+        setDraft(outcome.draft);
+        setEditing(false);
+      } else {
+        // Triage ran but produced no draft (hard decline etc.) or failed —
+        // say so inline. A silent no-op reads as a dead button.
+        setNotice({ kind: outcome.kind, text: outcome.notice });
+      }
+    } finally {
+      setGenerating(false);
+    }
   }
 
   async function copy() {
@@ -4824,6 +4839,11 @@ function SuggestedReply({ replyId, text, onSend, onGenerate }: {
           </button>
         </div>
       </div>
+      {notice ? (
+        <p className={`mt-2 border-l pl-2 text-xs leading-relaxed ${notice.kind === "error" ? "border-[var(--clay)]/50 text-[var(--clay)]" : "border-[var(--forest)]/40 text-[var(--ink)]/65"}`}>
+          {notice.text}
+        </p>
+      ) : null}
       {editing ? (
         <textarea
           value={draft}
