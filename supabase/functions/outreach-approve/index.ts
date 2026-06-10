@@ -82,7 +82,7 @@ Deno.serve(async (request) => {
   // Fetch the pipeline row.
   const { data: pipe, error: fetchErr } = await admin
     .from("outreach_pipeline")
-    .select("sendpilot_lead_id, contact_email, linkedin_url, status, rendered_message, video_link, accepted_at, sent_at, workspace_id, sendpilot_sender_id, campaign_id, invite_source, lemlist_lead_id, lemlist_campaign_id")
+    .select("sendpilot_lead_id, contact_email, linkedin_url, status, rendered_message, video_link, accepted_at, sent_at, workspace_id, sendpilot_sender_id, campaign_id, invite_source, lemlist_lead_id, lemlist_campaign_id, play")
     .eq("sendpilot_lead_id", leadId)
     .maybeSingle();
   if (fetchErr) return json({ error: "db fetch", details: fetchErr.message }, 500);
@@ -124,6 +124,29 @@ Deno.serve(async (request) => {
     await admin.from("outreach_pipeline")
       .update({ sendpilot_sender_id: resolvedSenderId })
       .eq("sendpilot_lead_id", leadId);
+  }
+
+  // Auto-inherit the play tag from the enrichment row at decision time. The
+  // invite RPC (outreach_record_invite) already stamps play, but a pipeline row
+  // created/touched by the accept poll upserts without it and keeps the default
+  // 'video_loop'. Re-derive here so every approved lead is correctly tagged,
+  // applying the RPC's exact rule: only upgrade a still-default tag, never
+  // clobber a non-default one.
+  if ((pipe.play ?? "video_loop") === "video_loop") {
+    const orParts = [`sendpilot_lead_id.eq.${leadId}`];
+    if (pipe.contact_email) orParts.unshift(`contact_email.eq.${pipe.contact_email}`);
+    const { data: leadPlayRows } = await admin
+      .from("outreach_leads")
+      .select("play")
+      .or(orParts.join(","))
+      .limit(1);
+    const truePlay = (leadPlayRows?.[0]?.play as string | undefined)?.trim();
+    if (truePlay && truePlay !== "video_loop") {
+      await admin.from("outreach_pipeline")
+        .update({ play: truePlay })
+        .eq("sendpilot_lead_id", leadId);
+      pipe.play = truePlay;
+    }
   }
 
   const now = new Date().toISOString();
