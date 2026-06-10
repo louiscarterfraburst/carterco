@@ -4,6 +4,9 @@ import {
   buildTreeEdges,
   buildTreeNodes,
   classifyNode,
+  FLOW_MAIN_PATH,
+  FLOW_STEP_META,
+  linearizeFlow,
   lookupSeqStep,
   nodeLabel,
   scopeSequencesToPlay,
@@ -319,5 +322,55 @@ describe("scopeSequencesToPlay", () => {
 
   it("drops every lane for a play with no sequences and no trigger (hiring today)", () => {
     expect(scopeSequencesToPlay(seqs, [{ sequence_id: null }], null)).toEqual([]);
+  });
+});
+
+describe("linearizeFlow (ActiveCampaign-style spine)", () => {
+  const occupied = (...ids: string[]) => new Set(ids);
+
+  it("gives every main-path node its own row in journey order, lane 0", () => {
+    const nodes = buildTreeNodes(SEQUENCES, [row()], []);
+    const lin = linearizeFlow(nodes, occupied());
+    const byId = new Map(lin.map((n) => [n.id, n]));
+    FLOW_MAIN_PATH.forEach((id, i) => {
+      expect(byId.get(id)).toMatchObject({ col: i, lane: 0 });
+    });
+  });
+
+  it("drops empty exception branches and keeps occupied ones beside their anchor", () => {
+    const nodes = buildTreeNodes([], [row()], []);
+    const empty = linearizeFlow(nodes, occupied());
+    expect(empty.some((n) => n.id === "pre_connected")).toBe(false);
+    expect(empty.some((n) => n.id === "rendered")).toBe(false);
+
+    const withParked = linearizeFlow(nodes, occupied("rendered"));
+    const parked = withParked.find((n) => n.id === "rendered");
+    // Sits beside the "rendering" row, offset into its own lane.
+    expect(parked?.col).toBe(FLOW_MAIN_PATH.indexOf("rendering"));
+    expect(parked?.lane ?? 0).toBeGreaterThan(0);
+  });
+
+  it("chains sequence steps directly under the spine", () => {
+    const nodes = buildTreeNodes(SEQUENCES, [row()], []);
+    const lin = linearizeFlow(nodes, occupied());
+    const step0 = lin.find((n) => n.id === "seq:hiring_signal_v1:0");
+    const step1 = lin.find((n) => n.id === "seq:hiring_signal_v1:1");
+    expect(step0?.col).toBe(FLOW_MAIN_PATH.length);
+    expect(step1?.col).toBe(FLOW_MAIN_PATH.length + 1);
+  });
+
+  it("passes arm-mode trees through untouched", () => {
+    const nodes = buildTreeNodes(ARM_SEQUENCES, [row({ first_dm_variant: "v1_long" })], []);
+    expect(linearizeFlow(nodes, occupied())).toEqual(nodes);
+  });
+
+  it("has step semantics for every main-path and exception node", () => {
+    for (const id of FLOW_MAIN_PATH) {
+      expect(FLOW_STEP_META[id]?.desc, id).toBeTruthy();
+      expect(FLOW_STEP_META[id]?.stepKind, id).toBeTruthy();
+    }
+    for (const id of ["rendered", "pending_ai_draft", "pre_connected", "pending_alt_review"]) {
+      expect(FLOW_STEP_META[id]?.desc, id).toBeTruthy();
+    }
   });
 });

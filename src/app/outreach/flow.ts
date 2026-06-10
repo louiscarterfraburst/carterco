@@ -320,6 +320,84 @@ export const STATUS_LABELS: Record<string, string> = {
   sent: "Sendt",
 };
 
+// ---------------------------------------------------------------------------
+// Linear "automation" layout (ActiveCampaign-style): one centered vertical
+// spine for the main journey, exceptions as side-branches that only appear
+// when they actually hold contacts. The grid layout buildTreeNodes emits is
+// the data model; linearizeFlow re-targets col/lane for readability.
+
+// The canonical main journey, in order. Every node here is ALWAYS visible so
+// the spine never breaks, even at 0 contacts (the chain is the explanation).
+export const FLOW_MAIN_PATH = [
+  "invited",
+  "accepted",
+  "pending_pre_render",
+  "rendering",
+  "pending_approval",
+  "approved_queued",
+  "sent",
+] as const;
+
+// Exception states branch off the spine and only render when occupied.
+// Keyed to the main-path node whose row they sit beside.
+export const FLOW_EXCEPTION_ANCHOR: Record<string, string> = {
+  pre_connected: "accepted",
+  pending_alt_review: "accepted",
+  pending_ai_draft: "pending_pre_render",
+  rendered: "rendering",
+};
+
+// Step semantics for the cards: who acts, and what actually happens. This is
+// what makes the flow read like an automation instead of a status taxonomy.
+export type FlowStepKind = "auto" | "manuel" | "venter" | "send";
+export const FLOW_STEP_META: Record<string, { stepKind: FlowStepKind; desc: string }> = {
+  invited: { stepKind: "auto", desc: "Blank invite sendes fra din konto" },
+  accepted: { stepKind: "venter", desc: "Forbindelsen er accepteret" },
+  pending_pre_render: { stepKind: "auto", desc: "Render starter (auto for hiring-signal)" },
+  rendering: { stepKind: "auto", desc: "SendSpark laver den personlige video" },
+  pending_approval: { stepKind: "manuel", desc: "Du godkender den præcise tekst" },
+  approved_queued: { stepKind: "venter", desc: "Driper ud, 6-10 min mellemrum, hverdage 08-18" },
+  sent: { stepKind: "send", desc: "Første DM leveret med video" },
+  rendered: { stepKind: "manuel", desc: "Parkeret: forkert baggrund, tjek manuelt" },
+  pending_ai_draft: { stepKind: "auto", desc: "AI skriver første DM (ingen video)" },
+  pre_connected: { stepKind: "manuel", desc: "Allerede i netværket, vurdér manuelt" },
+  pending_alt_review: { stepKind: "manuel", desc: "Lav ICP-score: vælg rigtig person" },
+};
+
+// Re-layout the non-arm tree as a single centered spine. Main-path nodes get
+// one row each (col 0..n, lane 0); occupied exceptions sit one lane right of
+// their anchor's row; unoccupied exceptions are dropped entirely; sequence
+// steps keep their lanes and chain on below the spine. Arm-mode trees pass
+// through untouched — the per-arm lanes already read vertically.
+export function linearizeFlow(nodes: NodeDef[], occupied: Set<string>): NodeDef[] {
+  if (nodes.some((n) => n.kind === "arm")) return nodes;
+
+  const rowOf = new Map<string, number>(FLOW_MAIN_PATH.map((id, i) => [id, i]));
+  const seqBase = FLOW_MAIN_PATH.length; // sequence rows start under "sent"
+  const minSeqCol = Math.min(...nodes.filter((n) => n.kind === "sequence").map((n) => n.col), Infinity);
+
+  const out: NodeDef[] = [];
+  for (const n of nodes) {
+    if (n.kind === "sequence") {
+      out.push({ ...n, col: seqBase + (n.col - minSeqCol) });
+      continue;
+    }
+    const row = rowOf.get(n.id);
+    if (row != null) {
+      out.push({ ...n, col: row, lane: 0 });
+      continue;
+    }
+    const anchor = FLOW_EXCEPTION_ANCHOR[n.id];
+    if (anchor != null) {
+      if (!occupied.has(n.id)) continue; // empty side-branch: drop
+      out.push({ ...n, col: rowOf.get(anchor) ?? 0, lane: 1.15 });
+      continue;
+    }
+    out.push(n); // unknown node: pass through unchanged
+  }
+  return out;
+}
+
 // Pipeline rows still being worked: not terminal, not finished, not replied.
 export const PLAY_TERMINAL_STATUSES = new Set(["rejected", "rejected_by_icp", "failed"]);
 

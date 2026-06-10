@@ -28,11 +28,14 @@ import {
 import "@xyflow/react/dist/style.css";
 import {
   ARM_META,
+  FLOW_MAIN_PATH,
+  FLOW_STEP_META,
   OUTCOME_DEFS,
   activeArms,
   buildTreeNodes,
   buildTreeEdges,
   classifyNode,
+  linearizeFlow,
   lookupSeqStep,
   nodeLabel,
   playStats,
@@ -42,6 +45,7 @@ import {
   scopeSequencesToPlay,
   stagedLeadStage,
   type ArmStat,
+  type FlowStepKind,
   type FlowTone,
   type NodeDef,
   type SeqLite,
@@ -1758,6 +1762,9 @@ type FlowNodeData = {
   count: number;
   tone: FlowTone;
   sublabel?: string;
+  // Automation-card semantics: who acts (chip) and what the step does (desc).
+  stepKind?: FlowStepKind | null;
+  desc?: string | null;
   isSelected: boolean;
   armStat?: ArmStat | null;
   // Age of the longest-waiting contact in this node ("6 d") — surfaces stuck
@@ -1767,26 +1774,41 @@ type FlowNodeData = {
   oldestStale?: boolean;
 };
 
-// React Flow custom node — a tone-tinted card with label, live count, optional
-// arm scoreboard line, and (hidden) connection handles.
+// Step-kind chips: who acts at this card. "DIG" is the only one that demands
+// the operator; everything else runs itself — that contrast is the point.
+const STEP_CHIP: Record<FlowStepKind, { label: string; cls: string }> = {
+  auto: { label: "Auto", cls: "bg-[var(--ink)]/6 text-[var(--ink)]/55" },
+  manuel: { label: "Dig", cls: "bg-[var(--clay)]/14 text-[var(--clay)]" },
+  venter: { label: "Venter", cls: "bg-[var(--ink)]/6 text-[var(--ink)]/45" },
+  send: { label: "Send", cls: "bg-[var(--forest)]/12 text-[var(--forest)]" },
+};
+
+// React Flow custom node — an automation card (ActiveCampaign-style): step-kind
+// chip + live count up top, step name, then one line on what the step does.
 function FlowCardNode({ data }: NodeProps) {
   const d = data as FlowNodeData;
   const tone = FLOW_TONE_CLASS[d.tone];
+  const chip = d.stepKind ? STEP_CHIP[d.stepKind] : null;
   return (
     <div
-      className={`rounded-md border px-3 py-2 ${tone.card} ${d.isSelected ? "ring-2 ring-[var(--ink)]/40" : ""} ${d.count === 0 && !d.armStat ? "opacity-50" : ""}`}
-      style={{ width: 188 }}
+      className={`rounded-lg border px-3.5 py-2.5 shadow-[0_1px_3px_rgba(28,25,20,0.06)] ${tone.card} ${d.isSelected ? "ring-2 ring-[var(--ink)]/40" : ""} ${d.count === 0 && !d.armStat ? "opacity-60" : ""}`}
+      style={{ width: 240 }}
     >
       <Handle type="target" position={Position.Top} style={{ opacity: 0 }} />
-      <div className="flex items-baseline justify-between gap-2">
-        <span className="text-[12px] leading-tight text-[var(--ink)]">{d.label}</span>
-        <span className="font-display text-lg italic leading-none text-[var(--ink)]">{d.count}</span>
+      <div className="flex items-center justify-between gap-2">
+        {chip ? (
+          <span className={`tabular rounded px-1.5 py-px text-[8px] uppercase tracking-[0.16em] ${chip.cls}`}>{chip.label}</span>
+        ) : <span />}
+        <span className={`tabular rounded-full px-2 py-px text-[11px] leading-snug ${d.count > 0 ? "bg-[var(--ink)]/8 font-semibold text-[var(--ink)]" : "text-[var(--ink)]/30"}`}>{d.count}</span>
       </div>
-      {d.sublabel ? (
+      <div className="mt-1 text-[13px] font-medium leading-tight text-[var(--ink)]">{d.label}</div>
+      {d.desc ? (
+        <div className="mt-0.5 text-[10px] leading-snug text-[var(--ink)]/50">{d.desc}</div>
+      ) : d.sublabel ? (
         <div className="tabular mt-0.5 truncate text-[9px] uppercase tracking-[0.14em] text-[var(--ink)]/35">{d.sublabel}</div>
       ) : null}
       {d.count > 0 && d.oldestAgo ? (
-        <div className={`tabular mt-0.5 text-[9px] tracking-[0.1em] ${d.oldestStale ? "text-[var(--clay)]" : "text-[var(--ink)]/40"}`}>
+        <div className={`tabular mt-1 text-[9px] tracking-[0.1em] ${d.oldestStale ? "text-[var(--clay)]" : "text-[var(--ink)]/40"}`}>
           ældste {d.oldestAgo}
         </div>
       ) : null}
@@ -1803,12 +1825,11 @@ function FlowCardNode({ data }: NodeProps) {
 
 const FLOW_NODE_TYPES = { flowCard: FlowCardNode };
 
-// Universal spine — always shown so the main flow never disconnects, even when
-// a stage is momentarily empty. Everything else shows only when it holds
+// The main journey — always shown so the spine never disconnects, even when a
+// stage is momentarily empty. Everything else shows only when it holds
 // contacts (workspace-aware), so client-specific side-branches don't clutter.
-const FLOW_SPINE = new Set([
-  "invited", "accepted", "pending_pre_render", "rendering", "rendered", "pending_approval", "sent",
-]);
+// Single source: FLOW_MAIN_PATH in flow.ts (linearizeFlow lays it out).
+const FLOW_SPINE = new Set<string>(FLOW_MAIN_PATH);
 
 function MessageBlueprint({ nodeId, seqStep }: {
   nodeId: string;
@@ -1969,6 +1990,12 @@ function FlowTab({ rows, sequences, replies, armStats, plays, playFilter, onPlay
 
   const treeDefs = useMemo(() => buildTreeNodes(scopedSequences, scopedRows, armStats), [scopedSequences, scopedRows, armStats]);
   const treeEdges = useMemo(() => buildTreeEdges(treeDefs, scopedSequences), [treeDefs, scopedSequences]);
+  // ActiveCampaign-style layout: one centered spine, exceptions only when
+  // occupied. Arm-mode trees pass through linearizeFlow untouched.
+  const layoutDefs = useMemo(() => {
+    const occupied = new Set([...counts.entries()].filter(([, c]) => c > 0).map(([id]) => id));
+    return linearizeFlow(treeDefs, occupied);
+  }, [treeDefs, counts]);
 
   // Pill counts: live pipeline rows per play (unscoped, so the numbers don't
   // change as you click through plays).
@@ -1987,24 +2014,26 @@ function FlowTab({ rows, sequences, replies, armStats, plays, playFilter, onPlay
   // so each client sees its own flow instead of the union of everyone's.
   const visibleIds = useMemo(() => {
     const s = new Set<string>();
-    for (const n of treeDefs) {
+    for (const n of layoutDefs) {
       // Always show the spine, arms, and the sequence skeleton (so every arm
       // shows its follow-ups even at 0 leads); plus anything holding contacts.
+      // linearizeFlow already dropped empty exception branches.
       if (FLOW_SPINE.has(n.id) || n.kind === "arm" || n.kind === "sequence" || (counts.get(n.id) ?? 0) > 0) s.add(n.id);
     }
     return s;
-  }, [treeDefs, counts]);
+  }, [layoutDefs, counts]);
 
   const rfNodes = useMemo<RFNode[]>(() => {
-    // Vertical tree: each level is a row going DOWN (y); siblings within a
-    // level spread across (x), centered so the trunk stays roughly mid-canvas.
+    // Vertical automation: the main journey is ONE centered column going down;
+    // occupied exceptions sit one lane right of their anchor row; sequence
+    // steps chain on below. Arm mode keeps its per-arm lanes.
     const byCol = new Map<number, NodeDef[]>();
-    for (const n of treeDefs) {
+    for (const n of layoutDefs) {
       if (!visibleIds.has(n.id)) continue;
       const list = byCol.get(n.col);
       if (list) list.push(n); else byCol.set(n.col, [n]);
     }
-    const LEVEL_H = 132, NODE_W = 220;
+    const LEVEL_H = 150, NODE_W = 270;
     const widest = Math.max(...[...byCol.values()].map((l) => l.length), 1);
     const out: RFNode[] = [];
     for (const [col, list] of byCol) {
@@ -2025,11 +2054,23 @@ function FlowTab({ rows, sequences, replies, armStats, plays, playFilter, onPlay
             // once the oldest contact has sat ≥5 days.
             const oldest = oldestByNode.get(n.id) ?? null;
             const ageMs = oldest ? Date.now() - Date.parse(oldest) : 0;
+            // Automation semantics: statuses carry FLOW_STEP_META; sequence
+            // steps describe their wait gate so the card reads like an
+            // ActiveCampaign wait+send step.
+            const meta = n.kind === "status" ? FLOW_STEP_META[n.id] : undefined;
+            const seqInfo = n.kind === "sequence" ? lookupSeqStep(n.id, scopedSequences) : null;
+            const seqDesc = seqInfo
+              ? (seqInfo.step.waitHours
+                ? `Efter ${seqInfo.step.waitHours} timers pause (arbejdstid)`
+                : "Opfølgning sendes automatisk")
+              : null;
             return {
               label: n.label,
               count: counts.get(n.id) ?? 0,
               tone: n.tone,
               sublabel: n.sublabel,
+              stepKind: meta?.stepKind ?? (n.kind === "sequence" ? "send" : null),
+              desc: meta?.desc ?? seqDesc,
               isSelected: n.id === selectedNode,
               armStat: arm,
               oldestAgo: ageMs >= 60 * 60_000 ? flowTimeAgo(oldest) || null : null,
@@ -2041,7 +2082,7 @@ function FlowTab({ rows, sequences, replies, armStats, plays, playFilter, onPlay
       });
     }
     return out;
-  }, [treeDefs, visibleIds, counts, oldestByNode, selectedNode, armByVariant]);
+  }, [layoutDefs, visibleIds, counts, oldestByNode, selectedNode, armByVariant, scopedSequences]);
 
   const rfEdges = useMemo<RFEdge[]>(() =>
     treeEdges
