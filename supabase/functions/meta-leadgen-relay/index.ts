@@ -51,6 +51,13 @@ const RELAY_TOKEN = Deno.env.get("META_LEADGEN_RELAY_TOKEN") ?? "";
 const CARTERCO_PAGE_ID = "1138136299380303";
 const PAGE_WORKSPACE_MAP: Record<string, string> = parseJsonEnv("META_PAGE_WORKSPACE_MAP");
 
+// Optional per-page form allowlist. When a page has one, only leads from those
+// form_ids are ingested — the rest are skipped at the door. Soho's page hosts
+// both a Mødelokaler form (in scope) and a Kontor form (different sales motion,
+// out of scope), so we accept only the meeting-room form. JSON:
+//   {"146975948684005":["1539910014404003"]}
+const PAGE_FORM_ALLOWLIST: Record<string, string[]> = parseJsonArrayEnv("META_PAGE_FORM_ALLOWLIST");
+
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL") ?? "",
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
@@ -84,6 +91,14 @@ Deno.serve(async (request) => {
     return json({ error: "workspace not resolvable" }, 500);
   }
 
+  // Form scope: if this page has an allowlist, only its forms are in scope.
+  // (Soho: accept Mødelokaler, skip Kontor.)
+  const formId = strField(body, "form_id");
+  const allow = PAGE_FORM_ALLOWLIST[pageId];
+  if (allow && allow.length && (!formId || !allow.includes(formId))) {
+    return json({ ok: true, status: `skipped:form_out_of_scope:${formId ?? "none"}` });
+  }
+
   // Idempotency: structured column first, legacy note as fallback for old rows.
   const noteTag = `meta_leadgen_id=${leadgenId}`;
   const existingId = await findExisting(leadgenId, noteTag);
@@ -95,7 +110,6 @@ Deno.serve(async (request) => {
   const company = strField(body, "company_name", "company");
   const qualifier = strField(body, "moeder_per_uge", "qualifier", "monthly_leads");
 
-  const formId = strField(body, "form_id");
   const adId = strField(body, "ad_id");
   const campaignId = strField(body, "campaign_id");
   const noteParts = [noteTag];
@@ -165,6 +179,23 @@ function parseJsonEnv(name: string): Record<string, string> {
   try {
     const parsed = JSON.parse(raw);
     return parsed && typeof parsed === "object" ? parsed as Record<string, string> : {};
+  } catch {
+    console.error(`${name}: invalid JSON, ignoring`);
+    return {};
+  }
+}
+
+function parseJsonArrayEnv(name: string): Record<string, string[]> {
+  const raw = Deno.env.get(name);
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return {};
+    const out: Record<string, string[]> = {};
+    for (const [k, v] of Object.entries(parsed)) {
+      if (Array.isArray(v)) out[k] = v.map(String);
+    }
+    return out;
   } catch {
     console.error(`${name}: invalid JSON, ignoring`);
     return {};
