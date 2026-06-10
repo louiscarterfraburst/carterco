@@ -373,6 +373,30 @@ ad `fbclid` → landing captures it (§3) → stored on lead → Nexudus booking
 `146975948684005` (same Meta-access ask as the spend side, §3/§10). Blocked until
 the landing page (fbclid), Nexudus trigger, and Meta token all exist.
 
+### Status 2026-06-10 — post-meeting build sprint
+
+Meeting outcomes: Nexudus webhook **shared + pointed at our receiver**;
+campaigns can run **Conversion Leads**; **instant form waits on our setup**
+(ingestion = critical path); ads read access granted.
+
+- ✅ Attribution columns **applied to prod** (`meta_lead_id` etc. live on `public.leads`).
+- ✅ `meta-leadgen-webhook` rewritten: **page→workspace routing**
+  (`META_PAGE_WORKSPACE_MAP`, per-page tokens via `META_PAGE_TOKEN_MAP`;
+  unmapped pages skipped — never cross-tenant), structured attribution columns,
+  best-effort `campaign_id` Graph hop, idempotency on `meta_lead_id`.
+  **PENDING DEPLOY.** Soho still needs: their page_id + a page token with
+  `leads_retrieval` → then env map + `subscribed_apps` on their page.
+- ✅ `nexudus-webhook` now fires **CAPI `booked`** (CRM model, hashed em +
+  `meta_lead_id`, event_id `nexudus:<bookingId>:booked`) after the outcome
+  write; never fails the booking on CAPI error. **PENDING DEPLOY** + the
+  `META_CAPI_*_SOHO` env must be set as **Supabase function secrets**
+  (deployed fns can't read .env.local).
+- 🔄 **Telavox pivot (agreed direction): deep link / `tel:` for dial** —
+  kills per-receptionist tokens + CTI licences; ring-click logging already
+  carries agent attribution. Loses answered/duration (answer-rate becomes
+  dial-rate). ONE calling-seat token still wanted for SMS-from-Soho's-number.
+  Verify: one receptionist taps a `tel:` test link → does it route via Telavox?
+
 ### Status 2026-06-09 — CAPI connection LIVE + verified
 
 The hardest, most-blocked link is done. The send pipe to Soho's dataset works

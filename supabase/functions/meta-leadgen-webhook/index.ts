@@ -1,16 +1,28 @@
 // meta-leadgen-webhook
 //
-// Receives Meta (Facebook) Lead Ads webhooks for the Louis fra Carter & Co
-// page (1138136299380303). Inserts into public.leads with source='meta_leadgen'
+// Receives Meta (Facebook) Lead Ads webhooks and inserts into public.leads
 // — the leads_notify_new_lead DB trigger fires push notifications automatically.
+//
+// Multi-workspace: the webhook entry carries the page_id; pages map to
+// workspaces. Built-in default = the Louis fra Carter & Co page
+// (1138136299380303) → carterco workspace. Additional pages (e.g. Soho's) are
+// added via META_PAGE_WORKSPACE_MAP without a redeploy. Leads from unmapped
+// pages are skipped (never dumped into the wrong tenant's panel).
+//
+// Attribution (docs/soho-leadflow.md §3): meta_lead_id / meta_form_id /
+// meta_ad_id land in structured first-touch columns on the lead —
+// meta_lead_id is the primary CAPI match key (Conversion Leads). campaign_id
+// is resolved best-effort via a Graph hop on the ad.
 //
 // Required env:
 //   META_VERIFY_TOKEN          — token used in Meta webhook subscription handshake
 //   META_APP_SECRET            — app secret, used to verify X-Hub-Signature-256
-//   META_PAGE_ACCESS_TOKEN     — long-lived page token to read /{leadgen_id}
+//   META_PAGE_ACCESS_TOKEN     — long-lived page token to read /{leadgen_id} (default page)
+//   META_PAGE_WORKSPACE_MAP    — optional JSON {"<page_id>":"<workspace_uuid>"}
+//   META_PAGE_TOKEN_MAP        — optional JSON {"<page_id>":"<page_access_token>"}
 //   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
 //
-// Subscribe via Graph API once after deploy:
+// Subscribe via Graph API once per page after deploy:
 //   POST /v21.0/{page-id}/subscribed_apps
 //     ?subscribed_fields=leadgen
 //     &access_token={page-access-token}
@@ -18,8 +30,6 @@
 // And in the Meta App dashboard → Webhooks → Page → leadgen field → callback:
 //   https://<project>.supabase.co/functions/v1/meta-leadgen-webhook
 //   verify token: META_VERIFY_TOKEN
-//
-// Single-workspace for now: defaults to public.carterco_workspace_id().
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.103.3";
@@ -34,6 +44,13 @@ const VERIFY_TOKEN = Deno.env.get("META_VERIFY_TOKEN") ?? "";
 const APP_SECRET = Deno.env.get("META_APP_SECRET") ?? "";
 const PAGE_ACCESS_TOKEN = Deno.env.get("META_PAGE_ACCESS_TOKEN") ?? "";
 const GRAPH_VERSION = Deno.env.get("META_GRAPH_VERSION") ?? "v21.0";
+
+// page_id → workspace uuid. The CarterCo page is the built-in default; more
+// pages come from META_PAGE_WORKSPACE_MAP (so onboarding Soho's page is an
+// env change, not a deploy).
+const CARTERCO_PAGE_ID = "1138136299380303";
+const PAGE_WORKSPACE_MAP: Record<string, string> = parseJsonEnv("META_PAGE_WORKSPACE_MAP");
+const PAGE_TOKEN_MAP: Record<string, string> = parseJsonEnv("META_PAGE_TOKEN_MAP");
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL") ?? "",
@@ -75,13 +92,17 @@ Deno.serve(async (request) => {
     return json({ ok: true, ignored: "not a page event" });
   }
 
-  const { data: ws } = await supabase.rpc("carterco_workspace_id");
-  const workspaceId = ws as string | null;
-  if (!workspaceId) return json({ error: "workspace not resolvable" }, 500);
-
   const results: Array<{ leadgen_id: string; status: string; lead_id?: string; error?: string }> = [];
 
   for (const entry of body.entry) {
+    const pageId = String(entry.id ?? "");
+    const workspaceId = await resolveWorkspace(pageId);
+    if (!workspaceId) {
+      console.warn("meta-leadgen-webhook: unmapped page, skipping", pageId);
+      results.push({ leadgen_id: "", status: `skipped:unmapped_page:${pageId}` });
+      continue;
+    }
+
     for (const change of entry.changes ?? []) {
       if (change.field !== "leadgen") continue;
       const v = change.value ?? {};
@@ -92,16 +113,19 @@ Deno.serve(async (request) => {
       }
 
       try {
-        const lead = await fetchLead(leadgenId);
+        const pageToken = PAGE_TOKEN_MAP[pageId] ?? PAGE_ACCESS_TOKEN;
+        const lead = await fetchLead(leadgenId, pageToken);
         const fields = parseFieldData(lead.field_data);
+        const adId = v.ad_id ? String(v.ad_id) : (lead.ad_id ? String(lead.ad_id) : null);
+        const campaignId = adId ? await fetchCampaignId(adId, pageToken) : null;
         const inserted = await insertLead({
           workspaceId,
           leadgenId,
           formId: String(v.form_id ?? lead.form_id ?? ""),
-          adId: v.ad_id ? String(v.ad_id) : null,
+          adId,
+          campaignId,
           createdAt: lead.created_time ?? new Date().toISOString(),
           fields,
-          raw: { webhook: v, lead },
         });
         results.push({ leadgen_id: leadgenId, status: inserted.duplicate ? "duplicate" : "ok", lead_id: inserted.id });
       } catch (e) {
@@ -114,6 +138,16 @@ Deno.serve(async (request) => {
 
   return json({ ok: true, results });
 });
+
+// Workspace per page: built-in CarterCo default + env map for new tenants.
+async function resolveWorkspace(pageId: string): Promise<string | null> {
+  if (PAGE_WORKSPACE_MAP[pageId]) return PAGE_WORKSPACE_MAP[pageId];
+  if (pageId === CARTERCO_PAGE_ID || !pageId) {
+    const { data: ws } = await supabase.rpc("carterco_workspace_id");
+    return (ws as string | null) ?? null;
+  }
+  return null;
+}
 
 type MetaWebhookBody = {
   object: string;
@@ -143,17 +177,37 @@ type MetaLead = {
   field_data?: LeadFieldData[];
 };
 
-async function fetchLead(leadgenId: string): Promise<MetaLead> {
-  if (!PAGE_ACCESS_TOKEN) throw new Error("META_PAGE_ACCESS_TOKEN not set");
+async function fetchLead(leadgenId: string, token: string): Promise<MetaLead> {
+  if (!token) throw new Error("no page access token for this page");
   const url = `https://graph.facebook.com/${GRAPH_VERSION}/${leadgenId}` +
     `?fields=id,created_time,ad_id,form_id,field_data` +
-    `&access_token=${encodeURIComponent(PAGE_ACCESS_TOKEN)}`;
+    `&access_token=${encodeURIComponent(token)}`;
   const res = await fetch(url);
   if (!res.ok) {
     const text = await res.text();
     throw new Error(`Graph fetch ${res.status}: ${text.slice(0, 300)}`);
   }
   return await res.json() as MetaLead;
+}
+
+// campaign_id is not in the leadgen webhook payload (only ad_id/adgroup_id) —
+// resolve it from the ad. Best-effort: spend reporting groups by campaign, but
+// a lead must never be dropped because this hop failed.
+async function fetchCampaignId(adId: string, token: string): Promise<string | null> {
+  try {
+    const url = `https://graph.facebook.com/${GRAPH_VERSION}/${adId}` +
+      `?fields=campaign_id&access_token=${encodeURIComponent(token)}`;
+    const res = await fetch(url);
+    if (!res.ok) {
+      console.warn("campaign_id hop failed", adId, res.status, (await res.text()).slice(0, 200));
+      return null;
+    }
+    const data = await res.json() as { campaign_id?: string };
+    return data.campaign_id ? String(data.campaign_id) : null;
+  } catch (e) {
+    console.warn("campaign_id hop error", adId, e instanceof Error ? e.message : String(e));
+    return null;
+  }
 }
 
 // Field names from Meta lead forms come back as machine-readable slugs. The
@@ -202,16 +256,17 @@ async function insertLead(args: {
   leadgenId: string;
   formId: string;
   adId: string | null;
+  campaignId: string | null;
   createdAt: string;
   fields: ReturnType<typeof parseFieldData>;
-  raw: Record<string, unknown>;
 }): Promise<{ id: string; duplicate: boolean }> {
-  // Idempotency: if we've already stored this leadgen_id, return the existing row.
+  // Idempotency on the structured column; fall back to the legacy note match
+  // for rows ingested before the attribution columns existed.
   const { data: existing } = await supabase
     .from("leads")
     .select("id")
     .eq("source", "meta_leadgen")
-    .eq("notes", metaLeadNote(args.leadgenId))
+    .or(`meta_lead_id.eq.${args.leadgenId},notes.eq.${metaLeadNote(args.leadgenId)}`)
     .maybeSingle();
   if (existing?.id) return { id: existing.id, duplicate: true };
 
@@ -224,6 +279,12 @@ async function insertLead(args: {
     monthly_leads: args.fields.qualifier,
     source: "meta_leadgen",
     is_draft: false,
+    // First-touch attribution — written once here, never updated.
+    meta_lead_id: args.leadgenId,
+    meta_form_id: args.formId || null,
+    meta_ad_id: args.adId,
+    meta_campaign_id: args.campaignId,
+    // Human-readable note kept for the panel; columns are the source of truth.
     notes: metaLeadNote(args.leadgenId, args.formId, args.adId),
   };
 
@@ -241,6 +302,18 @@ function metaLeadNote(leadgenId: string, formId?: string, adId?: string | null) 
   if (formId) parts.push(`form_id=${formId}`);
   if (adId) parts.push(`ad_id=${adId}`);
   return parts.join(" · ");
+}
+
+function parseJsonEnv(name: string): Record<string, string> {
+  const raw = Deno.env.get(name);
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed as Record<string, string> : {};
+  } catch {
+    console.error(`${name}: invalid JSON, ignoring`);
+    return {};
+  }
 }
 
 async function verifyMetaSignature(header: string, rawBody: string, appSecret: string): Promise<boolean> {

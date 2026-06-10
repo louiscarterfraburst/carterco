@@ -15,14 +15,22 @@
 //
 // Required env:
 //   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
-//   NEXUDUS_WEBHOOK_SECRET   — optional; when set, signatures are verified
-//   SOHO_WORKSPACE_ID        — defaults to the Soho rooms workspace
+//   NEXUDUS_WEBHOOK_SECRET        — optional; when set, signatures are verified
+//   SOHO_WORKSPACE_ID             — defaults to the Soho rooms workspace
+//   META_CAPI_ACCESS_TOKEN_SOHO   — CAPI token (system user, dataset assigned)
+//   META_CAPI_DATASET_ID_SOHO     — Soho dataset ("SOHO | New web 27/3-26")
+//   META_CAPI_TEST_EVENT_CODE_SOHO — optional; routes CAPI to Test Events
+//
+// On booking it also fires the Meta CAPI conversion (Conversion-Leads CRM
+// model, mirrors meta-capi-conversion): event_name "booked" matched by hashed
+// email + meta_lead_id. This is the signal that teaches Meta to optimize
+// toward bookers instead of form-fills (docs/soho-leadflow.md §12). CAPI
+// failure never fails the webhook — the outcome write is the priority.
 //
 // NOTE: the exact Nexudus payload shape (field casing, event wrapper) is
 // confirmed against the first real event via the raw-body log below, then the
 // extractors are tightened. Until then this parses defensively and no-ops
-// safely on anything it can't map. The booking -> CAPI fire is a follow-up
-// (the Soho CAPI sender) — this function only sets the outcome.
+// safely on anything it can't map.
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.103.3";
@@ -36,6 +44,10 @@ const corsHeaders = {
 const SECRET = Deno.env.get("NEXUDUS_WEBHOOK_SECRET") ?? "";
 const SOHO_WORKSPACE_ID =
   Deno.env.get("SOHO_WORKSPACE_ID") ?? "7f13f551-9514-4a5a-b1bf-98eb95c1a469";
+const CAPI_TOKEN = Deno.env.get("META_CAPI_ACCESS_TOKEN_SOHO") ?? "";
+const CAPI_DATASET = Deno.env.get("META_CAPI_DATASET_ID_SOHO") ?? "";
+const CAPI_TEST_CODE = Deno.env.get("META_CAPI_TEST_EVENT_CODE_SOHO") ?? "";
+const GRAPH_VERSION = Deno.env.get("META_GRAPH_VERSION") ?? "v21.0";
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL") ?? "",
@@ -118,7 +130,7 @@ async function handleEvent(ev: Record<string, unknown>): Promise<Record<string, 
   // Match to a Soho lead by email (first-class key). Most recent non-draft row.
   const { data: lead, error } = await supabase
     .from("leads")
-    .select("id, outcome")
+    .select("id, outcome, name, meta_lead_id")
     .eq("workspace_id", SOHO_WORKSPACE_ID)
     .eq("is_draft", false)
     .eq("email", email)
@@ -147,7 +159,70 @@ async function handleEvent(ev: Record<string, unknown>): Promise<Record<string, 
 
   const { error: upErr } = await supabase.from("leads").update(update).eq("id", lead.id);
   if (upErr) throw new Error(`mark booked: ${upErr.message}`);
-  return { status: "booked", lead_id: lead.id, email, room: resource, meeting_at: fromTime, bookingId };
+
+  // Close the loop to Meta — best-effort; never fails the booking write.
+  const capi = await fireCapiBooked({
+    email,
+    name: str(lead.name),
+    metaLeadId: str(lead.meta_lead_id),
+    bookingId: bookingId ?? lead.id,
+  });
+
+  return { status: "booked", lead_id: lead.id, email, room: resource, meeting_at: fromTime, bookingId, capi };
+}
+
+// Conversion-Leads CRM event (mirrors meta-capi-conversion): tells Meta this
+// lead progressed to a booking, matched by hashed email (+ meta_lead_id when
+// the lead came from an instant form). No-ops gracefully until the env is set.
+async function fireCapiBooked(args: {
+  email: string;
+  name: string | null;
+  metaLeadId: string | null;
+  bookingId: string;
+}): Promise<string> {
+  if (!CAPI_TOKEN || !CAPI_DATASET) return "skipped:no-capi-env";
+  try {
+    const userData: Record<string, unknown> = { em: [await sha256(args.email)] };
+    if (args.name) {
+      const parts = args.name.trim().toLowerCase().split(/\s+/).filter(Boolean);
+      if (parts[0]) userData.fn = [await sha256(parts[0])];
+      if (parts.length > 1) userData.ln = [await sha256(parts[parts.length - 1])];
+    }
+    if (args.metaLeadId) {
+      const n = Number(args.metaLeadId);
+      userData.lead_id = Number.isFinite(n) && String(n) === args.metaLeadId ? n : args.metaLeadId;
+    }
+
+    const event = {
+      event_name: "booked", // TODO: -> 'booket' with the §8 outcome rename
+      event_time: Math.floor(Date.now() / 1000),
+      action_source: "system_generated",
+      event_id: `nexudus:${args.bookingId}:booked`, // dedup across webhook retries
+      user_data: userData,
+      custom_data: { event_source: "crm", lead_event_source: "Soho" },
+    };
+    const reqBody: Record<string, unknown> = { data: [event] };
+    if (CAPI_TEST_CODE) reqBody.test_event_code = CAPI_TEST_CODE;
+
+    const res = await fetch(
+      `https://graph.facebook.com/${GRAPH_VERSION}/${CAPI_DATASET}/events?access_token=${encodeURIComponent(CAPI_TOKEN)}`,
+      { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(reqBody) },
+    );
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      console.error("nexudus-webhook: CAPI send failed", res.status, body);
+      return `error:${res.status}`;
+    }
+    return CAPI_TEST_CODE ? "sent:test" : "sent";
+  } catch (e) {
+    console.error("nexudus-webhook: CAPI error", e instanceof Error ? e.message : String(e));
+    return "error";
+  }
+}
+
+async function sha256(s: string): Promise<string> {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s.trim().toLowerCase()));
+  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────-
