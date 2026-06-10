@@ -373,6 +373,20 @@ export function playStats<R extends PlayStatRow>(
   return m;
 }
 
+// Sequences relevant to one play's scoped view: lanes holding the play's
+// contacts, plus the play's own trigger sequence (so its skeleton shows even
+// at 0 leads). Without this, a play-filtered tree renders the OTHER play's
+// follow-up lanes as empty skeleton — exactly the "which steps belong to this
+// flow?" confusion the play filter exists to remove.
+export function scopeSequencesToPlay(
+  sequences: SeqLite[],
+  scopedRows: Pick<FlowRow, "sequence_id">[],
+  triggerSequenceId?: string | null,
+): SeqLite[] {
+  const used = new Set(scopedRows.map((r) => r.sequence_id).filter(Boolean));
+  return sequences.filter((s) => used.has(s.id) || s.id === triggerSequenceId);
+}
+
 // Human label for any classifyNode() id — status node, arm, sequence step or
 // outcome. Lets list views (play roster, Kontakter step column) name a
 // contact's current position with the exact wording the Flow tree uses.

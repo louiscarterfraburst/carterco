@@ -39,6 +39,7 @@ import {
   resolvePlays,
   flowTimeAgo,
   normLinkedinUrl,
+  scopeSequencesToPlay,
   stagedLeadStage,
   type ArmStat,
   type FlowTone,
@@ -292,6 +293,7 @@ type Play = {
   status: "active" | "paused";
   position: number;
   is_default: boolean;
+  trigger_sequence_id: string | null;
 };
 
 // A play-tagged lead staged in outreach_leads, before any invite has fired
@@ -603,7 +605,7 @@ export default function OutreachPage() {
     // and the play filter on Flow/Kontakter.
     const { data: playRows } = await supabase
       .from("outreach_plays")
-      .select("id, workspace_id, label, description, status, position, is_default")
+      .select("id, workspace_id, label, description, status, position, is_default, trigger_sequence_id")
       .or(`workspace_id.is.null,workspace_id.eq.${activeWorkspaceId}`)
       .order("position", { ascending: true });
     const resolvedPlays = resolvePlays((playRows ?? []) as Play[]);
@@ -1916,6 +1918,15 @@ function FlowTab({ rows, sequences, replies, armStats, plays, playFilter, onPlay
     [rows, playFilter],
   );
 
+  // Sequence skeleton follows the play scope: only lanes holding this play's
+  // contacts (plus the play's trigger sequence) render — not the other play's
+  // empty follow-up chains.
+  const scopedSequences = useMemo(() => {
+    if (playFilter === "all") return sequences;
+    const play = plays.find((p) => p.id === playFilter);
+    return scopeSequencesToPlay(sequences, scopedRows, play?.trigger_sequence_id);
+  }, [sequences, scopedRows, plays, playFilter]);
+
   const { counts, byNode, oldestByNode } = useMemo(() => {
     const counts = new Map<string, number>();
     const byNode = new Map<string, PipelineRow[]>();
@@ -1956,8 +1967,8 @@ function FlowTab({ rows, sequences, replies, armStats, plays, playFilter, onPlay
     return best;
   }, [armStats]);
 
-  const treeDefs = useMemo(() => buildTreeNodes(sequences, scopedRows, armStats), [sequences, scopedRows, armStats]);
-  const treeEdges = useMemo(() => buildTreeEdges(treeDefs, sequences), [treeDefs, sequences]);
+  const treeDefs = useMemo(() => buildTreeNodes(scopedSequences, scopedRows, armStats), [scopedSequences, scopedRows, armStats]);
+  const treeEdges = useMemo(() => buildTreeEdges(treeDefs, scopedSequences), [treeDefs, scopedSequences]);
 
   // Pill counts: live pipeline rows per play (unscoped, so the numbers don't
   // change as you click through plays).
@@ -2884,11 +2895,11 @@ function PlaysOverview({ plays, staged, rows, runs, sequences, onOpenFlow, onOpe
                 </div>
                 <div className="flex shrink-0 gap-2">
                   <button type="button" onClick={() => onOpenFlow(p.id)}
-                    className="focus-cream tabular rounded-full border border-[var(--ink)]/20 px-2.5 py-1 text-[10px] uppercase tracking-[0.12em] text-[var(--ink)]/70 transition hover:border-[var(--ink)]/40">
+                    className="focus-cream tabular rounded-full border border-[var(--ink)]/20 px-2.5 py-1 max-sm:min-h-11 max-sm:px-4 text-[10px] uppercase tracking-[0.12em] text-[var(--ink)]/70 transition hover:border-[var(--ink)]/40">
                     Flow →
                   </button>
                   <button type="button" onClick={() => onOpenContacts(p.id)}
-                    className="focus-cream tabular rounded-full border border-[var(--ink)]/20 px-2.5 py-1 text-[10px] uppercase tracking-[0.12em] text-[var(--ink)]/70 transition hover:border-[var(--ink)]/40">
+                    className="focus-cream tabular rounded-full border border-[var(--ink)]/20 px-2.5 py-1 max-sm:min-h-11 max-sm:px-4 text-[10px] uppercase tracking-[0.12em] text-[var(--ink)]/70 transition hover:border-[var(--ink)]/40">
                     Kontakter →
                   </button>
                 </div>

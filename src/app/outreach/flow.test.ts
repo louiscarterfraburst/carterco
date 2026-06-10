@@ -6,6 +6,7 @@ import {
   classifyNode,
   lookupSeqStep,
   nodeLabel,
+  scopeSequencesToPlay,
   OUTCOME_DEFS,
   type FlowRow,
   type NodeDef,
@@ -297,3 +298,26 @@ describe("nodeLabel ↔ buildTreeNodes sync", () => {
 // resolvePlays + playStats suites live in play-stats.test.ts (the more
 // thorough home — adds null-play, zeroed-bucket and no-downgrade cases).
 // Keep them in one place so the counting rules can't drift.
+
+describe("scopeSequencesToPlay", () => {
+  const seqs: SeqLite[] = [
+    { id: "watched_followup_v1", workspace_id: null, steps: [{ id: "nysgerrig" }] },
+    { id: "unwatched_followup_v1", workspace_id: null, steps: [{ id: "qualifier" }] },
+    { id: "hiring_signal_v1", workspace_id: null, steps: [{ id: "opfolgning_1" }] },
+  ];
+
+  it("keeps only lanes holding the scoped contacts", () => {
+    const scoped = [{ sequence_id: "watched_followup_v1" }, { sequence_id: null }];
+    expect(scopeSequencesToPlay(seqs, scoped).map((s) => s.id)).toEqual(["watched_followup_v1"]);
+  });
+
+  it("keeps the play's trigger sequence even with zero enrolled contacts", () => {
+    expect(scopeSequencesToPlay(seqs, [], "hiring_signal_v1").map((s) => s.id)).toEqual([
+      "hiring_signal_v1",
+    ]);
+  });
+
+  it("drops every lane for a play with no sequences and no trigger (hiring today)", () => {
+    expect(scopeSequencesToPlay(seqs, [{ sequence_id: null }], null)).toEqual([]);
+  });
+});
