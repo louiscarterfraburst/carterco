@@ -19,3 +19,13 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm test
+
+  python-tests:
+    # Hiring-signal pipeline scripts (stdlib only, no pip install needed)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: python3 -m unittest discover -s scripts/lead-enrichment -p 'test_*.py' -v

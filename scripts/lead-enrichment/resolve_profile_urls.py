@@ -41,6 +41,8 @@ import sys
 import urllib.error
 import urllib.request
 
+from _http_retry import TRANSIENT_STATUSES, urlopen_retry
+
 TOKEN = os.environ.get("APIFY_API_TOKEN") or sys.exit("APIFY_API_TOKEN required")
 ACTOR = "harvestapi~linkedin-profile-scraper"
 BASE = "https://api.apify.com/v2"
@@ -70,7 +72,11 @@ def run_profile_scraper(urls: list[str], mode: str) -> list[dict]:
     req = urllib.request.Request(url, data=json.dumps(body).encode(), method="POST",
                                  headers={"Content-Type": "application/json"})
     try:
-        with urllib.request.urlopen(req, timeout=300) as f:
+        # attempts=2 (not 3): run-sync may have already executed (= charged)
+        # the actor when a 5xx lands, so retries re-run it. One retry bounds
+        # the duplicate cost while still surviving a single transient.
+        with urlopen_retry(req, timeout=300, attempts=2,
+                           retry_statuses=TRANSIENT_STATUSES | {403}) as f:
             return json.loads(f.read())
     except urllib.error.HTTPError as e:
         sys.exit(f"profile-scraper failed: {e.code} {e.read().decode()[:300]}")

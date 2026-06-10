@@ -34,8 +34,14 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+from _http_retry import TRANSIENT_STATUSES, urlopen_retry
+
 TOKEN = os.environ.get("APIFY_API_TOKEN") or sys.exit("APIFY_API_TOKEN required")
 BASE = "https://api.apify.com/v2"
+
+# See apify_hiring_intake.py: a transient actor-start 403 killed the
+# 2026-06-09 cron. A 403 here never starts (= never charges) a run.
+APIFY_RETRY_STATUSES = TRANSIENT_STATUSES | {403}
 
 DECISION_MAKER_PATTERNS = [
     re.compile(r"\b(co-?founder|stifter|grundlægger|gründer)\b", re.I),
@@ -150,7 +156,7 @@ def http_json(method: str, url: str, body: dict | None = None, timeout: int = 60
     data = json.dumps(body).encode() if body is not None else None
     req = urllib.request.Request(url, data=data, method=method,
                                   headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=timeout) as f:
+    with urlopen_retry(req, timeout=timeout, retry_statuses=APIFY_RETRY_STATUSES) as f:
         return json.loads(f.read())
 
 

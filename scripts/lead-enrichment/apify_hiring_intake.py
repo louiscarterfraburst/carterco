@@ -52,8 +52,16 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+from _http_retry import TRANSIENT_STATUSES, urlopen_retry
+
 TOKEN = os.environ.get("APIFY_API_TOKEN") or sys.exit("APIFY_API_TOKEN required")
 BASE = "https://api.apify.com/v2"
+
+# Apify 403s are usually persistent (usage cap, actor access) but NOT always:
+# the 2026-06-09 cron died on an actor-start 403 that self-resolved — the same
+# call succeeded the day before and the day after. A 403 on these endpoints
+# never starts (= never charges) a run, so retrying it is free.
+APIFY_RETRY_STATUSES = TRANSIENT_STATUSES | {403}
 
 # DK sales / outbound IC roles — the seats whose job IS the thing the outbound
 # machine replaces. Danish + English. Override with --roles. We deliberately
@@ -243,7 +251,7 @@ def http_json(method: str, url: str, body: dict | None = None, timeout: int = 60
     data = json.dumps(body).encode() if body is not None else None
     req = urllib.request.Request(url, data=data, method=method,
                                   headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=timeout) as f:
+    with urlopen_retry(req, timeout=timeout, retry_statuses=APIFY_RETRY_STATUSES) as f:
         return json.loads(f.read())
 
 

@@ -44,6 +44,8 @@ import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
 
+from _http_retry import urlopen_retry
+
 WORKSPACE_ID = "1e067f9a-d453-41a7-8bc4-9fdb5644a5fa"  # CarterCo (louis@carterco.dk)
 ENCODED_RE = re.compile(r"/in/AC[woq]AA", re.I)
 SLUG_RE = re.compile(r"[^a-z0-9-]+")
@@ -117,9 +119,28 @@ def sb(method: str, path: str, body=None, prefer=None):
         headers["Prefer"] = prefer
     data = json.dumps(body).encode() if body is not None else None
     req = urllib.request.Request(f"{SB}/rest/v1/{path}", data=data, method=method, headers=headers)
-    with urllib.request.urlopen(req, timeout=60) as f:
+    with urlopen_retry(req, timeout=60) as f:
         txt = f.read().decode()
         return json.loads(txt) if txt else []
+
+
+def dedupe_first_by_url(rows: list[dict]) -> list[dict]:
+    """Keep the first occurrence per linkedin_profile_url. The same person can
+    be matched to two companies in one run (poster on one role, commercial
+    lead on another); two rows sharing the conflict key in one
+    on_conflict=linkedin_url upsert trips Postgres' "ON CONFLICT DO UPDATE
+    command cannot affect row a second time" (a PostgREST 500) and fails the
+    whole load stage. Deduping the batch itself (not just the staged rows)
+    also keeps the SendPilot load from adding the same person twice."""
+    seen: set[str] = set()
+    out = []
+    for r in rows:
+        url = r["linkedin_profile_url"].strip()
+        if url in seen:
+            continue
+        seen.add(url)
+        out.append(r)
+    return out
 
 
 def sb_all(path: str, page: int = 1000) -> list:
@@ -247,19 +268,14 @@ def main() -> int:
                 clear.append(r)
         netnew = clear
 
-    # Build + stage net-new rows. Dedupe by linkedin_url WITHIN the batch: the
-    # same person can be matched to two companies in one run (e.g. a buyer who
-    # is the poster on one role and a commercial lead on another), which would
-    # put the same conflict key twice in the on_conflict upsert and trip
-    # Postgres' "ON CONFLICT DO UPDATE cannot affect row a second time". Keep
-    # the first occurrence.
+    # Dedupe within the batch BEFORE both consumers (staging upsert + SendPilot
+    # load) — see dedupe_first_by_url for why duplicates break the upsert.
+    netnew = dedupe_first_by_url(netnew)
+
+    # Build + stage net-new rows.
     staged_rows, detail = [], []
-    seen_urls: set[str] = set()
     for r in netnew:
         url = r["linkedin_profile_url"].strip()
-        if url in seen_urls:
-            continue
-        seen_urls.add(url)
         first = (r.get("first_name") or "").strip()
         last = (r.get("last_name") or "").strip()
         brand = (r.get("brand") or "").strip()
@@ -302,7 +318,7 @@ def main() -> int:
                                          headers={"Authorization": f"Bearer {sp_key}",
                                                   "Content-Type": "application/json"})
             try:
-                res = json.loads(urllib.request.urlopen(req, timeout=60).read())
+                res = json.loads(urlopen_retry(req, timeout=60).read())
                 added_sp = res.get("leadsAdded", 0)
             except urllib.error.HTTPError as e:
                 print(f"WARN: SendPilot add failed {e.code}: {e.read().decode()[:200]}")
