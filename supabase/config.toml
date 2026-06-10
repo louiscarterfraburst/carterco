@@ -431,6 +431,13 @@ verify_jwt = false
 [functions.poll-alt-searches]
 verify_jwt = false
 
+# Cron — drains the approved-DM drip queue (one send per sender per tick).
+# Safe without the JWT gate: sends are protected by atomic claims + a
+# send-time spacing floor; OUTREACH_CRON_TOKEN (function env) optionally
+# requires X-Cron-Token on top.
+[functions.outreach-send-queue]
+verify_jwt = false
+
 # User-triggered ICP tuning loop. Generates a proposal from outcomes;
 # apply promotes a proposal to a new active icp_version.
 # verify_jwt=true (default) — both validate the bearer manually inside.
