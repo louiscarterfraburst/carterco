@@ -89,10 +89,12 @@ def clean_role(title: str) -> str:
         return "SDR"
     if "bdr" in t:
         return "BDR"
+    # Danish DM convention: job titles lowercase mid-sentence ("søger en
+    # account executive"); only true acronyms (SDR/BDR) keep caps.
     if "account executive" in t or re.search(r"\bae\b", t):
-        return "Account Executive"
+        return "account executive"
     if "business develop" in t or "forretningsudvikl" in t:
-        return "Business Developer"
+        return "business developer"
     if "salgskonsulent" in t:
         return "salgskonsulent"
     if "sælger" in t or "saelger" in t:
