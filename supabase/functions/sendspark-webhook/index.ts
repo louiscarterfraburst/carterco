@@ -53,6 +53,21 @@ const DEFAULT_TEMPLATE = [
 
 const FALLBACK_TEMPLATE = Deno.env.get("OUTREACH_MESSAGE_TEMPLATE") || DEFAULT_TEMPLATE;
 
+// Hiring-signal play DM. References the posted {role} and the angle from the
+// video (AI/automation for the sales team), NOT the video_loop "I looked at your
+// lead-flow" framing. Used for EVERY play='hiring_signal' lead, bypassing the
+// bucket-hook personalized_hook — that generator mandates the banned
+// "testede jeres lead-flow" claim (a fabricated action; live blowback). Override
+// per campaign with OUTREACH_TEMPLATE_<campaignId>.
+const HIRING_TEMPLATE_DEFAULT = [
+    "Hej {firstName}",
+    "",
+    "Så I har slået en {role} op hos {company}. Jeg synes det er interessant, hvor mange ressourcer og værktøjer man efterhånden kan give sit salgsteam med AI og automation, og det er den del jeg hjælper med at implementere. Jeg samlede det i en kort video:",
+    "{videoLink}",
+    "",
+    "Har du 30 minutter i denne uge til en snak?",
+].join("\n");
+
 // Follow-up template used when the recipient came in via a reply_referral
 // alt_contact (referred_from_pipeline_lead_id is set on the pipeline row).
 // Substitutions: {firstName} (recipient), {referrerFirstName}, {videoLink}.
@@ -176,7 +191,7 @@ async function handleRenderReady(evt: SendSparkEvent, email: string, videoLink: 
 
     const { data: pipe } = await supabase
         .from("outreach_pipeline")
-        .select("sendpilot_lead_id, contact_email, status, campaign_id, referred_from_pipeline_lead_id, sent_at, personalized_hook, invite_source, lemlist_lead_id, lemlist_campaign_id")
+        .select("sendpilot_lead_id, contact_email, status, campaign_id, referred_from_pipeline_lead_id, sent_at, personalized_hook, invite_source, lemlist_lead_id, lemlist_campaign_id, play")
         .eq("contact_email", email)
         .maybeSingle();
 
@@ -242,6 +257,10 @@ async function handleRenderReady(evt: SendSparkEvent, email: string, videoLink: 
             referrerFirstName = firstNameForGreeting(refLead?.first_name) || referrerFirstName;
         }
         template = Deno.env.get("OUTREACH_REFERRAL_TEMPLATE") || REFERRAL_TEMPLATE_DEFAULT;
+    } else if (pipe.play === "hiring_signal") {
+        // Hiring play: job-posting template, never the bucket-hook hook. A
+        // per-campaign OUTREACH_TEMPLATE_<id> still wins if set.
+        template = Deno.env.get(`OUTREACH_TEMPLATE_${(pipe.campaign_id ?? "").trim()}`) || HIRING_TEMPLATE_DEFAULT;
     } else {
         // Use the SendPilot campaign_id we stored on the pipeline row, not
         // SendSpark's own campaignId — keeps env-var keys consistent with the
@@ -267,7 +286,11 @@ async function handleRenderReady(evt: SendSparkEvent, email: string, videoLink: 
     // before the no-dash/no-™ rules, or any path) is cleaned before it's baked
     // into rendered_message, so CarterCo outbound never ships an em dash or ™.
     const hook = humanize((pipe.personalized_hook ?? "").trim());
-    const message = (!pipe.referred_from_pipeline_lead_id && hook)
+    // Hiring-signal leads NEVER use the personalized_hook: it comes from the
+    // bucket-hook generator that bakes in the banned "testede jeres lead-flow"
+    // claim. Force the job-posting template for them.
+    const useHook = !pipe.referred_from_pipeline_lead_id && hook && pipe.play !== "hiring_signal";
+    const message = useHook
         ? `Hej ${firstName}\n\n${hook}\n\n${videoLink}`
         : templated;
 
