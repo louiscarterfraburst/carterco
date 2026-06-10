@@ -198,6 +198,20 @@ async function handleRenderReady(evt: SendSparkEvent, email: string, videoLink: 
     if (pipe.status === "sent" || pipe.status === "rejected") {
         return json({ ok: true, recorded: "render_after_terminal" });
     }
+    // Queued/in-flight/parked guard: once a DM is in the drip queue
+    // (approved_queued), being sent (sending), or parked for fallback review
+    // (rendered), a late render_ready — SendSpark regeneration,
+    // recover-stuck-renders re-post — must NOT rewrite rendered_message
+    // (the operator-approved text is a binding contract) or reset status,
+    // which would silently yank the DM out of the queue.
+    if (pipe.status === "approved_queued" || pipe.status === "sending" || pipe.status === "rendered") {
+        console.warn("video_generated_dv arrived for queued/parked lead — ignoring", {
+            email,
+            new_video_link: videoLink,
+            status_was: pipe.status,
+        });
+        return json({ ok: true, recorded: `render_while_${pipe.status}_ignored` });
+    }
     // Already-sent guard: if the DM has gone out, the URL in LinkedIn is the
     // source of truth and is immutable. A late-arriving render_ready (e.g.
     // SendSpark regenerated the asset, or recover-stuck-renders re-posted the
@@ -319,7 +333,12 @@ async function handleRenderReady(evt: SendSparkEvent, email: string, videoLink: 
 
     // All initial video messages queue for human approval before they go out.
     // No auto-send branch for cold vs warm — every video gets a manual eyeball.
-    await supabase.from("outreach_pipeline").update({
+    // The error MUST be checked: a silent failure here (e.g. the function
+    // deployed before outreach.sql added background_status → PGRST204, or a
+    // trigger rejection) would strand the lead at status='rendering' forever
+    // while telling SendSpark everything is fine. A 500 makes SendSpark retry
+    // and the gap observable.
+    const { error: updErr } = await supabase.from("outreach_pipeline").update({
         video_link: videoLink,
         embed_link: evt.embedLink ?? null,
         thumbnail_url: evt.thumbnailUrl ?? null,
@@ -329,6 +348,10 @@ async function handleRenderReady(evt: SendSparkEvent, email: string, videoLink: 
         status: parkAsFallback ? "rendered" : "pending_approval",
         background_status: backgroundStatus,
     }).eq("sendpilot_lead_id", pipe.sendpilot_lead_id);
+    if (updErr) {
+        console.error("render_ready pipeline update failed", { email, error: updErr.message });
+        return json({ error: "DB error", details: updErr.message }, 500);
+    }
 
     if (parkAsFallback) {
         return json({ ok: true, recorded: "render_fallback_background_parked" });

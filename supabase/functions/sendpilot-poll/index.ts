@@ -401,16 +401,33 @@ async function processAcceptedLead(spLead: SendPilotLead): Promise<ProcessResult
   // failed status).
   const playLookup = await getPlayConfig(supabase, lead?.play as string | undefined, workspaceId);
   if (autoRenderEnabled(playLookup) && !playPaused(playLookup)) {
+    // Claim BEFORE the paid render (CAS pending_pre_render → rendering),
+    // mirroring sendpilot-webhook: if the webhook already claimed this
+    // accept (poll/webhook race on the same fresh accept), 0 rows match and
+    // we skip — never two SendSpark charges for one lead.
+    const { data: renderClaim } = await supabase
+      .from("outreach_pipeline")
+      .update({ status: "rendering" })
+      .eq("sendpilot_lead_id", leadId)
+      .eq("status", "pending_pre_render")
+      .select("sendpilot_lead_id");
+    if (!renderClaim || renderClaim.length === 0) {
+      return "rendering";
+    }
     const renderRes = await sendsparkRender(
       lead as Record<string, unknown>,
       campaignId ?? "",
       workspaceId,
     );
-    await supabase.from("outreach_pipeline").update({
-      status: renderRes.ok ? "rendering" : "failed",
-      error: renderRes.ok ? null : `auto-render: HTTP ${renderRes.status} — ${renderRes.errorBody}`,
-    }).eq("sendpilot_lead_id", leadId);
-    return renderRes.ok ? "accepted_auto_rendering" : "accepted_auto_render_failed";
+    if (!renderRes.ok) {
+      await supabase.from("outreach_pipeline").update({
+        status: "failed",
+        error: `auto-render: HTTP ${renderRes.status} — ${renderRes.errorBody}`,
+      }).eq("sendpilot_lead_id", leadId).eq("status", "rendering");
+    }
+    // Reuse the existing summary counters: "rendering" → backfilled_rendering,
+    // "sendspark_fail" → sendspark_failures.
+    return renderRes.ok ? "rendering" : "sendspark_fail";
   }
   return "pending_pre_render";
 }

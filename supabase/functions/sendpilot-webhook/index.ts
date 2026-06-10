@@ -389,15 +389,31 @@ Deno.serve(async (request) => {
     // plays should keep use_personalized_hook=false — the async Becc hook
     // can't be guaranteed ready when the render starts.
     if (autoRenderEnabled(playLookup) && !playPaused(playLookup)) {
+      // Claim BEFORE the paid external render: CAS pending_pre_render →
+      // rendering. A redelivered accept or the webhook/poll race both pass
+      // autoRenderEnabled; only the first claim fires SendSpark — the loser
+      // sees 0 rows and skips, so the same accept never double-renders
+      // (= double SendSpark charges + clashing render_ready callbacks).
+      const { data: renderClaim } = await supabase
+        .from("outreach_pipeline")
+        .update({ status: "rendering" })
+        .eq("sendpilot_lead_id", leadId)
+        .eq("status", "pending_pre_render")
+        .select("sendpilot_lead_id");
+      if (!renderClaim || renderClaim.length === 0) {
+        return json({ ok: true, recorded: "accepted_auto_render_already_claimed", cold: true, referred_from: referredFrom, variant });
+      }
       const renderRes = await sendsparkRender(
         lead as Record<string, unknown>,
         campaignId ?? "",
         workspaceId,
       );
-      await supabase.from("outreach_pipeline").update({
-        status: renderRes.ok ? "rendering" : "failed",
-        error: renderRes.ok ? null : `auto-render: HTTP ${renderRes.status} — ${renderRes.errorBody}`,
-      }).eq("sendpilot_lead_id", leadId);
+      if (!renderRes.ok) {
+        await supabase.from("outreach_pipeline").update({
+          status: "failed",
+          error: `auto-render: HTTP ${renderRes.status} — ${renderRes.errorBody}`,
+        }).eq("sendpilot_lead_id", leadId).eq("status", "rendering");
+      }
       return json({
         ok: renderRes.ok,
         recorded: renderRes.ok ? "accepted_auto_rendering" : "accepted_auto_render_failed",
