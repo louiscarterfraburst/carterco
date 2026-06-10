@@ -275,9 +275,12 @@ async function handleRenderReady(evt: SendSparkEvent, email: string, videoLink: 
         template = Deno.env.get("OUTREACH_REFERRAL_TEMPLATE") || REFERRAL_TEMPLATE_DEFAULT;
     } else if (playCfg?.dm_template) {
         // Play-specific DM from the outreach_plays registry (e.g.
-        // hiring_signal's job-posting opener). A per-campaign
-        // OUTREACH_TEMPLATE_<id> still wins if set.
-        template = Deno.env.get(`OUTREACH_TEMPLATE_${(pipe.campaign_id ?? "").trim()}`) || playCfg.dm_template;
+        // hiring_signal's job-posting opener). The REGISTRY wins over any
+        // legacy per-campaign OUTREACH_TEMPLATE_<id> secret: the registry is
+        // the operator-editable source of truth (Louis, 2026-06-10 — "vi skal
+        // bruge den nye tekst template"); the env secret survives only as the
+        // path for plays/campaigns with no registry template.
+        template = playCfg.dm_template;
     } else {
         // Use the SendPilot campaign_id we stored on the pipeline row, not
         // SendSpark's own campaignId — keeps env-var keys consistent with the
