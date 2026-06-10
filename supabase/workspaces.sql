@@ -126,6 +126,9 @@ end $$;
 drop trigger if exists on_auth_user_created on auth.users;
 
 -- Update outreach_record_invite to chase workspace_id from outreach_leads.
+-- KEEP IN SYNC with the copy in migrations/20260610_play_hardening.sql §5 —
+-- the migration is what actually ran in prod; this mirror exists for fresh-DB
+-- bootstrap. Editing one without the other drifts the mirror from prod.
 create or replace function public.outreach_record_invite(
     _lead_id text,
     _linkedin_url text,
@@ -142,6 +145,8 @@ declare
     lead_play text;
 begin
     -- play rides alongside workspace_id (see 20260606_play_on_leads.sql).
+    -- NULL passes through: the outreach_resolve_play trigger fills the
+    -- registry default (see 20260610_play_hardening.sql) — no literals here.
     select workspace_id, play into ws_id, lead_play
     from public.outreach_leads
     where contact_email = coalesce(nullif(_contact_email, ''), contact_email)
@@ -152,7 +157,7 @@ begin
         (sendpilot_lead_id, linkedin_url, contact_email, status, invited_at, workspace_id, play)
     values
         (_lead_id, _linkedin_url, coalesce(_contact_email, ''), 'invited', _invited_at,
-         ws_id, coalesce(lead_play, 'video_loop'))
+         ws_id, lead_play)
     on conflict (sendpilot_lead_id) do update set
         invited_at    = coalesce(public.outreach_pipeline.invited_at, excluded.invited_at),
         linkedin_url  = excluded.linkedin_url,
@@ -160,7 +165,8 @@ begin
                               then excluded.contact_email
                               else public.outreach_pipeline.contact_email end,
         workspace_id  = coalesce(public.outreach_pipeline.workspace_id, excluded.workspace_id),
-        play          = case when public.outreach_pipeline.play = 'video_loop'
+        play          = case when public.outreach_pipeline.play
+                                  = public.outreach_default_play(public.outreach_pipeline.workspace_id)
                               then excluded.play
                               else public.outreach_pipeline.play end;
 end $$;

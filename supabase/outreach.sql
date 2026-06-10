@@ -167,6 +167,15 @@ alter table public.outreach_pipeline
     add column if not exists last_reply_at        timestamptz,
     add column if not exists last_reply_intent    public.reply_intent;
 
+-- Did SendSpark render the prospect's own website as the video background, or
+-- silently fall back to the workspace default (carterco.dk/tresyv.dk)? Set by
+-- sendspark-webhook on render_ready: 'ok' | 'fallback' | 'unknown' (unknown =
+-- payload didn't expose background URLs; see BACKLOG.md 2026-05-14 / Victor
+-- Lisberg case). 'fallback' rows park as status='rendered' instead of joining
+-- the pending_approval queue.
+alter table public.outreach_pipeline
+    add column if not exists background_status    text;
+
 alter table public.outreach_replies enable row level security;
 drop policy if exists outreach_replies_owner_all on public.outreach_replies;
 drop policy if exists outreach_replies_workspace_all on public.outreach_replies;
