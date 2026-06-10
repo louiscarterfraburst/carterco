@@ -2875,11 +2875,11 @@ function PlaysOverview({ plays, staged, rows, runs, sequences, onOpenFlow, onOpe
                 </div>
                 <div className="flex shrink-0 gap-2">
                   <button type="button" onClick={() => onOpenFlow(p.id)}
-                    className="focus-cream tabular rounded-full border border-[var(--ink)]/20 px-2.5 py-1 text-[10px] uppercase tracking-[0.12em] text-[var(--ink)]/70 transition hover:border-[var(--ink)]/40">
+                    className="focus-cream tabular rounded-full border border-[var(--ink)]/20 px-2.5 py-1 max-sm:min-h-11 max-sm:px-4 text-[10px] uppercase tracking-[0.12em] text-[var(--ink)]/70 transition hover:border-[var(--ink)]/40">
                     Flow →
                   </button>
                   <button type="button" onClick={() => onOpenContacts(p.id)}
-                    className="focus-cream tabular rounded-full border border-[var(--ink)]/20 px-2.5 py-1 text-[10px] uppercase tracking-[0.12em] text-[var(--ink)]/70 transition hover:border-[var(--ink)]/40">
+                    className="focus-cream tabular rounded-full border border-[var(--ink)]/20 px-2.5 py-1 max-sm:min-h-11 max-sm:px-4 text-[10px] uppercase tracking-[0.12em] text-[var(--ink)]/70 transition hover:border-[var(--ink)]/40">
                     Kontakter →
                   </button>
                 </div>
