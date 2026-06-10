@@ -69,6 +69,10 @@ supabase/workspaces.sql           # multi-tenant foundation (workspaces, members
 supabase/multi_tenant_cutover.sql # final RLS rewrite — must run AFTER workspaces.sql
 ```
 
+Then apply the dated migrations in `supabase/migrations/` in filename order —
+they layer the newer features (sequences, plays, the approved-DM send queue)
+on top of the base schema.
+
 After running them all:
 
 ```sql
@@ -107,6 +111,7 @@ npx supabase functions deploy notify-pending-approval
 npx supabase functions deploy outreach-ai
 npx supabase functions deploy outreach-approve
 npx supabase functions deploy outreach-engagement-tick
+npx supabase functions deploy outreach-send-queue
 npx supabase functions deploy sendpilot-webhook
 npx supabase functions deploy sendspark-webhook
 ```
@@ -198,7 +203,7 @@ To onboard another user, just send them the URL. The same trigger gives them the
 - **Row-Level Security** is the source of truth for tenant isolation. Every workspace-scoped table has a policy `using (workspace_id in (select public.auth_workspace_ids()))`. Edge functions use the service role key and bypass RLS.
 - **Auto-create trigger** (`handle_new_user_workspace` in `supabase/workspaces.sql`) fires on `auth.users` insert and gives each new sign-up a workspace. No invite flow needed.
 - **Public lead form** uses an anon insert policy that requires `workspace_id = public.carterco_workspace_id()` so leaked anon keys can't write to other tenants.
-- **Cron jobs** are scheduled via `pg_cron` inside SQL files: `cal-poll` every 15 min, `outreach-engagement-scan` every 5 min, `dispatch_due_retries` for `/leads` follow-ups. They call edge functions via `pg_net.http_post`.
+- **Cron jobs** are scheduled via `pg_cron` inside SQL files: `cal-poll` every 15 min, `outreach-engagement-scan` every 5 min, `outreach-send-queue` every 5 min (drains the approved-DM drip queue, one DM per sender per tick), `dispatch_due_retries` for `/leads` follow-ups. They call edge functions via `pg_net.http_post`.
 - **Realtime** subscriptions on `/outreach` filter by `workspace_id` so each tenant only hears their own pipeline events.
 
 ## Repo layout

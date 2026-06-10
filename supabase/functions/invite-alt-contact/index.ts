@@ -13,7 +13,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.103.3";
 import { createHash } from "node:crypto";
 import { canonicalSenderFor } from "../_shared/workspaces.ts";
-import { playStamp } from "../_shared/plays.ts";
+import { getPlayConfig, playPaused, playStamp } from "../_shared/plays.ts";
 // firstNameForGreeting was used by the old referral connect-note default;
 // kept the import nuked when we ripped out auto-notes. If a future caller
 // passes body.messageOverride that needs templating, do the substitution
@@ -128,6 +128,15 @@ Deno.serve(async (request) => {
   // (title-only referral → SendPilot-found URL) use the referral connect note.
   // They share the same UX semantics: the prospect pointed us at someone.
   const isReplyReferral = alt.source === "reply_referral" || alt.source === "reply_referral_search";
+
+  // Pause gate: firing a brand-new connection request IS automation, so a
+  // paused play must stop it — same contract as the accept/render/sequence
+  // paths (intake stays, outbound halts). The alt inherits the referrer's
+  // play (playStamp(orig) below), so that's the play whose pause applies.
+  const altPlayLookup = await getPlayConfig(admin, (orig as { play?: string | null }).play, alt.workspace_id);
+  if (playPaused(altPlayLookup)) {
+    return json({ error: "play is paused — alt-contact invite not sent (resume the play or invite manually)" }, 409);
+  }
 
   // Plant an outreach_leads row for the alternate so the future accept
   // webhook can look them up by linkedin_url and the SendSpark render uses

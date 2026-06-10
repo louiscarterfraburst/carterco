@@ -120,6 +120,22 @@ def sb(method: str, path: str, body=None, prefer=None):
         return json.loads(txt) if txt else []
 
 
+def sb_all(path: str, page: int = 1000) -> list:
+    """GET every row, paging past PostgREST's max-rows cap (default 1000).
+    The dialogue guard reads MUST be complete — a silently truncated read
+    means the guard stops seeing some in-dialogue companies and stages cold
+    outreach into live conversations, the exact thing it exists to prevent."""
+    out: list = []
+    offset = 0
+    sep = "&" if "?" in path else "?"
+    while True:
+        batch = sb("GET", f"{path}{sep}limit={page}&offset={offset}")
+        out.extend(batch)
+        if len(batch) < page:
+            return out
+        offset += page
+
+
 def dialogue_companies() -> tuple[set[str], set[str]]:
     """Companies (normalized names, domains) with an ACTIVE dialogue in the
     CarterCo workspace. A company qualifies when any of:
@@ -133,23 +149,25 @@ def dialogue_companies() -> tuple[set[str], set[str]]:
     domains: set[str] = set()
 
     since = (datetime.now(timezone.utc) - timedelta(days=DIALOGUE_REPLY_WINDOW_DAYS)).isoformat()
-    replies = sb("GET", f"outreach_replies?direction=eq.inbound&workspace_id=eq.{WORKSPACE_ID}"
-                        f"&received_at=gte.{urllib.parse.quote(since)}&select=linkedin_url")
+    replies = sb_all(f"outreach_replies?direction=eq.inbound&workspace_id=eq.{WORKSPACE_ID}"
+                     f"&received_at=gte.{urllib.parse.quote(since)}&select=linkedin_url")
     urls = sorted({r["linkedin_url"] for r in replies if r.get("linkedin_url")})
-    if urls:
-        inlist = ",".join('"%s"' % u for u in urls)
-        for x in sb("GET", f"outreach_leads?linkedin_url=in.({urllib.parse.quote(inlist)})"
-                           "&select=company,website"):
+    # Chunk the in.(...) list: hundreds of ~70-char URLs in one querystring
+    # would blow past gateway URL-length limits and abort the whole cron run.
+    for i in range(0, len(urls), 80):
+        inlist = ",".join('"%s"' % u for u in urls[i:i + 80])
+        for x in sb_all(f"outreach_leads?linkedin_url=in.({urllib.parse.quote(inlist)})"
+                        "&select=company,website"):
             names.add(_norm(x.get("company") or ""))
             domains.add(_domain(x.get("website") or ""))
 
-    for x in sb("GET", f"leads?workspace_id=eq.{WORKSPACE_ID}&is_draft=not.is.true"
-                       "&select=company,outcome"):
+    for x in sb_all(f"leads?workspace_id=eq.{WORKSPACE_ID}&is_draft=not.is.true"
+                    "&select=company,outcome"):
         if (x.get("outcome") or "") not in ("not_interested", "unqualified"):
             names.add(_norm(x.get("company") or ""))
 
-    for x in sb("GET", f"deals?workspace_id=eq.{WORKSPACE_ID}&stage=neq.lost"
-                       "&select=company_name,company_domain"):
+    for x in sb_all(f"deals?workspace_id=eq.{WORKSPACE_ID}&stage=neq.lost"
+                    "&select=company_name,company_domain"):
         names.add(_norm(x.get("company_name") or ""))
         domains.add(_domain(x.get("company_domain") or ""))
 
@@ -200,9 +218,24 @@ def main() -> int:
 
     # Dialogue guard (company level): hold net-new buyers whose company has an
     # active conversation going — never open a second cold thread into it.
+    # FAILS CLOSED: if the guard's reads error OR come back implausibly empty
+    # (carterco always has live leads — an empty set means RLS/permissions/
+    # schema drift silently broke a read), abort the run instead of staging.
+    # A guard that says "nothing in dialogue" on infrastructure failure is
+    # worse than no guard, because the run record would look green.
     held = []
     if netnew:
-        dlg_names, dlg_domains = dialogue_companies()
+        try:
+            dlg_names, dlg_domains = dialogue_companies()
+        except Exception as e:
+            print(f"FATAL: dialogue guard could not read its sources ({e}) — "
+                  f"aborting before staging anything", file=sys.stderr)
+            return 1
+        if not dlg_names and not dlg_domains:
+            print("FATAL: dialogue guard returned ZERO companies — implausible "
+                  "(live /leads rows always exist). A read is silently broken; "
+                  "aborting before staging anything", file=sys.stderr)
+            return 1
         clear = []
         for r in netnew:
             co, dom = _norm(r.get("brand", "")), _domain(r.get("domain", ""))

@@ -69,3 +69,11 @@ clients/bikenor/.env.*.local
 
 # npm lock — repo standardizes on pnpm (Vercel builds from pnpm-lock.yaml)
 package-lock.json
+
+# customoffice play — lead PII and client-confidential material stays out
+# (repo is public; only the .py scripts are source)
+scripts/customoffice/data/
+scripts/customoffice/*.csv
+scripts/customoffice/*.json
+scripts/customoffice/*.log
+scripts/customoffice/PITCH_NOTE.md

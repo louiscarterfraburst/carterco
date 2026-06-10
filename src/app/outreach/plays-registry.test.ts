@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  autoRenderEnabled,
   getDefaultPlayId,
   getPlayConfig,
   hookAllowed,
   playPaused,
+  playPausedLive,
   playStamp,
   type PlayConfig,
   type PlayLookup,
@@ -41,6 +43,7 @@ function mockClient(responses: Array<{ data?: PlayConfig[]; error?: { message: s
       calls++;
       const chain = {
         select: () => chain,
+        eq: () => chain,
         or: () => chain,
         then: (resolve: (v: { data: PlayConfig[] | null; error: { message: string } | null }) => void) =>
           resolve({ data: response.data ?? null, error: response.error ?? null }),
@@ -151,6 +154,21 @@ describe("hookAllowed — fails CLOSED", () => {
   });
 });
 
+describe("autoRenderEnabled — fails CLOSED", () => {
+  it("a failed lookup keeps the manual pre-render gate (never burn a SendSpark render on a registry blip)", () => {
+    expect(autoRenderEnabled({ ok: false })).toBe(false);
+  });
+
+  it("no registry row keeps the manual gate — auto-render is strictly opt-in", () => {
+    expect(autoRenderEnabled({ ok: true, config: null })).toBe(false);
+  });
+
+  it("fires only when the registry row opts in", () => {
+    expect(autoRenderEnabled({ ok: true, config: config({ auto_render: true }) })).toBe(true);
+    expect(autoRenderEnabled({ ok: true, config: config({ auto_render: false }) })).toBe(false);
+  });
+});
+
 describe("playPaused — fails OPEN", () => {
   it("a failed lookup does NOT pause (a registry blip must not stall every play)", () => {
     expect(playPaused({ ok: false })).toBe(false);
@@ -160,6 +178,46 @@ describe("playPaused — fails OPEN", () => {
     expect(playPaused({ ok: true, config: config({ status: "paused" }) })).toBe(true);
     expect(playPaused({ ok: true, config: config({ status: "active" }) })).toBe(false);
     expect(playPaused({ ok: true, config: null })).toBe(false);
+  });
+});
+
+describe("playPausedLive — cache-bypassing kill switch for the drainer", () => {
+  it("sees a pause immediately: every call queries, never the TTL cache", async () => {
+    const ws = freshWs();
+    const client = mockClient([
+      { data: [config({ status: "active" })] },
+      { data: [config({ status: "paused" })] },
+    ]);
+    expect(await playPausedLive(client, "lead_flow", ws)).toBe(false);
+    // Second call must hit the DB again and see the freshly-flipped pause.
+    expect(await playPausedLive(client, "lead_flow", ws)).toBe(true);
+    expect(client.callCount()).toBe(2);
+  });
+
+  it("workspace override beats the global row", async () => {
+    const ws = freshWs();
+    const client = mockClient([
+      { data: [config({ workspace_id: null, status: "active" }), config({ workspace_id: ws, status: "paused" })] },
+    ]);
+    expect(await playPausedLive(client, "lead_flow", ws)).toBe(true);
+  });
+
+  it("fails OPEN on query error — a registry blip must not freeze the queue", async () => {
+    const client = mockClient([{ error: { message: "connection refused" } }]);
+    expect(await playPausedLive(client, "lead_flow", freshWs())).toBe(false);
+  });
+
+  it("fails open without querying for empty or malformed ids (filter-injection guard)", async () => {
+    const client = mockClient([{ data: [config({ status: "paused" })] }]);
+    expect(await playPausedLive(client, "", freshWs())).toBe(false);
+    expect(await playPausedLive(client, "evil),x.eq.(", freshWs())).toBe(false);
+    expect(await playPausedLive(client, "lead_flow", "not-a-uuid")).toBe(false);
+    expect(client.callCount()).toBe(0);
+  });
+
+  it("no registry row at all is not paused", async () => {
+    const client = mockClient([{ data: [] }]);
+    expect(await playPausedLive(client, "ghost_play", freshWs())).toBe(false);
   });
 });
 

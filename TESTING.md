@@ -23,7 +23,10 @@ CI runs `pnpm test` on every push/PR via `.github/workflows/test.yml`.
 
 - **Unit tests** — pure logic next to the code it tests, named `*.test.ts`
   (e.g. `src/app/outreach/flow.test.ts` covers `classifyNode`/`nodeLabel`/
-  `activeArms`). Write these for any branching logic.
+  `activeArms`). Write these for any branching logic. Pure modules shared by
+  edge functions are covered too — `supabase/functions/_shared/**/*.test.ts`
+  is in the vitest include (e.g. `send-queue.test.ts` pins the drip-queue
+  slot math, `business-time.test.ts` the Copenhagen business-hours window).
 - **Component tests** — `*.test.tsx` with `@testing-library/react` when a
   component has behavior worth pinning (jsdom environment is preconfigured).
 - **Integration/E2E** — none yet; the OTP-gated cockpit makes browser E2E a
