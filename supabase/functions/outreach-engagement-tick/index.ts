@@ -30,6 +30,7 @@ import {
     type Sequence,
     type SequenceBranch,
 } from "../_shared/sequences.ts";
+import { getPlayConfig, playPaused } from "../_shared/plays.ts";
 import { checkLeadReplied } from "../_shared/sendpilot-client.ts";
 import { canonicalSenderFor } from "../_shared/workspaces.ts";
 import { addBusinessHours } from "../_shared/business-time.ts";
@@ -69,6 +70,9 @@ type PipelineRow = {
     workspace_id: string | null;
     campaign_id: string | null;
     sendpilot_sender_id: string | null;
+    // Which outbound play this lead belongs to (outreach_plays registry).
+    // A paused play halts sequence enrolment + advancement for its leads.
+    play: string | null;
     sequence_id: string | null;
     sequence_step: number | null;
     sequence_parked_until: string | null;
@@ -163,6 +167,12 @@ async function scan(): Promise<{ scanned: number; fires: number }> {
     let fires = 0;
     for (const row of (data ?? []) as PipelineRow[]) {
         if (row.workspace_id && paused.has(row.workspace_id)) continue;
+        // Play-level pause (outreach_plays.status='paused'): halts sequence
+        // enrolment + advancement for that play's leads. Registry lookups are
+        // cached in plays.ts, so this is ~one query per distinct (ws, play)
+        // per minute, not per row. Fails open on lookup error — a registry
+        // blip must not stall every active play.
+        if (playPaused(await getPlayConfig(supabase, row.play, row.workspace_id))) continue;
         fires += await evaluateLead(row, seqsFor(row.workspace_id), /* bypassWait */ false);
     }
     return { scanned: data?.length ?? 0, fires };
@@ -183,6 +193,10 @@ async function tickLead(sendpilotLeadId: string): Promise<{ fires: number }> {
     const row = data as PipelineRow;
     // Honour the workspace kill switch on per-lead invokes too.
     if (row.workspace_id && pausedWorkspaceIds().has(row.workspace_id)) {
+        return { fires: 0 };
+    }
+    // Honour play-level pause (see scan loop) on per-lead invokes too.
+    if (playPaused(await getPlayConfig(supabase, row.play, row.workspace_id))) {
         return { fires: 0 };
     }
     if (TERMINAL_STATUSES.has(row.status)) return { fires: 0 };

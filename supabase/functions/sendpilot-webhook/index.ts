@@ -7,6 +7,8 @@ import { createClient } from "npm:@supabase/supabase-js@2.103.3";
 import { normalizeWebsiteUrl, firstNameForGreeting } from "../_shared/text.ts";
 import { CARTERCO_WORKSPACE_ID, ODAGROUP_WORKSPACE_ID } from "../_shared/workspaces.ts";
 import { draftFirstMessage } from "../_shared/draft-first-message.ts";
+import { autoRenderEnabled, getDefaultPlayId, getPlayConfig, hookAllowed, playPaused, playStamp } from "../_shared/plays.ts";
+import { sendsparkRender } from "../_shared/sendspark-render.ts";
 import { fireReferralTitleSearch } from "../_shared/referral-search.ts";
 import { matchTresyvClient } from "../_shared/tresyv-clients.ts";
 import {
@@ -132,6 +134,10 @@ Deno.serve(async (request) => {
       .eq("sendpilot_lead_id", leadId)
       .maybeSingle();
     const cold = existing?.status === "invited";
+    // Stamp the lead's play on every pipeline write below. Omitted (not null)
+    // when unknown so the DB trigger fills the registry default on insert and
+    // an existing tag survives on conflict.
+    const play = playStamp(lead as { play?: string | null });
 
     // Referral detection: if this LinkedIn URL was invited via either a
     // reply_referral (named referral — prospect typed the name) or a
@@ -164,6 +170,7 @@ Deno.serve(async (request) => {
         campaign_id: campaignId || null,
         sendpilot_sender_id: senderId || null,
         error: "lead not in outreach_leads CSV",
+        ...play,
       }, { onConflict: "sendpilot_lead_id" });
       return json({ ok: true, recorded: "accepted_no_lead" });
     }
@@ -182,6 +189,7 @@ Deno.serve(async (request) => {
         workspace_id: workspaceId,
         campaign_id: campaignId || null,
         sendpilot_sender_id: senderId || null,
+        ...play,
       }, { onConflict: "sendpilot_lead_id" });
       scheduleScoutPhones("pipeline", leadId);
       return json({ ok: true, recorded: "pre_connected_skipped" });
@@ -210,6 +218,7 @@ Deno.serve(async (request) => {
           campaign_id: campaignId || null,
           sendpilot_sender_id: senderId || null,
           error: "workspace_blocklist: company is Novo Nordisk (Oda customer)",
+          ...play,
         }, { onConflict: "sendpilot_lead_id" });
         return json({ ok: true, recorded: "blocked_novo_nordisk_employee" });
       }
@@ -225,6 +234,7 @@ Deno.serve(async (request) => {
         campaign_id: campaignId || null,
         sendpilot_sender_id: senderId || null,
         referred_from_pipeline_lead_id: referredFrom,
+        ...play,
       }, { onConflict: "sendpilot_lead_id" });
 
       const draft = await draftFirstMessage(supabase, leadId);
@@ -268,6 +278,7 @@ Deno.serve(async (request) => {
         campaign_id: campaignId || null,
         sendpilot_sender_id: senderId || null,
         error: "missing_website: lead.website empty — render skipped to avoid carterco.dk fallback",
+        ...play,
       }, { onConflict: "sendpilot_lead_id" });
       return json({ ok: false, error: "missing_website" });
     }
@@ -294,6 +305,7 @@ Deno.serve(async (request) => {
           decided_at: now,
           decided_by: "auto:tresyv_client_blocklist",
           error: `existing Tresyv client (${matched}) — blocked from outreach`,
+          ...play,
         }, { onConflict: "sendpilot_lead_id" });
         return json({ ok: true, recorded: "blocked_tresyv_client", matched });
       }
@@ -334,6 +346,7 @@ Deno.serve(async (request) => {
         campaign_id: campaignId || null,
         sendpilot_sender_id: senderId || null,
         referred_from_pipeline_lead_id: referredFrom,
+        ...play,
       }, { onConflict: "sendpilot_lead_id" });
       scheduleScoutPhones("pipeline", leadId);
       return json({ ok: true, recorded: "accepted_text_arm_pending_approval", variant, referred_from: referredFrom });
@@ -351,15 +364,48 @@ Deno.serve(async (request) => {
       sendpilot_sender_id: senderId || null,
       referred_from_pipeline_lead_id: referredFrom,
       first_dm_variant: variant, // null for non-Tresyv, "v3_video" for Tresyv video arm
+      ...play,
     }, { onConflict: "sendpilot_lead_id" });
 
     scheduleScoutPhones("pipeline", leadId);
     // CarterCo only: generate the Becc-bucket personalization hook now (async),
     // so it's ready before the render completes and gets baked into the DM.
-    // EXCEPT the hiring-signal play: it uses its own job-posting DM template
-    // (OUTREACH_TEMPLATE_<campaign>), so we skip the Becc hook to keep
-    // personalized_hook empty and let pickTemplate's template win.
-    if (workspaceId === CARTERCO_WORKSPACE_ID && lead?.play !== "hiring_signal") scheduleEnrichBuckets(leadId);
+    // Plays with use_personalized_hook=false in the registry (e.g.
+    // hiring_signal, which has its own dm_template) skip the Becc hook so
+    // personalized_hook stays empty and the play's template wins. Paused
+    // plays skip automation too (the row is still recorded + tagged above).
+    // hookAllowed fails CLOSED on a registry lookup error.
+    const playLookup = await getPlayConfig(supabase, lead?.play as string | undefined, workspaceId);
+    if (workspaceId === CARTERCO_WORKSPACE_ID) {
+      if (hookAllowed(playLookup) && !playPaused(playLookup)) scheduleEnrichBuckets(leadId);
+    }
+
+    // Auto-render plays (registry auto_render=true, e.g. hiring_signal) fire
+    // the SendSpark render at accept instead of waiting for the operator's
+    // pre-render release — the DM still parks in pending_approval afterwards
+    // (sendspark-webhook), so the approved-text gate is untouched. Fails
+    // closed: a registry lookup error keeps the manual gate; a render failure
+    // leaves a visible failed status, never a silent skip. NB: auto_render
+    // plays should keep use_personalized_hook=false — the async Becc hook
+    // can't be guaranteed ready when the render starts.
+    if (autoRenderEnabled(playLookup) && !playPaused(playLookup)) {
+      const renderRes = await sendsparkRender(
+        lead as Record<string, unknown>,
+        campaignId ?? "",
+        workspaceId,
+      );
+      await supabase.from("outreach_pipeline").update({
+        status: renderRes.ok ? "rendering" : "failed",
+        error: renderRes.ok ? null : `auto-render: HTTP ${renderRes.status} — ${renderRes.errorBody}`,
+      }).eq("sendpilot_lead_id", leadId);
+      return json({
+        ok: renderRes.ok,
+        recorded: renderRes.ok ? "accepted_auto_rendering" : "accepted_auto_render_failed",
+        cold: true,
+        referred_from: referredFrom,
+        variant,
+      });
+    }
     return json({ ok: true, recorded: "accepted_pending_pre_render", cold: true, referred_from: referredFrom, variant });
   }
 
@@ -644,6 +690,20 @@ async function promoteFromInbox(
   if (!wsId) return null;
   const contactEmail = await synthesizeContactEmail(wsId, linkedinUrl, slug);
   const fullName = [i.first_name, i.last_name].filter(Boolean).join(" ").trim() || null;
+  // Carry the staged play tag through promotion — but only a NON-default tag.
+  // Inbox rows always carry a play (the DB trigger defaults them), so stamping
+  // unconditionally would let a default-tagged inbox row downgrade a lead
+  // pre-staged under a real play when the upsert conflicts on linkedin_url.
+  // FAIL CLOSED when the default can't be resolved (null = error or
+  // unconfigured): skipping the stamp risks nothing — an existing tag
+  // survives the conflict and an insert gets the trigger default — while
+  // stamping blind risks exactly the downgrade this guard exists to prevent.
+  const defaultPlay = await getDefaultPlayId(supabase, wsId);
+  if (!defaultPlay) {
+    console.warn("promoteFromInbox: could not resolve default play — not stamping play on promotion", { slug });
+  }
+  const stagedPlay = (i.play ?? "").trim();
+  const promotedPlay = defaultPlay && stagedPlay && stagedPlay !== defaultPlay ? { play: stagedPlay } : {};
   const { data: promoted, error } = await supabase
     .from("outreach_leads")
     .upsert({
@@ -661,6 +721,7 @@ async function promoteFromInbox(
       slug,
       workspace_id: wsId,
       source: "lead_inbox",
+      ...promotedPlay,
     }, { onConflict: "linkedin_url" })
     .select()
     .single();

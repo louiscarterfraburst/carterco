@@ -20,6 +20,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.103.3";
 import { CARTERCO_WORKSPACE_ID } from "../_shared/workspaces.ts";
+import { getPlayConfig, hookAllowed, playPaused, playStamp } from "../_shared/plays.ts";
 import { sendsparkCredsFor } from "../_shared/sendspark-config.ts";
 import { firstNameForGreeting, normalizeCompanyName, urlOrigin } from "../_shared/text.ts";
 
@@ -173,7 +174,7 @@ async function handleInviteAccepted(evt: LemlistEvent) {
 
   const { data: leadRow } = await supabase
     .from("outreach_leads")
-    .select("contact_email, first_name, last_name, company, title, website")
+    .select("contact_email, first_name, last_name, company, title, website, play")
     .eq("workspace_id", CARTERCO_WORKSPACE_ID)
     .eq("linkedin_url", linkedinUrl)
     .maybeSingle();
@@ -203,10 +204,23 @@ async function handleInviteAccepted(evt: LemlistEvent) {
     invite_source: "lemlist",
     lemlist_lead_id: lemlistLeadId,
     lemlist_campaign_id: lemlistCampaignId,
+    ...playStamp(leadRow),
   }, { onConflict: "sendpilot_lead_id" });
 
   await pauseLemlistLead(lemlistLeadId);
-  scheduleEnrichBuckets(pipelineKey);
+
+  // Paused play: the lead is recorded + tagged above and the lemlist sequence
+  // is paused, but no automation fires (no hook, no SendSpark render). The
+  // row parks at pending_pre_render for the operator.
+  const playLookup = await getPlayConfig(supabase, leadRow.play, CARTERCO_WORKSPACE_ID);
+  if (playPaused(playLookup)) {
+    return { ok: true, recorded: "accepted_play_paused", pipelineKey };
+  }
+
+  // Plays with use_personalized_hook=false in the registry keep their own
+  // dm_template — no Becc bucket-hook for them (mirrors sendpilot-webhook).
+  // hookAllowed fails CLOSED on a registry lookup error.
+  if (hookAllowed(playLookup)) scheduleEnrichBuckets(pipelineKey);
 
   // Auto-fire SendSpark render so the rendered video is ready by the time the
   // human opens the approval card. Status flips to 'rendering' to surface the

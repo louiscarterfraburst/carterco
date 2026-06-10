@@ -51,6 +51,9 @@ const GRAPH_VERSION = Deno.env.get("META_GRAPH_VERSION") ?? "v21.0";
 const CARTERCO_PAGE_ID = "1138136299380303";
 const PAGE_WORKSPACE_MAP: Record<string, string> = parseJsonEnv("META_PAGE_WORKSPACE_MAP");
 const PAGE_TOKEN_MAP: Record<string, string> = parseJsonEnv("META_PAGE_TOKEN_MAP");
+// Optional per-page form allowlist — only these forms ingest (Soho: Mødelokaler
+// in, Kontor out). JSON: {"146975948684005":["1539910014404003"]}
+const PAGE_FORM_ALLOWLIST: Record<string, string[]> = parseJsonArrayEnv("META_PAGE_FORM_ALLOWLIST");
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL") ?? "",
@@ -109,6 +112,19 @@ Deno.serve(async (request) => {
       const leadgenId = String(v.leadgen_id ?? "");
       if (!leadgenId) {
         results.push({ leadgen_id: "", status: "skipped:missing_id" });
+        continue;
+      }
+
+      // Form scope: skip out-of-scope forms before the Graph fetch (Kontor).
+      // Fail-closed semantics for allowlisted pages: a missing form_id and an
+      // explicitly-empty allowlist array both BLOCK (an empty array means
+      // "allow nothing", not "no filter"). Pages absent from the env map have
+      // no filter at all. Skips are recorded in `results` for auditability.
+      const formId = String(v.form_id ?? "");
+      const allow = PAGE_FORM_ALLOWLIST[pageId];
+      if (allow && (!formId || !allow.includes(formId))) {
+        console.warn("meta-leadgen: form out of scope, lead skipped", { pageId, formId: formId || "none", leadgenId });
+        results.push({ leadgen_id: leadgenId, status: `skipped:form_out_of_scope:${formId || "none"}` });
         continue;
       }
 
@@ -310,6 +326,23 @@ function parseJsonEnv(name: string): Record<string, string> {
   try {
     const parsed = JSON.parse(raw);
     return parsed && typeof parsed === "object" ? parsed as Record<string, string> : {};
+  } catch {
+    console.error(`${name}: invalid JSON, ignoring`);
+    return {};
+  }
+}
+
+function parseJsonArrayEnv(name: string): Record<string, string[]> {
+  const raw = Deno.env.get(name);
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return {};
+    const out: Record<string, string[]> = {};
+    for (const [k, v] of Object.entries(parsed)) {
+      if (Array.isArray(v)) out[k] = v.map(String);
+    }
+    return out;
   } catch {
     console.error(`${name}: invalid JSON, ignoring`);
     return {};

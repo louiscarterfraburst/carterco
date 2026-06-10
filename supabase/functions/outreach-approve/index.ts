@@ -1,14 +1,18 @@
 // Approval endpoint called from the /outreach UI. Authenticated user must
 // be a member of the lead's workspace (workspace_members). Actions:
-//   approve → POST /v1/inbox/send → status='sent'
+//   approve → status='approved_queued' + scheduled_send_at (drip queue —
+//             the outreach-send-queue cron sends it; approving NEVER fires
+//             the DM directly, so batch approvals can't burst-send)
+//   unqueue → approved_queued → pending_approval (operator cancel before send)
 //   reject  → status='rejected'
 //   render  → POST /v1/dynamics/.../prospect → kicks a SendSpark render
 //             for any accepted/pre-render/failed lead.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.103.3";
-import { firstNameForGreeting, normalizeCompanyName, urlOrigin } from "../_shared/text.ts";
 import { checkLeadReplied } from "../_shared/sendpilot-client.ts";
-import { sendsparkCredsFor } from "../_shared/sendspark-config.ts";
+import { sendsparkRender } from "../_shared/sendspark-render.ts";
+import { nextSendSlot, type SlotClaim } from "../_shared/send-queue.ts";
+import { getDefaultPlayId } from "../_shared/plays.ts";
 import { canonicalSenderFor } from "../_shared/workspaces.ts";
 
 const corsHeaders = {
@@ -18,7 +22,6 @@ const corsHeaders = {
 };
 
 const SP_API_KEY = Deno.env.get("SENDPILOT_API_KEY") ?? "";
-const SS_DYNAMIC = Deno.env.get("SENDSPARK_DYNAMIC") ?? "";
 
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -53,8 +56,8 @@ Deno.serve(async (request) => {
     return json({ error: "invalid json" }, 400);
   }
   const decision = (body.decision ?? "").toLowerCase();
-  if (!["approve", "reject", "render", "reply"].includes(decision)) {
-    return json({ error: "decision must be one of: approve | reject | render | reply" }, 400);
+  if (!["approve", "reject", "render", "reply", "unqueue"].includes(decision)) {
+    return json({ error: "decision must be one of: approve | reject | render | reply | unqueue" }, 400);
   }
 
   // Reply path uses replyId (the inbound row we're responding to). Look up
@@ -126,13 +129,18 @@ Deno.serve(async (request) => {
       .eq("sendpilot_lead_id", leadId);
   }
 
-  // Auto-inherit the play tag from the enrichment row at decision time. The
-  // invite RPC (outreach_record_invite) already stamps play, but a pipeline row
-  // created/touched by the accept poll upserts without it and keeps the default
-  // 'video_loop'. Re-derive here so every approved lead is correctly tagged,
-  // applying the RPC's exact rule: only upgrade a still-default tag, never
-  // clobber a non-default one.
-  if ((pipe.play ?? "video_loop") === "video_loop") {
+  // Auto-inherit the play tag from the enrichment row at decision time.
+  // Safety net for rows written before play stamping was wired through every
+  // intake path (poll/webhook upserts used to rely on the column default).
+  // Same rule as the invite RPC: only upgrade a still-default tag — the
+  // default is registry data (outreach_plays.is_default), never a literal.
+  // getDefaultPlayId is cached and logs lookup errors; a null here means the
+  // repair is skipped this time, so make that observable.
+  const defaultPlay = await getDefaultPlayId(admin, pipe.workspace_id as string);
+  if (!defaultPlay) {
+    console.warn("outreach-approve: could not resolve default play — skipping play re-derivation", { lead: leadId });
+  }
+  if (defaultPlay && (pipe.play ?? defaultPlay) === defaultPlay) {
     const orParts = [`sendpilot_lead_id.eq.${leadId}`];
     if (pipe.contact_email) orParts.unshift(`contact_email.eq.${pipe.contact_email}`);
     const { data: leadPlayRows } = await admin
@@ -141,7 +149,7 @@ Deno.serve(async (request) => {
       .or(orParts.join(","))
       .limit(1);
     const truePlay = (leadPlayRows?.[0]?.play as string | undefined)?.trim();
-    if (truePlay && truePlay !== "video_loop") {
+    if (truePlay && truePlay !== defaultPlay) {
       await admin.from("outreach_pipeline")
         .update({ play: truePlay })
         .eq("sendpilot_lead_id", leadId);
@@ -250,15 +258,29 @@ Deno.serve(async (request) => {
     return json({ ok: true, decision: "rejected" });
   }
 
+  // Operator cancel: pull a queued DM back to the approval gate before the
+  // drainer reaches it. rendered_message and video_link stay untouched — no
+  // re-render (renders are only retried via decision=render, and the row was
+  // never sent so the no-re-render-after-send guard is unaffected).
+  if (decision === "unqueue") {
+    if (pipe.status !== "approved_queued") {
+      return json({ error: `lead is in status '${pipe.status}', not approved_queued` }, 409);
+    }
+    await admin.from("outreach_pipeline").update({
+      status: "pending_approval",
+      scheduled_send_at: null,
+      decided_at: now,
+      decided_by: email,
+    }).eq("sendpilot_lead_id", leadId);
+    return json({ ok: true, decision: "unqueued" });
+  }
+
   if (pipe.status !== "pending_approval") {
     return json({ error: `lead is in status '${pipe.status}', not pending_approval` }, 409);
   }
 
-  // Approve → POST /inbox/send.
-  // SendPilot's API requires senderId + recipientLinkedinUrl + message
-  // (NOT leadId + message — that returned HTTP 400 "Validation failed").
-  // senderId is captured from the connection.accepted webhook payload and
-  // stored on the pipeline row; recipientLinkedinUrl is the prospect's URL.
+  // Approve → enqueue. The approved text is the contract: it's frozen into
+  // rendered_message here and the drainer sends exactly that, nothing else.
   const message = (body.messageOverride && body.messageOverride.trim())
     ? body.messageOverride.trim()
     : pipe.rendered_message;
@@ -356,81 +378,41 @@ Deno.serve(async (request) => {
     }, 409);
   }
 
-  const send = await fetch("https://api.sendpilot.ai/v1/inbox/send", {
-    method: "POST",
-    headers: { "X-API-Key": SP_API_KEY, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      senderId: resolvedSenderId,
-      recipientLinkedinUrl: pipe.linkedin_url,
-      message,
-    }),
-  });
-  let respBody: unknown = null;
-  try { respBody = await send.json(); } catch { /* ignore */ }
-  const success = send.status === 200 || send.status === 201;
-
-  // SendPilot's /inbox/send returns messageId, which IS the conversation id
-  // (verified: Dennis's send messageId == his inbox conversation id). Capturing
-  // it here gives the sync a deterministic key so future thread messages are
-  // never dropped. See docs/outreach-thread-trust.md.
-  const conversationId = (respBody as { messageId?: string } | null)?.messageId ?? null;
+  // Enqueue: compute the sender's next free drip slot. Claims = every queued
+  // slot (spacing + cap) plus everything sent in the last 48h (daily cap on
+  // the slot's CPH day). The drainer (outreach-send-queue) re-runs the live
+  // reply check at SEND time, so a reply arriving while queued still aborts.
+  const since48h = new Date(Date.now() - 48 * 3600_000).toISOString();
+  const { data: claimRows, error: claimErr } = await admin
+    .from("outreach_pipeline")
+    .select("status, scheduled_send_at, sent_at")
+    .eq("sendpilot_sender_id", resolvedSenderId)
+    .or(`status.eq.approved_queued,and(status.eq.sent,sent_at.gte.${since48h})`);
+  if (claimErr) return json({ error: "db fetch queue claims", details: claimErr.message }, 500);
+  const claims: SlotClaim[] = (claimRows ?? [])
+    .map((r) => {
+      const at = r.status === "approved_queued" ? r.scheduled_send_at : r.sent_at;
+      return at ? { at: new Date(at as string) } : null;
+    })
+    .filter((c): c is SlotClaim => c !== null);
+  const slot = nextSendSlot(claims, new Date());
 
   await admin.from("outreach_pipeline").update({
-    status: success ? "sent" : "failed",
-    sent_at: success ? now : null,
+    status: "approved_queued",
+    scheduled_send_at: slot.toISOString(),
     decided_at: now,
     decided_by: email,
-    sendpilot_response: respBody,
-    sendpilot_conversation_id: success && conversationId ? conversationId : undefined,
-    error: success ? null : `inbox/send HTTP ${send.status}`,
     rendered_message: message,
+    error: null,
   }).eq("sendpilot_lead_id", leadId);
 
-  return json({ ok: success, decision: "sent", status: send.status, response: respBody });
-});
-
-// Per-campaign SendSpark dynamic override. Mirrors sendpilot-webhook and
-// sendpilot-poll so manual pre-render approval uses the correct dynamic.
-function pickDynamic(campaignId: string): string {
-  const id = (campaignId ?? "").trim();
-  if (id) {
-    const perCampaign = Deno.env.get(`SS_DYNAMIC_${id}`);
-    if (perCampaign) return perCampaign;
-  }
-  return SS_DYNAMIC;
-}
-
-async function sendsparkRender(lead: Record<string, unknown>, campaignId = "", workspaceId: string | null = null) {
-  const creds = sendsparkCredsFor(workspaceId);
-  if (creds.source === "missing") {
-    return { ok: false, status: 0, errorBody: `no SendSpark creds for workspace ${workspaceId ?? "(null)"}` };
-  }
-  const payload = {
-    processAndAuthorizeCharge: true,
-    prospect: {
-      contactName: firstNameForGreeting(lead.first_name as string) || "there",
-      contactEmail: lead.contact_email as string,
-      company: normalizeCompanyName(lead.company as string).slice(0, 80),
-      jobTitle: ((lead.title as string) ?? "").slice(0, 100),
-      backgroundUrl: urlOrigin(lead.website as string),
-    },
-  };
-  const dynamicId = pickDynamic(campaignId);
-  const url =
-    `https://api-gw.sendspark.com/v1/workspaces/${creds.workspace}/dynamics/${dynamicId}/prospect`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      "x-api-key": creds.apiKey,
-      "x-api-secret": creds.apiSecret,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
+  return json({
+    ok: true,
+    decision: "queued",
+    scheduled_send_at: slot.toISOString(),
+    queue_position: claims.filter((c) => c.at > new Date()).length + 1,
   });
-  if (res.ok) return { ok: true, status: res.status, errorBody: "" };
-  const errorBody = await res.text().catch(() => "");
-  return { ok: false, status: res.status, errorBody: errorBody.slice(0, 400) };
-}
+});
 
 function json(obj: unknown, status = 200) {
   return new Response(JSON.stringify(obj), {

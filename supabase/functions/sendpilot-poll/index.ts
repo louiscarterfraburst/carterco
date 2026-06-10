@@ -16,6 +16,8 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.103.3";
 import { normalizeWebsiteUrl, firstNameForGreeting } from "../_shared/text.ts";
+import { autoRenderEnabled, getPlayConfig, playPaused, playStamp } from "../_shared/plays.ts";
+import { sendsparkRender } from "../_shared/sendspark-render.ts";
 import { matchTresyvClient } from "../_shared/tresyv-clients.ts";
 import {
   assignFirstDmVariant,
@@ -242,6 +244,10 @@ async function processAcceptedLead(spLead: SendPilotLead): Promise<ProcessResult
   const lead = await lookupLead(leadId, linkedinUrl);
   const workspaceId = (lead?.workspace_id as string | null) ?? null;
   const now = new Date().toISOString();
+  // Stamp the lead's play on every pipeline write below. Omitted (not null)
+  // when unknown so the DB trigger fills the registry default on insert and
+  // an existing tag survives on conflict.
+  const play = playStamp(lead as { play?: string | null });
 
   const campaignId = spLead.campaignId ?? "";
   const senderId = spLead.senderId ?? "";
@@ -266,6 +272,7 @@ async function processAcceptedLead(spLead: SendPilotLead): Promise<ProcessResult
       campaign_id: campaignId || null,
       sendpilot_sender_id: senderId || null,
       error: "lead not in outreach_leads CSV (poll)",
+      ...play,
     }, { onConflict: "sendpilot_lead_id" });
     return "no_outreach_lead";
   }
@@ -282,6 +289,7 @@ async function processAcceptedLead(spLead: SendPilotLead): Promise<ProcessResult
       campaign_id: campaignId || null,
       sendpilot_sender_id: senderId || null,
       error: "missing contact_email (poll)",
+      ...play,
     }, { onConflict: "sendpilot_lead_id" });
     return "failed_no_email";
   }
@@ -305,6 +313,7 @@ async function processAcceptedLead(spLead: SendPilotLead): Promise<ProcessResult
       campaign_id: campaignId || null,
       sendpilot_sender_id: senderId || null,
       error: "missing_website: lead.website empty — render skipped to avoid carterco.dk fallback",
+      ...play,
     }, { onConflict: "sendpilot_lead_id" });
     return "missing_website";
   }
@@ -328,6 +337,7 @@ async function processAcceptedLead(spLead: SendPilotLead): Promise<ProcessResult
         decided_at: now,
         decided_by: "auto:tresyv_client_blocklist",
         error: `existing Tresyv client (${matched}) — blocked from outreach`,
+        ...play,
       }, { onConflict: "sendpilot_lead_id" });
       return "blocked_tresyv_client";
     }
@@ -363,6 +373,7 @@ async function processAcceptedLead(spLead: SendPilotLead): Promise<ProcessResult
       workspace_id: workspaceId,
       campaign_id: campaignId || null,
       sendpilot_sender_id: senderId || null,
+      ...play,
     }, { onConflict: "sendpilot_lead_id" });
     scheduleScoutPhones("pipeline", leadId);
     return "pending_approval_text_arm";
@@ -379,9 +390,28 @@ async function processAcceptedLead(spLead: SendPilotLead): Promise<ProcessResult
     campaign_id: campaignId || null,
     sendpilot_sender_id: senderId || null,
     first_dm_variant: variant, // null or "v3_video"
+    ...play,
   }, { onConflict: "sendpilot_lead_id" });
 
   scheduleScoutPhones("pipeline", leadId);
+
+  // Auto-render plays: same branch as sendpilot-webhook — the poll catches
+  // accepts the webhook missed, so both ingress paths must route identically.
+  // Fails closed (lookup error → manual gate; render failure → visible
+  // failed status).
+  const playLookup = await getPlayConfig(supabase, lead?.play as string | undefined, workspaceId);
+  if (autoRenderEnabled(playLookup) && !playPaused(playLookup)) {
+    const renderRes = await sendsparkRender(
+      lead as Record<string, unknown>,
+      campaignId ?? "",
+      workspaceId,
+    );
+    await supabase.from("outreach_pipeline").update({
+      status: renderRes.ok ? "rendering" : "failed",
+      error: renderRes.ok ? null : `auto-render: HTTP ${renderRes.status} — ${renderRes.errorBody}`,
+    }).eq("sendpilot_lead_id", leadId);
+    return renderRes.ok ? "accepted_auto_rendering" : "accepted_auto_render_failed";
+  }
   return "pending_pre_render";
 }
 
