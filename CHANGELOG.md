@@ -34,7 +34,7 @@ From this branch's review and live verification on the production project
 | Intake paths stamping play explicitly | 1 of ~16 | all | complete |
 | Hardcoded play-name branches in functions | 6 | 0 | -6 |
 | Plays addable without a deploy | no | yes | registry-driven |
-| Automated tests in the repo | 0 | 94 | +94, runs in CI |
+| Automated tests in the repo | 0 | 97 | +97, runs in CI |
 | Mistagged pipeline rows at cutover | n/a | 0 | verified live |
 | Max burst from one approval batch | unbounded | 1 DM / sender / 5 min | drip queue |
 | Double-send window (crash or overlapping cron) | open | closed | atomic claim |
@@ -88,7 +88,7 @@ and follow-up sends. Next: per-play follow-up sequences (see TODOS.md).
 - Hiring-cron dialogue guard fails CLOSED: read errors or implausibly-empty
   sources abort the run before staging, and its reads paginate past
   PostgREST's 1000-row cap so growth can't silently blind it.
-- Test infrastructure: vitest + CI workflow, 94 tests covering flow
+- Test infrastructure: vitest + CI workflow, 97 tests covering flow
   classification, play resolution/stats, registry lookup policy, queue slot
   math (Copenhagen window/cap), background classification, stage helpers and
   the label-sync invariant. TESTING.md documents conventions.
