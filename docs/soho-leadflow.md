@@ -380,12 +380,20 @@ campaigns can run **Conversion Leads**; **instant form waits on our setup**
 (ingestion = critical path); ads read access granted.
 
 - ✅ Attribution columns **applied to prod** (`meta_lead_id` etc. live on `public.leads`).
-- ✅ `meta-leadgen-webhook` rewritten: **page→workspace routing**
-  (`META_PAGE_WORKSPACE_MAP`, per-page tokens via `META_PAGE_TOKEN_MAP`;
-  unmapped pages skipped — never cross-tenant), structured attribution columns,
-  best-effort `campaign_id` Graph hop, idempotency on `meta_lead_id`.
-  **PENDING DEPLOY.** Soho still needs: their page_id + a page token with
-  `leads_retrieval` → then env map + `subscribed_apps` on their page.
+- ✅ **Ingestion path corrected.** The LIVE Meta lead path is **`meta-leadgen-relay`**
+  (Make → relay, token-auth'd) — the Graph `meta-leadgen-webhook` is **dormant**
+  (its `META_PAGE_ACCESS_TOKEN`/`META_APP_SECRET`/`META_VERIFY_TOKEN` were never
+  set). So the relay (not the webhook) got the multi-tenant upgrade: **page→workspace
+  routing** (`META_PAGE_WORKSPACE_MAP`; no page_id → CarterCo default, so the
+  existing CarterCo scenario is untouched; unmapped page → skipped, never
+  cross-tenant), structured attribution columns, idempotency on `meta_lead_id`.
+  **Deployed (v14).** Soho page→workspace secret set (`146975948684005` → Soho ws).
+  - Soho's remaining: **one Make scenario** — "Watch Leads" on page
+    `146975948684005` → POST to the relay (include `page_id` in the body).
+    **No page token / app subscription needed** (Make handles FB auth). The
+    `meta-leadgen-webhook` rewrite stays in the repo as an alt path but is unused.
+  - Page `146975948684005` = Soho's **Page** (the old spec mislabeled it as the
+    ad account `asset_id`; the real ad account is `1902358339977331`).
 - ✅ `nexudus-webhook` now fires **CAPI `booked`** (CRM model, hashed em +
   `meta_lead_id`, event_id `nexudus:<bookingId>:booked`) after the outcome
   write; never fails the booking on CAPI error. **PENDING DEPLOY** + the

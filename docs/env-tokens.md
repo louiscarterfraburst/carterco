@@ -24,6 +24,8 @@ All tokens live in `.env.local`. Edge Functions read the same names from the Sup
 | `PROSPEO_API_KEY` | Email + phone enrichment by name+company; account balance check | `https://api.prospeo.io` (`/search-person`, `/account-information`) | `scripts/lead-enrichment/prospeo_enrich_brands.py`, `scout-phones`, `signal-scout-phones` |
 | `BRAVE_SEARCH_API_KEY` | Web search results (used for company/brand discovery) | `https://api.search.brave.com/res/v1/web/search` | enrichment scripts, `signal-search-people` |
 | `JINA_API_KEY` | Page-to-markdown reader (`r.jina.ai`) and search (`s.jina.ai`). Authenticated tier ~200+ RPM vs ~5 anon. | `https://r.jina.ai/`, `https://s.jina.ai/` | enrichment scripts, `track-job-postings` |
+| `META_CAPI_ACCESS_TOKEN_SOHO` + `META_CAPI_DATASET_ID_SOHO` | **Soho** Conversions API — fire booking/outcome conversion events to Soho's dataset `2094557531307172` so Conversion-Leads optimizes toward bookers. System-user token, dataset scope only (`read_ads_dataset_quality` — **no** ads/leads/pages access). | `https://graph.facebook.com/v21.0/<dataset>/events` | `nexudus-webhook`, `scripts/soho/test_capi_event.mjs` |
+| `META_LEADGEN_RELAY_TOKEN` | Shared secret authing Make → `meta-leadgen-relay` (the **live** Meta lead-ads ingestion path; `meta-leadgen-webhook` is dormant). Page→workspace routing inside the relay sends Soho's page leads to the Soho workspace. | `?token=` on the relay URL | `meta-leadgen-relay` |
 
 ## LLMs
 
