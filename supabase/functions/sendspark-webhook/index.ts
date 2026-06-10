@@ -20,6 +20,8 @@
 // outreach_events, prune the map to the actual strings.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.103.3";
+import { getPlayConfig, hookAllowed } from "../_shared/plays.ts";
+import { classifyBackground } from "../_shared/background.ts";
 import { firstNameForGreeting, humanize, normalizeCompanyName, normalizeWebsiteUrl } from "../_shared/text.ts";
 
 const corsHeaders = {
@@ -37,6 +39,10 @@ type SendSparkEvent = {
     videoLink?: string;
     embedLink?: string;
     thumbnailUrl?: string;
+    // Background URLs — field names unconfirmed against a real payload (see
+    // header caveat). classifyBackground treats absence as 'unknown'.
+    backgroundUrl?: string;
+    originalBackgroundUrl?: string;
 };
 
 const supabase = createClient(
@@ -53,20 +59,9 @@ const DEFAULT_TEMPLATE = [
 
 const FALLBACK_TEMPLATE = Deno.env.get("OUTREACH_MESSAGE_TEMPLATE") || DEFAULT_TEMPLATE;
 
-// Hiring-signal play DM. References the posted {role} and the angle from the
-// video (AI/automation for the sales team), NOT the video_loop "I looked at your
-// lead-flow" framing. Used for EVERY play='hiring_signal' lead, bypassing the
-// bucket-hook personalized_hook — that generator mandates the banned
-// "testede jeres lead-flow" claim (a fabricated action; live blowback). Override
-// per campaign with OUTREACH_TEMPLATE_<campaignId>.
-const HIRING_TEMPLATE_DEFAULT = [
-    "Hej {firstName}",
-    "",
-    "Så I har slået en {role} op hos {company}. Jeg synes det er interessant, hvor mange ressourcer og værktøjer man efterhånden kan give sit salgsteam med AI og automation, og det er den del jeg hjælper med at implementere. Jeg samlede det i en kort video:",
-    "{videoLink}",
-    "",
-    "Har du 30 minutter i denne uge til en snak?",
-].join("\n");
+// Play-specific DM templates (e.g. hiring_signal's job-posting opener) live in
+// outreach_plays.dm_template — see getPlayConfig. Only the referral and
+// workspace-default templates remain code/env-level.
 
 // Follow-up template used when the recipient came in via a reply_referral
 // alt_contact (referred_from_pipeline_lead_id is set on the pipeline row).
@@ -191,7 +186,7 @@ async function handleRenderReady(evt: SendSparkEvent, email: string, videoLink: 
 
     const { data: pipe } = await supabase
         .from("outreach_pipeline")
-        .select("sendpilot_lead_id, contact_email, status, campaign_id, referred_from_pipeline_lead_id, sent_at, personalized_hook, invite_source, lemlist_lead_id, lemlist_campaign_id, play")
+        .select("sendpilot_lead_id, contact_email, status, campaign_id, referred_from_pipeline_lead_id, sent_at, personalized_hook, invite_source, lemlist_lead_id, lemlist_campaign_id, play, workspace_id")
         .eq("contact_email", email)
         .maybeSingle();
 
@@ -235,6 +230,13 @@ async function handleRenderReady(evt: SendSparkEvent, email: string, videoLink: 
     const website = normalizeWebsiteUrl(lead?.website);
     const role = ((lead?.role as string | null) ?? "").trim();  // hiring-signal: the posted role, for {role}
 
+    // Registry config for this lead's play: dm_template overrides the default
+    // template path; use_personalized_hook=false disables the Becc hook. A
+    // FAILED lookup (ok:false) falls back to the default template and fails
+    // the hook closed — never the other play's behavior.
+    const playLookup = await getPlayConfig(supabase, pipe.play, pipe.workspace_id);
+    const playCfg = playLookup.ok ? playLookup.config : null;
+
     // Referral path: when this lead came in via a reply_referral alt_contact,
     // swap the cold opener for a referral-aware template that thanks them for
     // connecting and presents the (freshly rendered, name-personalised) video
@@ -257,10 +259,11 @@ async function handleRenderReady(evt: SendSparkEvent, email: string, videoLink: 
             referrerFirstName = firstNameForGreeting(refLead?.first_name) || referrerFirstName;
         }
         template = Deno.env.get("OUTREACH_REFERRAL_TEMPLATE") || REFERRAL_TEMPLATE_DEFAULT;
-    } else if (pipe.play === "hiring_signal") {
-        // Hiring play: job-posting template, never the bucket-hook hook. A
-        // per-campaign OUTREACH_TEMPLATE_<id> still wins if set.
-        template = Deno.env.get(`OUTREACH_TEMPLATE_${(pipe.campaign_id ?? "").trim()}`) || HIRING_TEMPLATE_DEFAULT;
+    } else if (playCfg?.dm_template) {
+        // Play-specific DM from the outreach_plays registry (e.g.
+        // hiring_signal's job-posting opener). A per-campaign
+        // OUTREACH_TEMPLATE_<id> still wins if set.
+        template = Deno.env.get(`OUTREACH_TEMPLATE_${(pipe.campaign_id ?? "").trim()}`) || playCfg.dm_template;
     } else {
         // Use the SendPilot campaign_id we stored on the pipeline row, not
         // SendSpark's own campaignId — keeps env-var keys consistent with the
@@ -286,15 +289,33 @@ async function handleRenderReady(evt: SendSparkEvent, email: string, videoLink: 
     // before the no-dash/no-™ rules, or any path) is cleaned before it's baked
     // into rendered_message, so CarterCo outbound never ships an em dash or ™.
     const hook = humanize((pipe.personalized_hook ?? "").trim());
-    // Hiring-signal leads NEVER use the personalized_hook: it comes from the
-    // bucket-hook generator that bakes in the banned "testede jeres lead-flow"
-    // claim. Force the job-posting template for them.
-    const useHook = !pipe.referred_from_pipeline_lead_id && hook && pipe.play !== "hiring_signal";
+    // Plays with use_personalized_hook=false (registry config) NEVER use the
+    // personalized_hook — e.g. hiring_signal, whose hook generator bakes in
+    // the banned "testede jeres lead-flow" claim. Their dm_template wins.
+    // hookAllowed fails CLOSED when the registry lookup errored.
+    const useHook = !pipe.referred_from_pipeline_lead_id && hook && hookAllowed(playLookup);
     const message = useHook
         ? `Hej ${firstName}\n\n${hook}\n\n${videoLink}`
         : templated;
 
     const now = new Date().toISOString();
+
+    // Fallback-background gate: when SendSpark demonstrably rendered the
+    // workspace-default background instead of the prospect's site, park the
+    // row as 'rendered' (no queued_at) instead of queueing it for approval —
+    // an approver scanning the cockpit queue won't catch a wrong-branded
+    // video (the Victor Lisberg case). 'unknown' (payload didn't expose
+    // background URLs — the common case until field names are confirmed)
+    // queues normally.
+    const backgroundStatus = classifyBackground(evt);
+    const parkAsFallback = backgroundStatus === "fallback";
+    if (parkAsFallback) {
+        console.warn("render used fallback background — parking for manual review, NOT queueing", {
+            email,
+            requested: evt.originalBackgroundUrl,
+            rendered: evt.backgroundUrl,
+        });
+    }
 
     // All initial video messages queue for human approval before they go out.
     // No auto-send branch for cold vs warm — every video gets a manual eyeball.
@@ -304,9 +325,14 @@ async function handleRenderReady(evt: SendSparkEvent, email: string, videoLink: 
         thumbnail_url: evt.thumbnailUrl ?? null,
         rendered_message: message,
         rendered_at: now,
-        queued_at: now,
-        status: "pending_approval",
+        queued_at: parkAsFallback ? null : now,
+        status: parkAsFallback ? "rendered" : "pending_approval",
+        background_status: backgroundStatus,
     }).eq("sendpilot_lead_id", pipe.sendpilot_lead_id);
+
+    if (parkAsFallback) {
+        return json({ ok: true, recorded: "render_fallback_background_parked" });
+    }
 
     // Lemlist branch: push rendered_message + video link as custom variables
     // on the lemlist lead so the campaign's linkedinSend step uses them when

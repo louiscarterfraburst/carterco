@@ -139,7 +139,7 @@ export function buildTreeNodes(sequences: SeqLite[], rows: FlowRow[], armStats: 
   // stray "Sendt" — arms fork at the top, every arm shows its own follow-ups.
   if (arms.length) {
     const armNodes: NodeDef[] = [
-      { id: "invited", label: "Inviteret", col: 0, tone: "neutral", kind: "status", lane: (arms.length - 1) / 2 },
+      { id: "invited", label: STATUS_LABELS.invited, col: 0, tone: "neutral", kind: "status", lane: (arms.length - 1) / 2 },
     ];
     arms.forEach((a, i) => {
       const meta = ARM_META[a] ?? { label: a, sublabel: "" };
@@ -175,23 +175,24 @@ export function buildTreeNodes(sequences: SeqLite[], rows: FlowRow[], armStats: 
   }
 
   // NON-ARM MODE (CarterCo / OdaGroup): invite → accept → path → render → send.
+  // Labels come from STATUS_LABELS so nodeLabel-driven list views match.
   const nodes: NodeDef[] = [
-    { id: "invited", label: "Inviteret", col: 0, tone: "neutral", kind: "status" },
-    { id: "accepted", label: "Accepteret", col: 1, tone: "neutral", kind: "status" },
-    { id: "pending_pre_render", label: "Afventer pre-render", col: 2, tone: "neutral", kind: "status", sublabel: "kold video" },
-    { id: "pending_ai_draft", label: "AI-draft", col: 2, tone: "neutral", kind: "status", sublabel: "tekst, ingen video" },
-    { id: "pre_connected", label: "Pre-forbundet", col: 2, tone: "neutral", kind: "status", sublabel: "allerede forbundet" },
-    { id: "pending_alt_review", label: "Alt-review", col: 2, tone: "neutral", kind: "status" },
-    { id: "rendering", label: "Renderer", col: 3, tone: "neutral", kind: "status" },
-    { id: "rendered", label: "Renderet", col: 3, tone: "neutral", kind: "status" },
-    { id: "pending_approval", label: "Til godkendelse", col: 3, tone: "active", kind: "status" },
+    { id: "invited", label: STATUS_LABELS.invited, col: 0, tone: "neutral", kind: "status" },
+    { id: "accepted", label: STATUS_LABELS.accepted, col: 1, tone: "neutral", kind: "status" },
+    { id: "pending_pre_render", label: STATUS_LABELS.pending_pre_render, col: 2, tone: "neutral", kind: "status", sublabel: "kold video" },
+    { id: "pending_ai_draft", label: STATUS_LABELS.pending_ai_draft, col: 2, tone: "neutral", kind: "status", sublabel: "tekst, ingen video" },
+    { id: "pre_connected", label: STATUS_LABELS.pre_connected, col: 2, tone: "neutral", kind: "status", sublabel: "allerede forbundet" },
+    { id: "pending_alt_review", label: STATUS_LABELS.pending_alt_review, col: 2, tone: "neutral", kind: "status" },
+    { id: "rendering", label: STATUS_LABELS.rendering, col: 3, tone: "neutral", kind: "status" },
+    { id: "rendered", label: STATUS_LABELS.rendered, col: 3, tone: "neutral", kind: "status" },
+    { id: "pending_approval", label: STATUS_LABELS.pending_approval, col: 3, tone: "active", kind: "status" },
   ];
 
   // "Sendt" — the AI-personalised first DM (this branch only runs when there
   // are no A/B arms).
   nodes.push({
     id: "sent",
-    label: "Sendt",
+    label: STATUS_LABELS.sent,
     col: 4,
     tone: "active",
     kind: "status",
@@ -293,6 +294,145 @@ export function buildTreeEdges(nodes: NodeDef[], sequences: SeqLite[]): EdgeDef[
     }
   }
   return edges;
+}
+
+// Danish labels for the status tree nodes — the single source: buildTreeNodes
+// builds its spine NodeDefs from this map, and nodeLabel reads it, so list
+// views (play roster, Kontakter step column) can never drift from the tree.
+export const STATUS_LABELS: Record<string, string> = {
+  invited: "Inviteret",
+  accepted: "Accepteret",
+  pending_pre_render: "Afventer pre-render",
+  pending_ai_draft: "AI-draft",
+  pre_connected: "Pre-forbundet",
+  pending_alt_review: "Alt-review",
+  rendering: "Renderer",
+  rendered: "Renderet",
+  pending_approval: "Til godkendelse",
+  sent: "Sendt",
+};
+
+// Pipeline rows still being worked: not terminal, not finished, not replied.
+export const PLAY_TERMINAL_STATUSES = new Set(["rejected", "rejected_by_icp", "failed"]);
+
+// Structural subset of the page's Play type that resolution/stats need.
+export type PlayLite = {
+  id: string;
+  workspace_id: string | null;
+  position: number;
+};
+
+// Registry resolution, mirroring outreach_sequences: a workspace-specific row
+// overrides the global row with the same id, regardless of arrival order;
+// the resolved set sorts by position.
+export function resolvePlays<T extends PlayLite>(rows: T[]): T[] {
+  const byId = new Map<string, T>();
+  for (const p of rows) {
+    const existing = byId.get(p.id);
+    if (!existing || (existing.workspace_id === null && p.workspace_id !== null)) {
+      byId.set(p.id, p);
+    }
+  }
+  return [...byId.values()].sort((a, b) => a.position - b.position);
+}
+
+// Per-play headline numbers for the Plays tab. A replied contact counts as
+// svar but NOT aktiv (the reply ends the automated flow); terminal and
+// sequence-completed rows aren't aktive either. Rows whose play isn't in
+// playIds are dropped — callers surface those separately if needed.
+export type PlayStatRow = {
+  play: string | null;
+  status: string;
+  sent_at: string | null;
+  last_reply_at: string | null;
+  sequence_completed_at: string | null;
+};
+
+export function playStats<R extends PlayStatRow>(
+  playIds: string[],
+  rows: R[],
+): Map<string, { pipe: R[]; active: number; sent: number; replied: number }> {
+  const m = new Map<string, { pipe: R[]; active: number; sent: number; replied: number }>();
+  for (const id of playIds) m.set(id, { pipe: [], active: 0, sent: 0, replied: 0 });
+  for (const r of rows) {
+    const s = m.get(r.play ?? "");
+    if (!s) continue;
+    s.pipe.push(r);
+    if (r.sent_at) s.sent++;
+    if (r.last_reply_at) s.replied++;
+    else if (!PLAY_TERMINAL_STATUSES.has(r.status) && !r.sequence_completed_at) s.active++;
+  }
+  return m;
+}
+
+// Sequences relevant to one play's scoped view: lanes holding the play's
+// contacts, plus the play's own trigger sequence (so its skeleton shows even
+// at 0 leads). Without this, a play-filtered tree renders the OTHER play's
+// follow-up lanes as empty skeleton — exactly the "which steps belong to this
+// flow?" confusion the play filter exists to remove.
+export function scopeSequencesToPlay(
+  sequences: SeqLite[],
+  scopedRows: Pick<FlowRow, "sequence_id">[],
+  triggerSequenceId?: string | null,
+): SeqLite[] {
+  const used = new Set(scopedRows.map((r) => r.sequence_id).filter(Boolean));
+  return sequences.filter((s) => used.has(s.id) || s.id === triggerSequenceId);
+}
+
+// Human label for any classifyNode() id — status node, arm, sequence step or
+// outcome. Lets list views (play roster, Kontakter step column) name a
+// contact's current position with the exact wording the Flow tree uses.
+export function nodeLabel(id: string, sequences: SeqLite[]): string {
+  const seqStep = lookupSeqStep(id, sequences);
+  if (seqStep) return seqStep.step.id || `trin ${seqStep.index}`;
+  if (id.startsWith("seq:")) return `trin ${id.slice(id.lastIndexOf(":") + 1)}`;
+  if (id.startsWith("arm:")) return ARM_META[id.slice(4)]?.label ?? id.slice(4);
+  const outcome = OUTCOME_DEFS.find((o) => o.id === id);
+  if (outcome) return outcome.label;
+  return STATUS_LABELS[id] ?? id;
+}
+
+// Relative compact age for flow cards and roster rows ("45 min", "3 t", "6 d").
+export function flowTimeAgo(iso: string | null): string {
+  if (!iso) return "";
+  const ms = Date.now() - new Date(iso).getTime();
+  const min = Math.round(ms / 60000);
+  if (min < 60) return `${Math.max(0, min)} min`;
+  const hrs = Math.round(min / 60);
+  if (hrs < 24) return `${hrs} t`;
+  return `${Math.round(hrs / 24)} d`;
+}
+
+// LinkedIn URLs arrive with trailing slashes, query params and mixed case —
+// normalize before using as a map key so staged leads match pipeline rows.
+// Query strip runs BEFORE slash strip so ".../mette-hansen/?utm=x" and
+// ".../mette-hansen" collide.
+export function normLinkedinUrl(u: string | null): string {
+  return (u ?? "").split("?")[0].replace(/\/+$/, "").toLowerCase();
+}
+
+// Structural subset of a pipeline row that stage derivation needs.
+export type StageMarks = {
+  last_reply_at: string | null;
+  sent_at: string | null;
+  accepted_at: string | null;
+  invited_at: string | null;
+};
+
+// Per-lead stage, derived by matching the staged lead to its pipeline row
+// (if invited yet) via a prebuilt normalized-URL map — O(1) per lead instead
+// of scanning the pipeline per row. Drives the row status pill.
+export function stagedLeadStage<R extends StageMarks>(
+  l: { linkedin_url: string | null },
+  pipeByUrl: Map<string, R>,
+): string {
+  const r = pipeByUrl.get(normLinkedinUrl(l.linkedin_url));
+  if (!r) return "Klargjort";
+  if (r.last_reply_at) return "Svar";
+  if (r.sent_at) return "Video";
+  if (r.accepted_at) return "Accepteret";
+  if (r.invited_at) return "Inviteret";
+  return "Klargjort";
 }
 
 // Resolve a seq node id back to its sequence + step for the message template.

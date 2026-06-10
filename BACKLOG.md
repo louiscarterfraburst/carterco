@@ -36,7 +36,7 @@ Bruger `{company}` (normalizeCompanyName) i stedet for `{website}` (normalizeWeb
 
 **Action:** Opdater `OUTREACH_MESSAGE_TEMPLATE` i Tresyv's Supabase secrets, eller skift default i `sendspark-webhook/index.ts`. Send 50-100 næste Tresyv-leads med ny template. Sammenlign reply rate efter 1-2 uger.
 
-**Status:** Open
+**Status:** Closed (2026-06-10, per Louis) — fixet via Tresyv's `OUTREACH_MESSAGE_TEMPLATE` Supabase-secret. NB: kode-defaulten i `sendspark-webhook/index.ts` (DEFAULT_TEMPLATE) bruger stadig `{website}` — rammer kun workspaces uden env-override. Mål reply rate efter 1-2 uger for at bekræfte hypotesen.
 
 ---
 
@@ -48,7 +48,7 @@ Bruger `{company}` (normalizeCompanyName) i stedet for `{website}` (normalizeWeb
 
 **Action:** Tilføj `background_status` kolonne på outreach_pipeline. Når sendspark-webhook modtager render_ready, sammenlign `evt.originalBackgroundUrl` vs `evt.backgroundUrl` (hvis SendSpark eksponerer det) eller poll SendSpark's prospect API. Hvis fallback brugt → flag som `pending_manual_review` i stedet for `pending_approval`.
 
-**Status:** Open
+**Status:** Implementeret 2026-06-10, afventer deploy. `background_status`-kolonne i `outreach.sql`, host-niveau sammenligning i `_shared/background.ts` (+ vitest), gate i `sendspark-webhook`: 'fallback' parkeres som status='rendered' uden queued_at (når aldrig pending_approval-køen). NB: SendSpark's feltnavne for background-URLs er stadig ubekræftede — indtil et rigtigt payload bekræfter dem, klassificeres alt som 'unknown' og flowet er uændret. Tjek et render_ready-payload i outreach_events efter deploy og juster feltnavnene.
 
 ---
 
@@ -63,7 +63,7 @@ Bruger `{company}` (normalizeCompanyName) i stedet for `{website}` (normalizeWeb
 - `company` > 60 chars → flag (men IKKE auto-reject; ICARS-typer er ægte)
 - Drop CSV-rækker der hits flag, eller mark `needs_review=true` så de ikke ryger ind i sendpilot-flowet
 
-**Status:** Open
+**Status:** Closed (2026-06-10). `finalize.py` har nu `SUSPICIOUS_COMPANY` (substring: volunteer/frivillig/freelance/self-employed/selvstændig) + >60-chars længde-flag på company-feltet. Flaggede rækker ryger i `--review-out` (manual review, ikke auto-drop). Verificeret mod Charlotte-casen: hendes række routes til review, rene rækker beholdes. NB: gælder CSV-pipelinen (finalize.py) — den automatiske hiring-pipeline har egne title-filtre i intake og kører ikke finalize.
 
 ---
 

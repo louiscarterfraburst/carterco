@@ -13,6 +13,9 @@ Reads `--in` (typically data/master_v2.csv after firstName cleanup), then:
   - Clears polluted websites that point to linkedin.com (sets miss_reason)
   - Exports suspicious-title rows (students/retired/interns/etc.) to a
     separate CSV for manual review
+  - Exports suspicious-company rows (volunteer/freelance prose in the company
+    field, or >60-char company strings) to the same review CSV — the
+    Charlotte Andersen case
   - Prints 10 random sample rows for spot-check
 
 Usage:
@@ -34,6 +37,19 @@ GENERIC_COMPANY = {
     "self employed", "self-employed", "selvst\u00e6ndig", "freelance",
     "freelancer", "none", "n/a", "--", "retired", "pensioneret",
 }
+# Multi-current-role scraper dumps land in the company FIELD as prose
+# ("Volunteer Work for Save the Children\u2026 Freelance for Stark Group" \u2014 the
+# Charlotte Andersen case, an actual CMO). GENERIC_COMPANY above is exact-match
+# and misses these; this one is substring-level. Flagged rows go to
+# --review-out, not auto-dropped: the person is often real, the company string
+# is just junk.
+SUSPICIOUS_COMPANY = re.compile(
+    r"\b(volunteer(ing)?|frivillig|freelance|freelancer|self.?employed|selvst.?ndig)\b",
+    re.IGNORECASE,
+)
+# Real company names fit in 60 chars; longer usually means multi-role prose.
+# Review, not reject \u2014 ICARS-style org names are legitimately long.
+COMPANY_MAX_LEN = 60
 JUNK_WEBSITE_HOSTS = (
     "hotmail.com", "hotmail-outlook", "gmail.com", "outlook.com",
     "yahoo.com", "mailto:",
@@ -144,6 +160,16 @@ def main():
     suspicious_urls = {r["linkedinUrl"] for r in suspicious}
     final = [r for r in final if r["linkedinUrl"] not in suspicious_urls]
 
+    flagged_company = [
+        r for r in final
+        if SUSPICIOUS_COMPANY.search(r.get("company", ""))
+        or len(r.get("company", "").strip()) > COMPANY_MAX_LEN
+    ]
+    counters["suspicious_company_flagged"] = len(flagged_company)
+    flagged_urls = {r["linkedinUrl"] for r in flagged_company}
+    final = [r for r in final if r["linkedinUrl"] not in flagged_urls]
+    suspicious += flagged_company
+
     with open(args.out_csv, "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=fieldnames)
         w.writeheader()
@@ -163,7 +189,7 @@ def main():
     print(f"  with website: {with_web} ({100*with_web/len(final):.1f}%)")
     print(f"Written: {args.out_csv}")
     if suspicious:
-        print(f"Suspicious-title rows for manual review: {args.review_out} ({len(suspicious)})")
+        print(f"Suspicious title/company rows for manual review: {args.review_out} ({len(suspicious)})")
 
     print("\n--- 10 random sample rows for eyeball check ---")
     rng = random.Random(args.seed)

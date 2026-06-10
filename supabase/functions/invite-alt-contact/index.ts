@@ -13,6 +13,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.103.3";
 import { createHash } from "node:crypto";
 import { canonicalSenderFor } from "../_shared/workspaces.ts";
+import { playStamp } from "../_shared/plays.ts";
 // firstNameForGreeting was used by the old referral connect-note default;
 // kept the import nuked when we ripped out auto-notes. If a future caller
 // passes body.messageOverride that needs templating, do the substitution
@@ -76,7 +77,7 @@ Deno.serve(async (request) => {
 
   const { data: orig, error: origErr } = await admin
     .from("outreach_pipeline")
-    .select("sendpilot_lead_id, workspace_id, contact_email, sendpilot_sender_id, campaign_id")
+    .select("sendpilot_lead_id, workspace_id, contact_email, sendpilot_sender_id, campaign_id, play")
     .eq("sendpilot_lead_id", alt.pipeline_lead_id)
     .maybeSingle();
   if (origErr) return json({ error: "db fetch orig", details: origErr.message }, 500);
@@ -147,6 +148,9 @@ Deno.serve(async (request) => {
     contact_email: altContactEmail,
     workspace_id: alt.workspace_id,
     campaign_id: orig.campaign_id ?? null,
+    // The alt belongs to the same motion as the lead who referred them —
+    // inherit the play so the accept webhook stamps it onto the pipeline.
+    ...playStamp(orig),
   }, { onConflict: "linkedin_url" });
 
   // Connect-note policy: never auto-attach a note. Bare connects out-perform
