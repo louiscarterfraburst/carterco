@@ -6,6 +6,7 @@ import {
   classifyNode,
   lookupSeqStep,
   nodeLabel,
+  scopeSequencesToPlay,
   OUTCOME_DEFS,
   playStats,
   resolvePlays,
@@ -330,5 +331,28 @@ describe("playStats", () => {
     const m = playStats(["p1"], rows);
     expect(m.get("p1")).toMatchObject({ pipe: [], active: 0 });
     expect(m.has("ghost_play")).toBe(false);
+  });
+});
+
+describe("scopeSequencesToPlay", () => {
+  const seqs: SeqLite[] = [
+    { id: "watched_followup_v1", workspace_id: null, steps: [{ id: "nysgerrig" }] },
+    { id: "unwatched_followup_v1", workspace_id: null, steps: [{ id: "qualifier" }] },
+    { id: "hiring_signal_v1", workspace_id: null, steps: [{ id: "opfolgning_1" }] },
+  ];
+
+  it("keeps only lanes holding the scoped contacts", () => {
+    const scoped = [{ sequence_id: "watched_followup_v1" }, { sequence_id: null }];
+    expect(scopeSequencesToPlay(seqs, scoped).map((s) => s.id)).toEqual(["watched_followup_v1"]);
+  });
+
+  it("keeps the play's trigger sequence even with zero enrolled contacts", () => {
+    expect(scopeSequencesToPlay(seqs, [], "hiring_signal_v1").map((s) => s.id)).toEqual([
+      "hiring_signal_v1",
+    ]);
+  });
+
+  it("drops every lane for a play with no sequences and no trigger (hiring today)", () => {
+    expect(scopeSequencesToPlay(seqs, [{ sequence_id: null }], null)).toEqual([]);
   });
 });
