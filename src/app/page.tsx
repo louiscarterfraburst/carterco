@@ -772,7 +772,7 @@ export default function Home() {
   return (
     <main className="relative flex min-h-screen flex-col bg-[#0f0d0a] text-[var(--cream)]">
       <section className="relative flex min-h-screen flex-col overflow-hidden lg:min-h-[min(100vh,860px)]">
-        <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_75%_60%,rgba(218,96,34,0.32),transparent_55%),radial-gradient(ellipse_at_15%_10%,rgba(25,70,58,0.28),transparent_50%)]" />
+        <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_50%_62%,rgba(218,96,34,0.32),transparent_55%),radial-gradient(ellipse_at_15%_10%,rgba(25,70,58,0.28),transparent_50%)]" />
         <div
           className="pointer-events-none absolute inset-0 -z-10 opacity-[0.06] mix-blend-overlay"
           style={{
@@ -817,7 +817,7 @@ export default function Home() {
         </div>
       </nav>
 
-      <div className="mx-auto flex w-full max-w-[1400px] flex-1 flex-col justify-start px-8 pt-[12vh] sm:px-12 sm:justify-center sm:pt-20">
+      <div className="mx-auto flex w-full max-w-[1400px] flex-1 flex-col items-center justify-start px-8 pt-[12vh] text-center sm:px-12 sm:justify-center sm:pt-20">
         <h1 className="font-display text-[11.2vw] leading-[0.95] tracking-[-0.05em] sm:text-[9.6vw] lg:text-[clamp(3rem,6vw,5.5rem)]">
           <span className="relative inline-block">
             <span className="absolute inset-0 -z-10 scale-125 bg-[radial-gradient(ellipse_at_center,rgba(255,107,44,0.45),transparent_65%)] blur-2xl" />
@@ -842,14 +842,14 @@ export default function Home() {
               (2026-06-11): mechanism-led promise in the visitor's own voice —
               the live export is the meeting's content, so the CTA still
               leads to a conversation per DESIGN.md. */}
-          <div className="flex flex-col gap-4">
+          <div className="flex flex-col items-center gap-4">
             <p className="max-w-md text-[14px] leading-relaxed text-[var(--cream)]/65">
               Jeg finder dig 100 leads med navn på beslutningstageren og grunden til at kontakte dem netop nu.
             </p>
             <button
               type="button"
               onClick={openScoping}
-              className="group inline-flex items-center gap-4 self-start rounded-full bg-[#ff6b2c] px-8 py-5 text-sm font-bold uppercase tracking-[0.25em] text-[#0f0d0a] shadow-[0_18px_60px_rgba(255,107,44,0.35)] transition hover:-translate-y-1 hover:bg-[#ff8244] hover:shadow-[0_24px_80px_rgba(255,107,44,0.5)]"
+              className="group inline-flex items-center gap-4 self-center rounded-full bg-[#ff6b2c] px-8 py-5 text-sm font-bold uppercase tracking-[0.25em] text-[#0f0d0a] shadow-[0_18px_60px_rgba(255,107,44,0.35)] transition hover:-translate-y-1 hover:bg-[#ff8244] hover:shadow-[0_24px_80px_rgba(255,107,44,0.5)]"
             >
               <span>Find mig mine leads</span>
               <span className="text-lg">→</span>
