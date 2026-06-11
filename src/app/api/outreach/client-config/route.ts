@@ -24,11 +24,13 @@ const WORKSPACE_OUTREACH_STYLE: Record<string, "video_render" | "ai_drafted_dm">
   "2740ba1f-d5d5-4008-bf43-b45367c73134": "video_render",  // Tresyv
   "f4777612-4615-4734-94de-4745eade3318": "video_render",  // Haugefrom
   "cdfd80d8-33bb-4b64-b778-0a2c5ab78cc6": "ai_drafted_dm", // OdaGroup
+  "c1db9fd3-2568-464f-8551-20630094b5d9": "ai_drafted_dm", // Bikenor (PUKY) — see clients/bikenor/CLAUDE.md 2026-06-11 pivot
 };
 
 // Maps workspace UUID → slug under clients/<slug>/agent-brief.md.
 const WORKSPACE_BRIEF_SLUG: Record<string, string> = {
   "cdfd80d8-33bb-4b64-b778-0a2c5ab78cc6": "odagroup",
+  "c1db9fd3-2568-464f-8551-20630094b5d9": "bikenor",
 };
 
 type VoicePlaybook = {

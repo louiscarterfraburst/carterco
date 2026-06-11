@@ -13,6 +13,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.103.3";
 import { createHash } from "node:crypto";
 import { canonicalSenderFor } from "../_shared/workspaces.ts";
+import { sendpilotKeyFor } from "../_shared/sendpilot-creds.ts";
 import { getPlayConfig, playPaused, playStamp } from "../_shared/plays.ts";
 // firstNameForGreeting was used by the old referral connect-note default;
 // kept the import nuked when we ripped out auto-notes. If a future caller
@@ -26,7 +27,6 @@ const corsHeaders = {
 };
 
 const ALLOWED = new Set(["louis@carterco.dk", "rm@tresyv.dk", "haugefrom@haugefrom.com"]);
-const SP_API_KEY = Deno.env.get("SENDPILOT_API_KEY") ?? "";
 
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -117,6 +117,16 @@ Deno.serve(async (request) => {
     });
   }
 
+  // Per-workspace SendPilot account (Bikenor → Nikolaj's own key). Refuse
+  // rather than send from the wrong account if the workspace's key is unset.
+  const spKey = sendpilotKeyFor(orig.workspace_id as string);
+  if (!spKey) {
+    return json({
+      error: "no SendPilot API key configured for workspace — cannot send invite",
+      workspace_id: orig.workspace_id,
+    }, 500);
+  }
+
   const { data: origLead } = await admin
     .from("outreach_leads")
     .select("first_name, company, website")
@@ -175,7 +185,7 @@ Deno.serve(async (request) => {
 
   const connectRes = await fetch("https://api.sendpilot.ai/v1/inbox/connect", {
     method: "POST",
-    headers: { "X-API-Key": SP_API_KEY, "Content-Type": "application/json" },
+    headers: { "X-API-Key": spKey, "Content-Type": "application/json" },
     body: JSON.stringify({
       senderId: canonicalSenderId,
       recipientLinkedinUrl: alt.linkedin_url,
