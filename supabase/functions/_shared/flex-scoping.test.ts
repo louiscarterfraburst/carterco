@@ -30,11 +30,11 @@ describe("formatFlexNote", () => {
     const note = formatFlexNote("Vi sælger engros til hoteller", ["Købte lister", "Selv på LinkedIn"]);
     expect(note).toContain("Flex-møde booket via carterco.dk");
     expect(note).toContain("ICP: Vi sælger engros til hoteller");
-    expect(note).toContain("Har provet: Købte lister, Selv på LinkedIn");
+    expect(note).toContain("Har prøvet: Købte lister, Selv på LinkedIn");
   });
 
   it("omits the tried line when empty", () => {
     const note = formatFlexNote("ICP-tekst her", []);
-    expect(note).not.toContain("Har provet");
+    expect(note).not.toContain("Har prøvet");
   });
 });

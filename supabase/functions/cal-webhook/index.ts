@@ -130,10 +130,18 @@ Deno.serve(async (request) => {
       if (scopingId && leadId) {
         const { data: scoping } = await supabase
           .from("scoping_submissions")
-          .select("id, icp, tried")
+          .select("id, icp, tried, lead_id")
           .eq("id", scopingId)
           .maybeSingle();
-        if (scoping) {
+        if (scoping && scoping.lead_id) {
+          // Already joined (reschedule / webhook retry) — appending the note
+          // again would duplicate it. Just keep the booking uid current.
+          const { error: uidErr } = await supabase
+            .from("scoping_submissions")
+            .update({ booking_uid: uid })
+            .eq("id", scopingId);
+          if (uidErr) console.warn("cal-webhook: scoping uid refresh failed", { scopingId, error: uidErr.message });
+        } else if (scoping) {
           const note = formatFlexNote(scoping.icp, scoping.tried ?? []);
           const existingNotes = existing && existing.length > 0 ? existing[0].notes : null;
           const merged = [existingNotes, note].filter(Boolean).join("\n---\n");

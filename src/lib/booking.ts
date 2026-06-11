@@ -1,7 +1,9 @@
 // Single source of truth for the public booking links (cal.com).
 // Migrated off Calendly 2026-06-02. Bookings flow back into /leads + /meetings
 // via the cal-webhook edge function.
-export const BOOKING_URL = "https://cal.com/louis-carter-3twilu/20min";
+// NB: the cal.com slug is "20-min" (hyphen). The old "20min" value 404'ed in
+// production — caught by the pre-merge review 2026-06-11.
+export const BOOKING_URL = "https://cal.com/louis-carter-3twilu/20-min";
 
 // Lead Flex booking (CEO plan 2026-06-10): 30-min event with opt-in booking
 // confirmation, so the operator reads the scoping answer before the meeting

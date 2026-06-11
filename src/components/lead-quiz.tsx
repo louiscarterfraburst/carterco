@@ -569,10 +569,12 @@ function BookStep({
         {t.bookBody}
       </p>
 
-      {/* Honeypot — visually hidden; bots fill it, humans never see it. */}
+      {/* Honeypot — visually hidden; bots fill it, humans never see it.
+          Non-semantic name attribute so browser autofill never touches it
+          (an autofilled honeypot would silently swallow a real submit). */}
       <input
         type="text"
-        name="website"
+        name="hp_field"
         value={website}
         onChange={(e) => onWebsiteChange(e.target.value)}
         tabIndex={-1}

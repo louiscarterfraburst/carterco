@@ -5,6 +5,6 @@ export const ICP_MAX = 240;
 
 export function formatScopingNote(icp: string, tried: string[]): string {
   const lines = [`ICP: ${icp}`];
-  if (tried.length) lines.push(`Har provet: ${tried.join(", ")}`);
+  if (tried.length) lines.push(`Har prøvet: ${tried.join(", ")}`);
   return lines.join("\n");
 }

@@ -17,6 +17,6 @@ export function extractScopingId(raw: string): string | null {
 
 export function formatFlexNote(icp: string, tried: string[]): string {
   const lines = ["Flex-møde booket via carterco.dk", `ICP: ${icp}`];
-  if (tried.length) lines.push(`Har provet: ${tried.join(", ")}`);
+  if (tried.length) lines.push(`Har prøvet: ${tried.join(", ")}`);
   return lines.join("\n");
 }

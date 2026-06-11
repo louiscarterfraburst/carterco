@@ -28,13 +28,14 @@ function makeFakeClient(opts: { existingLeads?: Array<{ id: string; notes: strin
           };
         },
         select() {
-          return {
-            eq: () => ({
-              ilike: () => ({
-                limit: async () => ({ data: opts.existingLeads ?? [], error: null }),
-              }),
-            }),
+          // Self-referencing chain so any .eq()/.ilike() combination works
+          // (the dedupe lookup chains is_draft + workspace_id + ilike).
+          const chain = {
+            eq: () => chain,
+            ilike: () => chain,
+            limit: async () => ({ data: opts.existingLeads ?? [], error: null }),
           };
+          return chain;
         },
         update(payload: Record<string, unknown>) {
           updates.push({ table, payload });

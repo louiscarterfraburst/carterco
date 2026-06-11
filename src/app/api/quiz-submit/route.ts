@@ -117,11 +117,15 @@ export async function POST(req: Request) {
     // the scoping row above is the durable record.
     try {
       const note = formatScopingNote(icp, tried);
+      // Workspace-scoped dedupe (leads is multi-tenant) + ilike-metachar
+      // escape so a crafted email can't pattern-match another lead.
+      const emailPattern = email.replace(/[%_]/g, "\\$&");
       const { data: existing } = await supabase
         .from("leads")
         .select("id, notes")
         .eq("is_draft", false)
-        .ilike("email", email)
+        .eq("workspace_id", CARTERCO_WORKSPACE_ID)
+        .ilike("email", emailPattern)
         .limit(1);
       if (existing && existing.length > 0) {
         const merged = [existing[0].notes, note].filter(Boolean).join("\n---\n");

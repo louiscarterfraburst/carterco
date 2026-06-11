@@ -4,6 +4,47 @@ All notable changes to carterco are documented here. Versions follow the
 4-digit `MAJOR.MINOR.PATCH.MICRO` scheme; entries lead with a release summary,
 itemized changes below.
 
+## [0.3.0.0] - 2026-06-11
+
+**The site's primary CTA stopped asking for a quiz and started promising
+buyers: "Find mine købere" leads to a scoping flow and a live-export meeting.**
+
+The Lead Flex offer (design doc 2026-06-08, CEO plan 2026-06-10) replaced the
+lead-quiz funnel at all three entry points (hero, late-page, exit-intent),
+Danish and English. Two questions survive — "hvad sælger I, og til hvem?" and
+"hvad har I prøvet?" — because they change what the operator does before the
+meeting; everything quiz-shaped was torn down (quiz-calc deleted,
+quiz-analysis a 410 stub for one release).
+
+Persist-then-book: scoping answers are saved server-side before the cal.com
+redirect (new `scoping_submissions` table), only a `scoping:<id>` token
+travels in the booking notes, and cal-webhook joins the answers onto the lead
+row (idempotent across reschedules/retries, workspace-scoped dedupe). The new
+30-min cal.com event `find-dine-kobere` runs with opt-in booking confirmation
+— the operator reads the ICP answer and approves each meeting, which keeps
+the 1:1 selection logic of the original outbound motion. A soft-capture exit
+("vil du hellere have det på skrift?") with explicit consent and a honeypot
+mirrors into /leads.
+
+A new flex section after the logo marquee shows the export's form as an
+inline system mockup — fictional category+region rows, no company names, and
+the honest-yield line ("findes der kun 40 ægte købere, får I 40 ægte").
+
+### Fixed
+
+- `BOOKING_URL` pointed at the cal.com slug `20min`; the live event is
+  `20-min`. Every contact-form booking redirect had been 404'ing in
+  production. Caught by the pre-merge adversarial review.
+- cal-webhook gained its missing `verify_jwt = false` entry in config.toml —
+  without it the next CLI functions-deploy would have flipped JWT
+  verification on and silently killed all booking webhooks.
+
+### Tests
+
+- 38 new vitest cases (135 total): booking URL builders, the scoping
+  endpoint's validation contract (both kinds, honeypot, dedupe), and the
+  webhook's token-extraction + note-formatting helpers.
+
 ## [0.2.0.0] - 2026-06-10
 
 **Every contact now belongs to exactly one play, and the cockpit finally
