@@ -2624,10 +2624,10 @@ export default function Home() {
               <span className="italic text-[var(--clay)]">And show you them live.</span>
             </h2>
             <p className="mt-6 max-w-md text-[15px] leading-[1.7] text-[#29261f]/75">
-              Tell me what you sell. Before the meeting I map your market across the business registry, maps, social media and the companies&apos; own sites. On the call I share my screen and export the list while you watch: who they are, where you reach them, and why right now.
+              Tell me what you sell. On the call I share my screen and export the list live: who, where you reach them, and why right now.
             </p>
             <p className="mt-3 max-w-md text-[13px] leading-[1.6] text-[#29261f]/55">
-              The list is yours to keep. And if your niche holds only 40 real buyers, you get 40 real ones. Not 100 thin ones.
+              If your niche holds 40 real buyers, you get 40. Not 100 thin ones.
             </p>
             <div className="mt-8">
               <button
