@@ -14,13 +14,13 @@ const COPY = {
     eyebrow: "Inden du går",
     headline: "Skal jeg finde jeres købere?",
     body: "Fortæl mig hvad I sælger. Så kortlægger jeg jeres marked og viser jer køberne live på et kort møde.",
-    cta: "Find mine købere →",
+    cta: "Find mig mine leads →",
   },
   en: {
     eyebrow: "Before you go",
     headline: "Want me to find your buyers?",
     body: "Tell me what you sell. I'll map your market and show you the buyers live on a short call.",
-    cta: "Find my buyers →",
+    cta: "Find me my leads →",
   },
 } as const;
 
