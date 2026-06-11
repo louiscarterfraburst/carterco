@@ -2660,9 +2660,9 @@ export default function Home() {
                   <span className="h-2.5 w-2.5 rounded-full bg-[#28c840]" />
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#ff6b2c]" />
+                  <span className="h-1.5 w-1.5 rounded-full bg-[#ff6b2c]" />
                   <span className="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--cream)]/60">
-                    Live eksport · deler skærm
+                    Din køberliste · de første fem
                   </span>
                 </div>
               </div>
