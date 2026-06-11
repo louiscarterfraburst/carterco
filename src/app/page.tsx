@@ -834,7 +834,7 @@ export default function Home() {
             className="max-w-xl text-lg leading-relaxed text-[var(--cream)]/70 sm:max-w-2xl sm:text-xl"
             style={{ textWrap: "balance" }}
           >
-            Jeg bygger systemer, der finder, kontakter og plejer dine kommende kunder, så du får flere aftaler i hus.
+            Jeg bygger systemer, der finder dine kommende kunder, kontakter dem og følger op, så du får flere aftaler i hus.
           </p>
 
           {/* CTA group — signature lives in the founder card per DESIGN.md
