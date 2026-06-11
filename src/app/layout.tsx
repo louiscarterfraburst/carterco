@@ -1,5 +1,11 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono, Homemade_Apple, Caveat } from "next/font/google";
+import {
+  Geist,
+  Geist_Mono,
+  Homemade_Apple,
+  Caveat,
+  Manrope,
+} from "next/font/google";
 import Script from "next/script";
 import { PwaRegistrar } from "./pwa-registrar";
 import "./globals.css";
@@ -24,6 +30,11 @@ const homemadeApple = Homemade_Apple({
 
 const caveat = Caveat({
   variable: "--font-handwritten",
+  subsets: ["latin"],
+});
+
+const manrope = Manrope({
+  variable: "--font-manrope",
   subsets: ["latin"],
 });
 
@@ -87,7 +98,7 @@ export default function RootLayout({
   return (
     <html
       lang="da"
-      className={`${geistSans.variable} ${geistMono.variable} ${homemadeApple.variable} ${caveat.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${homemadeApple.variable} ${caveat.variable} ${manrope.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
         <Script

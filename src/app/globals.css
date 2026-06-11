@@ -10,7 +10,7 @@
   --clay: #b97041;
   --forest: #19463a;
   --font-display: "Fraunces", "Canela", "Georgia", serif;
-  --font-body: "Manrope", "Avenir Next", "Helvetica Neue", sans-serif;
+  --font-body: var(--font-manrope), "Avenir Next", "Helvetica Neue", sans-serif;
 }
 
 @theme inline {
