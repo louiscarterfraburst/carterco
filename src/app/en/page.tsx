@@ -798,7 +798,7 @@ export default function Home() {
           <defs>
             <linearGradient id="radar-sweep" x1="0" y1="0" x2="0" y2="-1" gradientUnits="objectBoundingBox">
               <stop offset="0" stopColor="rgba(255,107,44,0)" />
-              <stop offset="1" stopColor="rgba(255,107,44,0.35)" />
+              <stop offset="1" stopColor="rgba(255,107,44,0.5)" />
             </linearGradient>
           </defs>
           {/* rings */}
@@ -850,7 +850,7 @@ export default function Home() {
           </circle>
           {/* sweep arm */}
           <g>
-            <animateTransform attributeName="transform" type="rotate" from="0" to="360" dur="60s" repeatCount="indefinite" />
+            <animateTransform attributeName="transform" type="rotate" from="0" to="360" dur="14s" repeatCount="indefinite" />
             <line x1="0" y1="0" x2="0" y2="-500" stroke="url(#radar-sweep)" strokeWidth="2" />
             <circle cx="0" cy="-380" r="5" fill="#ff6b2c" opacity="0.9" />
           </g>
