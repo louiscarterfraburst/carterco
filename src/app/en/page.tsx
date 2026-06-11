@@ -834,7 +834,7 @@ export default function Home() {
             className="max-w-xl text-lg leading-relaxed text-[var(--cream)]/70 sm:max-w-2xl sm:text-xl"
             style={{ textWrap: "balance" }}
           >
-            I build systems that find, contact and nurture your future customers, so you close more deals.
+            I build systems that find your future customers, contact them and follow up, so you close more deals.
           </p>
 
           {/* CTA group — signature lives in the founder card per DESIGN.md
