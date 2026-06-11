@@ -788,7 +788,7 @@ export default function Home() {
             SMIL animations so globals.css stays untouched. */}
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-0 -z-10 [background-image:radial-gradient(rgba(255,248,234,0.17)_1px,transparent_1px)] [background-size:26px_26px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_55%,transparent_28%,black_58%,transparent_92%)]"
+          className="pointer-events-none absolute inset-0 -z-10 [background-image:radial-gradient(rgba(255,248,234,0.20)_1px,transparent_1px)] [background-size:26px_26px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_55%,transparent_28%,black_58%,transparent_92%)]"
         />
         <svg
           aria-hidden
@@ -796,12 +796,12 @@ export default function Home() {
           className="pointer-events-none absolute left-1/2 top-[55%] -z-10 h-[110rem] w-[110rem] -translate-x-1/2 -translate-y-1/2"
         >
           {/* rings */}
-          <circle r="260" fill="none" stroke="rgba(255,248,234,0.10)" strokeWidth="1" />
-          <circle r="380" fill="none" stroke="rgba(255,248,234,0.08)" strokeWidth="1" />
-          <circle r="500" fill="none" stroke="rgba(255,248,234,0.06)" strokeWidth="1" />
+          <circle r="260" fill="none" stroke="rgba(255,248,234,0.15)" strokeWidth="1" />
+          <circle r="380" fill="none" stroke="rgba(255,248,234,0.12)" strokeWidth="1" />
+          <circle r="500" fill="none" stroke="rgba(255,248,234,0.10)" strokeWidth="1" />
           {/* crosshair */}
-          <line x1="-560" y1="0" x2="560" y2="0" stroke="rgba(255,248,234,0.05)" strokeWidth="1" />
-          <line x1="0" y1="-560" x2="0" y2="560" stroke="rgba(255,248,234,0.05)" strokeWidth="1" />
+          <line x1="-560" y1="0" x2="560" y2="0" stroke="rgba(255,248,234,0.07)" strokeWidth="1" />
+          <line x1="0" y1="-560" x2="0" y2="560" stroke="rgba(255,248,234,0.07)" strokeWidth="1" />
           {/* bearing ticks every 30deg on the outer ring */}
           {Array.from({ length: 12 }, (_, i) => {
             const a = (i * 30 * Math.PI) / 180;
@@ -812,14 +812,14 @@ export default function Home() {
                 y1={-Math.cos(a) * 490}
                 x2={Math.sin(a) * 510}
                 y2={-Math.cos(a) * 510}
-                stroke="rgba(255,248,234,0.12)"
+                stroke="rgba(255,248,234,0.17)"
                 strokeWidth="1.5"
               />
             );
           })}
           {/* plotted courses out to two leads (outbound contact, not missiles) */}
-          <path d="M 0 0 Q 150 30 330 210" fill="none" stroke="rgba(255,107,44,0.16)" strokeWidth="1.5" strokeDasharray="5 7" />
-          <path d="M 0 0 Q -160 -20 -310 150" fill="none" stroke="rgba(255,107,44,0.12)" strokeWidth="1.5" strokeDasharray="5 7" />
+          <path d="M 0 0 Q 150 30 330 210" fill="none" stroke="rgba(255,107,44,0.22)" strokeWidth="1.5" strokeDasharray="5 7" />
+          <path d="M 0 0 Q -160 -20 -310 150" fill="none" stroke="rgba(255,107,44,0.17)" strokeWidth="1.5" strokeDasharray="5 7" />
           {/* lead blips */}
           <circle cx="330" cy="210" r="4.5" fill="#ff6b2c">
             <animate attributeName="opacity" values="0.4;1;0.4" dur="3.4s" repeatCount="indefinite" />
@@ -849,7 +849,7 @@ export default function Home() {
             the tail trails at smaller conic angles. */}
         <div
           aria-hidden
-          className="pointer-events-none absolute left-1/2 top-[55%] -z-10 h-[91.6rem] w-[91.6rem] -translate-x-1/2 -translate-y-1/2 animate-[spin_14s_linear_infinite] rounded-full [background:conic-gradient(from_0deg,transparent_0deg,rgba(255,107,44,0.025)_18deg,rgba(255,107,44,0.07)_45deg,rgba(255,107,44,0.16)_72deg,rgba(255,138,68,0.30)_74.5deg,transparent_75deg)]"
+          className="pointer-events-none absolute left-1/2 top-[55%] -z-10 h-[91.6rem] w-[91.6rem] -translate-x-1/2 -translate-y-1/2 animate-[spin_14s_linear_infinite] rounded-full [background:conic-gradient(from_0deg,transparent_0deg,rgba(201,60,10,0.03)_20deg,rgba(255,107,44,0.09)_48deg,rgba(255,107,44,0.18)_71deg,rgba(255,184,107,0.42)_74.3deg,transparent_75deg)] [mask-image:radial-gradient(circle,transparent_24%,black_42%,black_98%,transparent_100%)]"
         />
 
         <nav className="mx-auto flex w-full max-w-[1400px] items-center justify-between px-8 pt-8 sm:px-12">
