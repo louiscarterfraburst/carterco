@@ -13,9 +13,11 @@ Workspace plan is Business Starter, which has no transcripts).
    the transcript, calendar invitees (with emails), and action items.
    Event-driven; no cron, no polling.
 3. The function matches the meeting to a lead: external invitee email ↔
-   `leads.email` first (the same key the booking webhooks write), falling
-   back to `leads.meeting_at` ±30 min. Internal meetings and unmatched
-   recordings are dropped.
+   `leads.email` first (the same key the booking webhooks write), then the
+   invitee's corporate domain (free-mail excluded, and only when exactly one
+   lead has that domain — a colleague joining instead of the booked contact
+   still lands on the right timeline), finally `leads.meeting_at` ±30 min.
+   Internal meetings and unmatched recordings are dropped.
 4. Claude summarizes the transcript (Resultat / Situation / Indvendinger /
    Næste skridt) and the note is inserted into `lead_conversation_events`
    with `channel='note'`, `source='fathom'`, `source_id=recording_id`. The

@@ -9,7 +9,10 @@
 // Lead matching, in order:
 //   1. external calendar-invitee email ↔ leads.email (ilike) — the same key
 //      cal-webhook/calendly-webhook use, so booked meetings always hit
-//   2. fallback: leads.meeting_at within ±30 min of the meeting start
+//   2. fallback: corporate domain of an external invitee ↔ leads.email
+//      domain, only when exactly one lead matches (colleague joined the
+//      call instead of / alongside the booked contact)
+//   3. fallback: leads.meeting_at within ±30 min of the meeting start
 //      (covers invitees who joined from a different address)
 // Internal-only meetings and unmatched recordings are acknowledged and
 // dropped — Fathom retries on non-2xx, so never error on "not for us".
@@ -33,6 +36,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2.103.3";
 import {
   buildTranscriptText,
+  corporateDomains,
   durationMinutes,
   externalInviteeEmails,
   type FathomInvitee,
@@ -144,7 +148,29 @@ Deno.serve(async (request) => {
     }
   }
 
-  // 2. Fallback: booked meeting time.
+  // 2. Fallback: corporate domain of an external invitee — covers the
+  //    common case where a colleague of the booked contact sits in the
+  //    call (e.g. jjk@ joins while the lead row is cad@ same domain).
+  //    Free-mail domains are excluded, and an ambiguous domain (several
+  //    leads) matches nothing: a call note on the wrong person's timeline
+  //    is worse than no note.
+  if (!lead) {
+    for (const domain of corporateDomains(emails)) {
+      const { data, error } = await supabase
+        .from("leads")
+        .select("id, workspace_id, name, company, email, meeting_at")
+        .eq("is_draft", false)
+        .ilike("email", `%@${domain}`)
+        .limit(2);
+      if (error) return json({ error: error.message }, 500);
+      if (data && data.length === 1) {
+        lead = data[0];
+        break;
+      }
+    }
+  }
+
+  // 3. Fallback: booked meeting time.
   if (!lead && startedAt) {
     const windowStart = new Date(
       Date.parse(startedAt) - MEETING_MATCH_TOLERANCE_MS,

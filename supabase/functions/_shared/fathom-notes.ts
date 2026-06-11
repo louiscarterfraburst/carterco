@@ -41,6 +41,41 @@ export function externalInviteeEmails(invitees: FathomInvitee[]): string[] {
   return out;
 }
 
+// Free-mail providers never identify a company — a domain fallback match on
+// these would glue unrelated people together, so they are excluded outright.
+export const FREE_MAIL_DOMAINS = new Set([
+  "gmail.com",
+  "googlemail.com",
+  "hotmail.com",
+  "hotmail.dk",
+  "outlook.com",
+  "outlook.dk",
+  "live.com",
+  "live.dk",
+  "yahoo.com",
+  "yahoo.dk",
+  "icloud.com",
+  "me.com",
+  "proton.me",
+  "protonmail.com",
+  "mail.com",
+]);
+
+// Corporate domains of the external invitees, lowercased, deduped, free-mail
+// excluded — used as the lead-match fallback when no invitee email matches a
+// lead directly (e.g. a colleague of the booked contact joined the call).
+export function corporateDomains(emails: string[]): string[] {
+  const out: string[] = [];
+  for (const email of emails) {
+    const at = email.lastIndexOf("@");
+    if (at < 1) continue;
+    const domain = email.slice(at + 1).trim().toLowerCase();
+    if (!domain || FREE_MAIL_DOMAINS.has(domain)) continue;
+    if (!out.includes(domain)) out.push(domain);
+  }
+  return out;
+}
+
 // Fathom returns one transcript item per spoken segment; merge consecutive
 // segments from the same speaker so the text reads as dialogue, not captions.
 export function buildTranscriptText(items: FathomTranscriptItem[]): string {

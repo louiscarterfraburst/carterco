@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildTranscriptText,
+  corporateDomains,
   durationMinutes,
   externalInviteeEmails,
   matchLeadByMeetingTime,
@@ -28,6 +29,28 @@ describe("externalInviteeEmails", () => {
       { email: "A@B.dk", is_external: true },
     ]);
     expect(emails).toEqual(["a@b.dk"]);
+  });
+});
+
+describe("corporateDomains", () => {
+  it("returns deduped corporate domains, lowercased", () => {
+    const domains = corporateDomains([
+      "jjk@fiftytwodynamics.com",
+      "cad@FiftyTwoDynamics.com",
+      "nikolaj@bikenor.dk",
+    ]);
+    expect(domains).toEqual(["fiftytwodynamics.com", "bikenor.dk"]);
+  });
+  it("excludes free-mail providers", () => {
+    const domains = corporateDomains([
+      "someone@gmail.com",
+      "other@hotmail.dk",
+      "cfo@bikenor.dk",
+    ]);
+    expect(domains).toEqual(["bikenor.dk"]);
+  });
+  it("skips malformed addresses", () => {
+    expect(corporateDomains(["not-an-email", "@nodomain", "trailing@"])).toEqual([]);
   });
 });
 
