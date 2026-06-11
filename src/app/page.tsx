@@ -772,7 +772,7 @@ export default function Home() {
   return (
     <main className="relative flex min-h-screen flex-col bg-[#0f0d0a] text-[var(--cream)]">
       <section className="relative isolate flex min-h-screen flex-col overflow-hidden lg:min-h-[min(100vh,860px)]">
-        <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_50%_62%,rgba(218,96,34,0.32),transparent_55%),radial-gradient(ellipse_at_15%_10%,rgba(25,70,58,0.28),transparent_50%)]" />
+        <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_50%_70%,rgba(218,96,34,0.22),transparent_55%),radial-gradient(ellipse_at_15%_10%,rgba(25,70,58,0.28),transparent_50%)]" />
         <div
           className="pointer-events-none absolute inset-0 -z-10 opacity-[0.09] mix-blend-overlay"
           style={{
@@ -852,6 +852,15 @@ export default function Home() {
           className="pointer-events-none absolute left-1/2 top-[55%] -z-10 h-[91.6rem] w-[91.6rem] -translate-x-1/2 -translate-y-1/2 animate-[spin_14s_linear_infinite] rounded-full [background:conic-gradient(from_0deg,transparent_0deg,rgba(201,60,10,0.03)_20deg,rgba(255,107,44,0.09)_48deg,rgba(255,107,44,0.18)_71deg,rgba(255,184,107,0.42)_74.3deg,transparent_75deg)] [mask-image:radial-gradient(circle,transparent_24%,black_42%,black_98%,transparent_100%)]"
         />
 
+        {/* Text-protection scrim — darkens the column behind the copy so
+            cream text keeps contrast; the radar stays vivid at the edges
+            where the donut mask puts it anyway. Sits above the backdrop
+            layers (-z-10) and below the content. */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 -z-[5] bg-[radial-gradient(ellipse_52%_46%_at_50%_52%,rgba(15,13,10,0.72),rgba(15,13,10,0.25)_62%,transparent_78%)]"
+        />
+
         <nav className="mx-auto flex w-full max-w-[1400px] items-center justify-between px-8 pt-8 sm:px-12">
         <div className="flex items-center gap-3">
           <span className="h-2 w-2 animate-pulse rounded-full bg-[#ff6b2c] shadow-[0_0_12px_rgba(255,107,44,0.9)]" />
@@ -902,7 +911,7 @@ export default function Home() {
 
         <div className="mt-10 flex flex-col gap-14 pb-10 sm:mt-12 lg:mt-14">
           <p
-            className="max-w-xl text-lg leading-relaxed text-[var(--cream)]/70 sm:max-w-2xl sm:text-xl"
+            className="max-w-xl text-lg leading-relaxed text-[var(--cream)]/85 sm:max-w-2xl sm:text-xl"
             style={{ textWrap: "balance" }}
           >
             Jeg bygger systemer, der finder dine kommende kunder, kontakter dem og følger op, så du får flere aftaler i hus.
@@ -914,7 +923,7 @@ export default function Home() {
               the live export is the meeting's content, so the CTA still
               leads to a conversation per DESIGN.md. */}
           <div className="flex flex-col items-center gap-4">
-            <p className="max-w-md text-[14px] leading-relaxed text-[var(--cream)]/65">
+            <p className="max-w-md text-[14px] leading-relaxed text-[var(--cream)]/75">
               Vis mig din ideelle kunde. Så finder jeg dig 100 leads med navn på beslutningstageren og grunden til at kontakte dem netop nu. Gratis.
             </p>
             <button
