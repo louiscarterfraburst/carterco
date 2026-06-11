@@ -2631,12 +2631,12 @@ export default function Home() {
               Sådan ser det ud
             </p>
             <h2 className="mt-4 font-display text-4xl leading-[1.02] tracking-[-0.03em] sm:text-5xl lg:text-6xl">
-              Jeg finder jeres købere.
+              Jeg finder dine købere.
               <br />
-              <span className="italic text-[var(--clay)]">Og viser jer dem live.</span>
+              <span className="italic text-[var(--clay)]">Og vinklen, der åbner hver enkelt.</span>
             </h2>
             <p className="mt-6 max-w-md text-[15px] leading-[1.7] text-[#29261f]/75">
-              Fortæl mig hvad I sælger. På mødet deler jeg skærm og eksporterer listen live: hvem, hvordan du fanger dem, og hvorfor lige nu.
+              Fortæl mig hvad du sælger. Så får du navnet på beslutningstageren, hvor du fanger dem, og grunden til at kontakte dem netop nu.
             </p>
             <div className="mt-8">
               <button

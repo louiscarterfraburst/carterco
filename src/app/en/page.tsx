@@ -2633,10 +2633,10 @@ export default function Home() {
             <h2 className="mt-4 font-display text-4xl leading-[1.02] tracking-[-0.03em] sm:text-5xl lg:text-6xl">
               I find your buyers.
               <br />
-              <span className="italic text-[var(--clay)]">And show you them live.</span>
+              <span className="italic text-[var(--clay)]">And the angle that opens each one.</span>
             </h2>
             <p className="mt-6 max-w-md text-[15px] leading-[1.7] text-[#29261f]/75">
-              Tell me what you sell. On the call I share my screen and export the list live: who, where you reach them, and why right now.
+              Tell me what you sell. You get the decision-maker&apos;s name, where you reach them, and the reason to get in touch right now.
             </p>
             <div className="mt-8">
               <button
