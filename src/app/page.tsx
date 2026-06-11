@@ -963,83 +963,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ── Lead Flex — the offer behind the hero CTA ──────────────────
-          CEO plan 2026-06-10-leadflex-website-cta (T7). Shows the FORM of
-          the live export, never a guaranteed count (no-fabricated-proof:
-          rows are category+region examples, deliberately without company
-          names so nothing can collide with a real CVR entity). Placed
-          directly after the logo marquee so the hero promise gets its
-          visual proof first; sand/ember transition polish belongs to
-          /plan-design-review. min-w-0 on both grid children per the
-          2026-06-08 mobile grid-blowout pitfall. */}
-      <section className="relative overflow-hidden bg-[#f6efe4] py-24 text-[#29261f] sm:py-32">
-        <div aria-hidden className="paper-grain" />
-        <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-10 bg-[linear-gradient(180deg,rgba(255,107,44,0.18),transparent)]" />
-
-        <div className="relative z-[1] mx-auto grid w-full max-w-[1400px] gap-12 px-8 sm:px-12 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:items-center lg:gap-16">
-          <div className="min-w-0">
-            <p className="font-mono text-[10px] font-bold uppercase tracking-[0.3em] text-[var(--clay)]">
-              Sådan ser det ud
-            </p>
-            <h2 className="mt-4 font-display text-4xl leading-[1.02] tracking-[-0.03em] sm:text-5xl lg:text-6xl">
-              Jeg finder jeres købere.
-              <br />
-              <span className="italic text-[var(--clay)]">Og viser jer dem live.</span>
-            </h2>
-            <p className="mt-6 max-w-md text-[15px] leading-[1.7] text-[#29261f]/75">
-              Fortæl mig hvad I sælger. Inden mødet kortlægger jeg jeres marked på tværs af CVR, kort, sociale medier og firmaernes egne sider. På mødet deler jeg skærm og eksporterer listen, mens I kigger på: hvem de er, hvor I fanger dem, og hvorfor lige nu.
-            </p>
-            <p className="mt-3 max-w-md text-[13px] leading-[1.6] text-[#29261f]/55">
-              I beholder listen. Og findes der kun 40 ægte købere i jeres niche, får I 40 ægte. Ikke 100 tynde.
-            </p>
-            <div className="mt-8">
-              <button
-                type="button"
-                onClick={openScoping}
-                className="inline-flex items-center gap-3 rounded-full bg-[#ff6b2c] px-7 py-3.5 text-xs font-bold uppercase tracking-[0.25em] text-[#0f0d0a] shadow-[0_18px_50px_-16px_rgba(255,107,44,0.55)] transition hover:-translate-y-0.5 hover:bg-[#ff8244]"
-              >
-                Find mig mine leads <span aria-hidden>→</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Export panel — the flex as an inline system mockup */}
-          <div className="min-w-0">
-            <div className="overflow-hidden rounded-2xl border border-[#29261f]/12 bg-[#fffdf8] shadow-[0_30px_80px_-30px_rgba(41,38,31,0.35)]">
-              <div className="flex items-center justify-between border-b border-[#29261f]/10 px-5 py-3">
-                <span className="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-[#29261f]/55">
-                  Live eksport
-                </span>
-                <span className="font-mono text-[10px] text-[#29261f]/40">deler skærm…</span>
-              </div>
-              <div className="divide-y divide-[#29261f]/[0.07] text-[13px]">
-                {[
-                  { who: "Maskinudlejer, Midtjylland", contact: "Indehaver · direkte mail", signal: "Åbnede afdeling nr. 2 i sidste måned" },
-                  { who: "Cateringgrossist, Storkøbenhavn", contact: "Indkøbschef · telefon", signal: "Slog to nye chauffør-stillinger op i denne uge" },
-                  { who: "Tagrenseservice, Fyn", contact: "Medejer · LinkedIn", signal: "Ny CVR-registrering på søsterselskab" },
-                  { who: "VVS-grossist, Nordjylland", contact: "Salgsdirektør · mail", signal: "Skiftede webshop-platform for nylig" },
-                  { who: "Hotelvaskeri, Sjælland", contact: "Driftschef · telefon", signal: "Annoncerer efter mere lagerplads" },
-                ].map((row) => (
-                  <div key={row.who} className="grid gap-1 px-5 py-3.5 sm:grid-cols-[minmax(0,5fr)_minmax(0,4fr)_minmax(0,7fr)] sm:gap-4">
-                    <span className="min-w-0 truncate font-semibold text-[#29261f]">{row.who}</span>
-                    <span className="min-w-0 truncate text-[#29261f]/60">{row.contact}</span>
-                    <span className="min-w-0 truncate text-[#29261f]/75">{row.signal}</span>
-                  </div>
-                ))}
-              </div>
-              <div className="bg-[linear-gradient(180deg,transparent,rgba(246,239,228,0.9))] px-5 pb-4 pt-1">
-                <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#29261f]/40">
-                  … og resten af listen følger med
-                </span>
-              </div>
-            </div>
-            <p className="mt-3 text-[11px] text-[#29261f]/45">
-              Illustration af formatet. Ikke rigtige firmaer.
-            </p>
-          </div>
-        </div>
-      </section>
-
       <section className="relative overflow-hidden bg-[#f6efe4] py-28 text-[#29261f] sm:py-36">
         <div aria-hidden className="paper-grain" />
 
@@ -2667,6 +2590,83 @@ export default function Home() {
           · Dead-code Testimonials placeholder (false-flagged for months)
             removed at the same time.
           Net effect: journey ends, founder begins, ~270 lines lighter. */}
+
+      {/* ── Lead Flex — the offer behind the hero CTA ──────────────────
+          CEO plan 2026-06-10-leadflex-website-cta (T7). Shows the FORM of
+          the live export, never a guaranteed count (no-fabricated-proof:
+          rows are category+region examples, deliberately without company
+          names so nothing can collide with a real CVR entity). Placed
+          directly after the logo marquee so the hero promise gets its
+          visual proof first; sand/ember transition polish belongs to
+          /plan-design-review. min-w-0 on both grid children per the
+          2026-06-08 mobile grid-blowout pitfall. */}
+      <section className="relative overflow-hidden bg-[#f6efe4] py-24 text-[#29261f] sm:py-32">
+        <div aria-hidden className="paper-grain" />
+        <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-10 bg-[linear-gradient(180deg,rgba(255,107,44,0.18),transparent)]" />
+
+        <div className="relative z-[1] mx-auto grid w-full max-w-[1400px] gap-12 px-8 sm:px-12 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:items-center lg:gap-16">
+          <div className="min-w-0">
+            <p className="font-mono text-[10px] font-bold uppercase tracking-[0.3em] text-[var(--clay)]">
+              Sådan ser det ud
+            </p>
+            <h2 className="mt-4 font-display text-4xl leading-[1.02] tracking-[-0.03em] sm:text-5xl lg:text-6xl">
+              Jeg finder jeres købere.
+              <br />
+              <span className="italic text-[var(--clay)]">Og viser jer dem live.</span>
+            </h2>
+            <p className="mt-6 max-w-md text-[15px] leading-[1.7] text-[#29261f]/75">
+              Fortæl mig hvad I sælger. Inden mødet kortlægger jeg jeres marked på tværs af CVR, kort, sociale medier og firmaernes egne sider. På mødet deler jeg skærm og eksporterer listen, mens I kigger på: hvem de er, hvor I fanger dem, og hvorfor lige nu.
+            </p>
+            <p className="mt-3 max-w-md text-[13px] leading-[1.6] text-[#29261f]/55">
+              I beholder listen. Og findes der kun 40 ægte købere i jeres niche, får I 40 ægte. Ikke 100 tynde.
+            </p>
+            <div className="mt-8">
+              <button
+                type="button"
+                onClick={openScoping}
+                className="inline-flex items-center gap-3 rounded-full bg-[#ff6b2c] px-7 py-3.5 text-xs font-bold uppercase tracking-[0.25em] text-[#0f0d0a] shadow-[0_18px_50px_-16px_rgba(255,107,44,0.55)] transition hover:-translate-y-0.5 hover:bg-[#ff8244]"
+              >
+                Find mig mine leads <span aria-hidden>→</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Export panel — the flex as an inline system mockup */}
+          <div className="min-w-0">
+            <div className="overflow-hidden rounded-2xl border border-[#29261f]/12 bg-[#fffdf8] shadow-[0_30px_80px_-30px_rgba(41,38,31,0.35)]">
+              <div className="flex items-center justify-between border-b border-[#29261f]/10 px-5 py-3">
+                <span className="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-[#29261f]/55">
+                  Live eksport
+                </span>
+                <span className="font-mono text-[10px] text-[#29261f]/40">deler skærm…</span>
+              </div>
+              <div className="divide-y divide-[#29261f]/[0.07] text-[13px]">
+                {[
+                  { who: "Maskinudlejer, Midtjylland", contact: "Indehaver · direkte mail", signal: "Åbnede afdeling nr. 2 i sidste måned" },
+                  { who: "Cateringgrossist, Storkøbenhavn", contact: "Indkøbschef · telefon", signal: "Slog to nye chauffør-stillinger op i denne uge" },
+                  { who: "Tagrenseservice, Fyn", contact: "Medejer · LinkedIn", signal: "Ny CVR-registrering på søsterselskab" },
+                  { who: "VVS-grossist, Nordjylland", contact: "Salgsdirektør · mail", signal: "Skiftede webshop-platform for nylig" },
+                  { who: "Hotelvaskeri, Sjælland", contact: "Driftschef · telefon", signal: "Annoncerer efter mere lagerplads" },
+                ].map((row) => (
+                  <div key={row.who} className="grid gap-1 px-5 py-3.5 sm:grid-cols-[minmax(0,5fr)_minmax(0,4fr)_minmax(0,7fr)] sm:gap-4">
+                    <span className="min-w-0 truncate font-semibold text-[#29261f]">{row.who}</span>
+                    <span className="min-w-0 truncate text-[#29261f]/60">{row.contact}</span>
+                    <span className="min-w-0 truncate text-[#29261f]/75">{row.signal}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="bg-[linear-gradient(180deg,transparent,rgba(246,239,228,0.9))] px-5 pb-4 pt-1">
+                <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#29261f]/40">
+                  … og resten af listen følger med
+                </span>
+              </div>
+            </div>
+            <p className="mt-3 text-[11px] text-[#29261f]/45">
+              Illustration af formatet. Ikke rigtige firmaer.
+            </p>
+          </div>
+        </div>
+      </section>
 
       {/* ─────── Section: Founder card — Værksteds-kortet ─────── */}
       <section className="relative overflow-hidden bg-[#f6efe4] py-28 text-[#29261f] sm:py-36 lg:py-40">
