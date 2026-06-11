@@ -32,6 +32,7 @@ import {
 } from "../_shared/sequences.ts";
 import { getPlayConfig, playPaused } from "../_shared/plays.ts";
 import { checkLeadReplied } from "../_shared/sendpilot-client.ts";
+import { sendpilotKeyFor } from "../_shared/sendpilot-creds.ts";
 import { canonicalSenderFor } from "../_shared/workspaces.ts";
 import { addBusinessHours } from "../_shared/business-time.ts";
 
@@ -41,7 +42,6 @@ const corsHeaders = {
     "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const SP_API_KEY = Deno.env.get("SENDPILOT_API_KEY") ?? "";
 
 const supabase = createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
@@ -662,6 +662,10 @@ async function executeAction(
             workspace_id: row.workspace_id,
         });
     }
+    // Per-workspace SendPilot account (Bikenor → Nikolaj's own key). Empty
+    // (Bikenor key unset) makes the live reply check fail-safe → the send is
+    // aborted, never fired from the wrong account.
+    const spKey = sendpilotKeyFor(row.workspace_id);
     // Defense-in-depth reply checks, in order of authority:
     //
     // (1) LIVE SendPilot API check — ask their server right now whether
@@ -689,7 +693,7 @@ async function executeAction(
         || [leadForName?.first_name, leadForName?.last_name].filter(Boolean).join(" ").trim()
         || undefined;
     const liveCheck = await checkLeadReplied({
-        apiKey: SP_API_KEY,
+        apiKey: spKey,
         senderAccountId: canonicalSenderId,
         recipientLinkedinUrl: row.linkedin_url,
         recipientName: fullName,
@@ -730,7 +734,7 @@ async function executeAction(
     }
     const send = await fetch("https://api.sendpilot.ai/v1/inbox/send", {
         method: "POST",
-        headers: { "X-API-Key": SP_API_KEY, "Content-Type": "application/json" },
+        headers: { "X-API-Key": spKey, "Content-Type": "application/json" },
         body: JSON.stringify({
             senderId: canonicalSenderId,
             recipientLinkedinUrl: row.linkedin_url,

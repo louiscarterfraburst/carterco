@@ -19,6 +19,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.103.3";
 import { fireReferralTitleSearch } from "../_shared/referral-search.ts";
+import { sendpilotKeyFor } from "../_shared/sendpilot-creds.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -26,7 +27,6 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const SP_API_KEY = Deno.env.get("SENDPILOT_API_KEY") ?? "";
 const SP_BASE = "https://api.sendpilot.ai";
 
 const supabase = createClient(
@@ -199,6 +199,10 @@ async function syncOne(
   if (!row.sendpilot_sender_id || !row.linkedin_url) {
     return { lead: row.sendpilot_lead_id, skipped: "missing_sender_or_url", outbound_inserted: 0 };
   }
+  // Per-workspace SendPilot account: read the RIGHT account's inbox (Bikenor →
+  // Nikolaj's own key). Empty key → the list fetch fails and the row is
+  // reported as an error rather than read from the wrong account.
+  const spKey = sendpilotKeyFor(row.workspace_id);
 
   // Step 1: find the conversation for this lead. List up to 50 — name/URL
   // match alone misses threads that drop off the top-20 window when a sender
@@ -206,7 +210,7 @@ async function syncOne(
   // CarterCo leads came back skipped:"no_conversation_match" in May 2026).
   // SendPilot caps this endpoint below 100 (returns 500 at limit=100).
   const listUrl = `${SP_BASE}/v1/inbox/conversations?accountId=${encodeURIComponent(row.sendpilot_sender_id)}&limit=50`;
-  const listRes = await fetch(listUrl, { headers: { "X-API-Key": SP_API_KEY } });
+  const listRes = await fetch(listUrl, { headers: { "X-API-Key": spKey } });
   if (!listRes.ok) {
     return { lead: row.sendpilot_lead_id, error: `list HTTP ${listRes.status}`, outbound_inserted: 0 };
   }
@@ -262,7 +266,7 @@ async function syncOne(
   // Step 2: fetch messages. Single page (limit=50) covers nearly every real
   // thread; we can add pagination later if needed.
   const msgUrl = `${SP_BASE}/v1/inbox/conversations/${encodeURIComponent(convId)}/messages?accountId=${encodeURIComponent(row.sendpilot_sender_id)}&limit=50`;
-  const msgRes = await fetch(msgUrl, { headers: { "X-API-Key": SP_API_KEY } });
+  const msgRes = await fetch(msgUrl, { headers: { "X-API-Key": spKey } });
   if (!msgRes.ok) {
     return { lead: row.sendpilot_lead_id, conv: convId, error: `messages HTTP ${msgRes.status}`, outbound_inserted: 0 };
   }

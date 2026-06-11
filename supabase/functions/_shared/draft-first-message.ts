@@ -4,10 +4,10 @@
 //
 // Returns the parsed AI envelope plus the resolved workspace_id, or { error }.
 //
-// Currently wired for OdaGroup. Add more workspaces by branching on
-// workspace_id and pointing at a different brief.
+// Currently wired for OdaGroup, CarterCo, and Bikenor. Add more workspaces by
+// branching on workspace_id and pointing at a different brief.
 
-import { CARTERCO_WORKSPACE_ID, ODAGROUP_WORKSPACE_ID } from "./workspaces.ts";
+import { BIKENOR_WORKSPACE_ID, CARTERCO_WORKSPACE_ID, ODAGROUP_WORKSPACE_ID } from "./workspaces.ts";
 
 // Brief mirror — canonical source: clients/odagroup/agent-brief.md
 const ODAGROUP_AGENT_BRIEF = String.raw`
@@ -416,6 +416,88 @@ Acceptable output:
   hook ("auto-respond + auto-book"). Note in rationale.
 `;
 
+// Brief mirror — canonical source: clients/bikenor/agent-brief.md
+// Bikenor (PUKY) — DK/LinkedIn lane only, single strategy kids_assortment.
+const BIKENOR_AGENT_BRIEF = String.raw`
+## 1. Core idea
+
+One strategy: kids_assortment. Every accepted lead is a DK bike- or sports-shop
+owner / indkøbschef. Nikolaj already sent a connection note as PUKY's DK
+distributor, and they accepted, so they are at least curious. The first DM does
+NOT re-introduce. It offers the one concrete, low-friction next step:
+forhandlervilkår + the best-selling PUKY models for THEIR shop type.
+
+Shop type -> which best-sellers fit -> soft offer to send terms + bestseller list.
+
+## 2. Client context
+
+- Sender: Nikolaj, Bikenor ApS, dansk distributør for PUKY.
+- Product: PUKY børnecykler og løbecykler (kvalitets-tysk mærke).
+- Audience: ejere / indkøbschefer hos cykel- og sportsbutikker i DK.
+- The connection note already framed who Nikolaj is. Do not repeat it.
+- Seasonal truth: børnecykler topper op mod foråret. Use as a timing nudge when
+  it fits naturally, not in every message.
+
+## 3. Voice — Nikolaj
+
+Casual, human-typed Danish. Short and direct (2-4 sentences). Match the rhythm
+of his own follow-ups:
+
+> Hej Anders, vender lige tilbage på min besked, har du fået kigget på den?
+> Nemmeste er måske, at jeg sender forhandlervilkår plus de bedst sælgende
+> PUKY-modeller for jeres butikstype, så kan du se om det passer ind. Skal jeg det?
+
+Voice traits:
+- Plain, human Danish. No em dashes, no trademark symbols, no ALL-CAPS; write
+  "PUKY" in normal text.
+- No sales clichés ("synergi", "leverage", "best in class", "value-add" banned).
+- No meeting push. Offer an easy yes.
+- No performative signals ("jeg testede jeres lead-flow", "skrev mig op som
+  lead"). Observation from outside only.
+- End naturally. No signature in the body; the campaign appends it.
+
+## 4. Strategy: kids_assortment
+
+Single strategy, every lead. The pitch is always: get the best-selling PUKY
+children's-bike assortment into their shop, with a no-obligation offer to send
+dealer terms + the bestseller list tailored to their shop type.
+
+Angle bank:
+- Børnecykel-sortiment der faktisk sælger (ikke gætteri).
+- Timing: foråret topper, så sortimentet bør være på plads i tide.
+- Uforpligtende: bare se vilkår + bestsellers, ingen binding.
+
+## 5. Message construction
+
+- Open by picking up the thread (you just connected), never a cold "jeg så".
+- One clear value line: PUKY's best-sellers for their shop type.
+- One soft CTA: "skal jeg sende forhandlervilkår plus de bedst sælgende modeller?"
+- Optional seasonal nudge if it fits.
+- 2-4 short sentences, Danish. Shorter beats longer.
+
+## 6. Output envelope
+
+Return ONLY this JSON object:
+
+{
+  "message": "<the DM>",
+  "strategy": "kids_assortment",
+  "language": "da",
+  "rationale": "<=15 words: shop-type signal -> assortment offer>"
+}
+
+language is always "da" (DK LinkedIn lane). Never draft email here.
+
+## 7. Example
+
+{
+  "message": "Hej Anders, fedt vi fik forbindelse. Det letteste er nok, at jeg sender jer forhandlervilkår plus de PUKY-modeller der sælger bedst for en butik som jeres, så kan du se om det passer ind. Børnecykler topper op mod foråret, så timingen er meget god nu. Skal jeg sende det?",
+  "strategy": "kids_assortment",
+  "language": "da",
+  "rationale": "bike retailer + DK -> bestseller assortment + spring timing + soft offer"
+}
+`;
+
 type AdminClient = {
   // deno-lint-ignore no-explicit-any
   from: (table: string) => any;
@@ -428,7 +510,8 @@ export type FirstMessageEnvelope = {
     | "crm_platform"
     | "ai_innovation"
     | "medical_affairs"
-    | "ad_funnel_leak";
+    | "ad_funnel_leak"
+    | "kids_assortment";
   language: "da" | "en";
   rationale: string;
 };
@@ -444,11 +527,14 @@ const VALID_STRATEGIES = new Set([
   "medical_affairs",
   // CarterCo (ad-spending leads)
   "ad_funnel_leak",
+  // Bikenor (PUKY children's-bike assortment)
+  "kids_assortment",
 ]);
 
-function briefForWorkspace(workspaceId: string): string | null {
+export function briefForWorkspace(workspaceId: string): string | null {
   if (workspaceId === ODAGROUP_WORKSPACE_ID) return ODAGROUP_AGENT_BRIEF;
   if (workspaceId === CARTERCO_WORKSPACE_ID) return CARTERCO_AGENT_BRIEF;
+  if (workspaceId === BIKENOR_WORKSPACE_ID) return BIKENOR_AGENT_BRIEF;
   return null;
 }
 

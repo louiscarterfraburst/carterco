@@ -5,7 +5,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.103.3";
 import { normalizeWebsiteUrl, firstNameForGreeting } from "../_shared/text.ts";
-import { CARTERCO_WORKSPACE_ID, ODAGROUP_WORKSPACE_ID } from "../_shared/workspaces.ts";
+import { CARTERCO_WORKSPACE_ID, isAiDraftedDmWorkspace, ODAGROUP_WORKSPACE_ID } from "../_shared/workspaces.ts";
 import { draftFirstMessage } from "../_shared/draft-first-message.ts";
 import { autoRenderEnabled, getDefaultPlayId, getPlayConfig, hookAllowed, playPaused, playStamp } from "../_shared/plays.ts";
 import { sendsparkRender } from "../_shared/sendspark-render.ts";
@@ -195,12 +195,13 @@ Deno.serve(async (request) => {
       return json({ ok: true, recorded: "pre_connected_skipped" });
     }
 
-    // OdaGroup branch: no SendSpark video. Write the pipeline row, then
-    // call draftFirstMessage which writes rendered_message + strategy +
-    // status='pending_approval' inline. The /outreach UI shows it in the
-    // approval queue same as a CarterCo render. Errors fall through to
-    // status='failed' so the row is visible for manual handling.
-    if (workspaceId === ODAGROUP_WORKSPACE_ID) {
+    // AI-drafted-DM branch (OdaGroup, Bikenor/PUKY): no SendSpark video. Write
+    // the pipeline row, then call draftFirstMessage which writes
+    // rendered_message + strategy + status='pending_approval' inline. The
+    // /outreach UI shows it in the approval queue same as a CarterCo render.
+    // Errors fall through to status='failed' so the row is visible for manual
+    // handling. The Novo blocklist below is an Oda-specific no-op for Bikenor.
+    if (isAiDraftedDmWorkspace(workspaceId)) {
       // Hard blocklist: Novo Nordisk is Oda's flagship customer — never
       // outreach to anyone employed there, even if they slip through Sales
       // Nav filters. Belt-and-suspenders against the proof point becoming

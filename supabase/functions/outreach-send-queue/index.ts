@@ -26,9 +26,9 @@ import { createClient } from "npm:@supabase/supabase-js@2.103.3";
 import { checkLeadReplied } from "../_shared/sendpilot-client.ts";
 import { playPausedLive } from "../_shared/plays.ts";
 import { canonicalSenderFor } from "../_shared/workspaces.ts";
+import { sendpilotKeyFor } from "../_shared/sendpilot-creds.ts";
 import { QUEUE_MIN_GAP_MS } from "../_shared/send-queue.ts";
 
-const SP_API_KEY = Deno.env.get("SENDPILOT_API_KEY") ?? "";
 // Optional shared secret: when OUTREACH_CRON_TOKEN is set in the function's
 // env, requests must carry it in X-Cron-Token. verify_jwt=false exposes the
 // endpoint, and while the claim/spacing logic makes extra invocations
@@ -116,6 +116,10 @@ Deno.serve(async (request) => {
   for (const { row, senderId } of bySender.values()) {
     const leadId = row.sendpilot_lead_id;
     const now = new Date().toISOString();
+    // Per-workspace SendPilot account. Bikenor → Nikolaj's own key; everyone
+    // else → the global key. Empty (Bikenor key unset) makes the reply check
+    // fail-safe and leaves the row queued — never sends from the wrong account.
+    const spKey = sendpilotKeyFor(row.workspace_id);
 
     // Paused play → leave the row queued, untouched. Live check (no cache).
     if (await playPausedLive(admin, row.play, row.workspace_id)) {
@@ -164,7 +168,7 @@ Deno.serve(async (request) => {
       || [leadForName?.first_name, leadForName?.last_name].filter(Boolean).join(" ").trim()
       || undefined;
     const replyCheck = await checkLeadReplied({
-      apiKey: SP_API_KEY,
+      apiKey: spKey,
       senderAccountId: senderId,
       recipientLinkedinUrl: row.linkedin_url,
       recipientName: fullName,
@@ -211,7 +215,7 @@ Deno.serve(async (request) => {
 
     const send = await fetch("https://api.sendpilot.ai/v1/inbox/send", {
       method: "POST",
-      headers: { "X-API-Key": SP_API_KEY, "Content-Type": "application/json" },
+      headers: { "X-API-Key": spKey, "Content-Type": "application/json" },
       body: JSON.stringify({
         senderId,
         recipientLinkedinUrl: row.linkedin_url,

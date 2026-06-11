@@ -19,6 +19,9 @@ import { normalizeWebsiteUrl, firstNameForGreeting } from "../_shared/text.ts";
 import { autoRenderEnabled, getPlayConfig, playPaused, playStamp } from "../_shared/plays.ts";
 import { sendsparkRender } from "../_shared/sendspark-render.ts";
 import { matchTresyvClient } from "../_shared/tresyv-clients.ts";
+import { BIKENOR_WORKSPACE_ID, isAiDraftedDmWorkspace } from "../_shared/workspaces.ts";
+import { sendpilotKeyFor } from "../_shared/sendpilot-creds.ts";
+import { draftFirstMessage } from "../_shared/draft-first-message.ts";
 import {
   assignFirstDmVariant,
   renderTresyvBody,
@@ -46,6 +49,23 @@ const SP_CAMPAIGN_IDS = (Deno.env.get("SENDPILOT_CAMPAIGN_IDS") ?? "")
   .map((s) => s.trim())
   .filter(Boolean);
 
+// Bikenor (PUKY) campaigns live in Nikolaj's OWN SendPilot account, so they
+// must be polled with his key, not the global one. These are also AI-drafted
+// (no SendSpark): an accept routes to draftFirstMessage, not a video render.
+const SP_BIKENOR_CAMPAIGN_IDS = (Deno.env.get("SENDPILOT_BIKENOR_CAMPAIGN_IDS") ?? "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+// Which SendPilot API key polls a given campaign. Bikenor campaigns → Nikolaj's
+// key (sendpilotKeyFor); everything else → the global CarterCo-account key.
+function keyForCampaign(campaignId: string): string {
+  if (SP_BIKENOR_CAMPAIGN_IDS.includes(campaignId)) {
+    return sendpilotKeyFor(BIKENOR_WORKSPACE_ID);
+  }
+  return SP_API_KEY;
+}
+
 type SendPilotLead = {
   id: string;
   linkedinUrl: string;
@@ -69,7 +89,10 @@ type ProcessResult =
   | "failed_no_email"
   | "no_outreach_lead"
   | "sendspark_fail"
-  | "missing_website";
+  | "missing_website"
+  | "drafted_ai"
+  | "drafted_ai_failed"
+  | "blocked_do_not_contact";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -85,7 +108,7 @@ Deno.serve(async (req) => {
     }
   } catch { /* ignore */ }
 
-  const campaignIds = bodyJson.campaignIds ?? SP_CAMPAIGN_IDS;
+  const campaignIds = bodyJson.campaignIds ?? [...SP_CAMPAIGN_IDS, ...SP_BIKENOR_CAMPAIGN_IDS];
   if (!campaignIds.length) {
     return json({
       ok: false,
@@ -106,15 +129,20 @@ Deno.serve(async (req) => {
     accepted_not_in_outreach_leads: 0,
     accepted_sendspark_failures: 0,
     accepted_missing_website: 0,
+    accepted_drafted_ai: 0,
+    accepted_drafted_ai_failed: 0,
+    accepted_blocked_do_not_contact: 0,
     errors: [] as string[],
   };
 
   for (const campaignId of campaignIds) {
     summary.campaigns++;
+    // Bikenor campaigns are polled with Nikolaj's key; all others the global one.
+    const apiKey = keyForCampaign(campaignId);
 
     // CONNECTION_SENT — record invites idempotently via outreach_record_invite RPC.
     try {
-      const sentLeads = await fetchLeadsByStatus(campaignId, "CONNECTION_SENT");
+      const sentLeads = await fetchLeadsByStatus(campaignId, "CONNECTION_SENT", apiKey);
       summary.sent_fetched += sentLeads.length;
       for (const lead of sentLeads) {
         try {
@@ -134,8 +162,8 @@ Deno.serve(async (req) => {
     // sequence completes; we treat DONE the same so accepted leads we missed
     // (webhook downtime, between-poll status flip) still reach the review queue.
     try {
-      const acceptedLeads = await fetchLeadsByStatus(campaignId, "CONNECTION_ACCEPTED");
-      const doneLeads = await fetchLeadsByStatus(campaignId, "DONE");
+      const acceptedLeads = await fetchLeadsByStatus(campaignId, "CONNECTION_ACCEPTED", apiKey);
+      const doneLeads = await fetchLeadsByStatus(campaignId, "DONE", apiKey);
       const allAccepted = [...acceptedLeads, ...doneLeads];
       summary.accepted_fetched += allAccepted.length;
       for (const lead of allAccepted) {
@@ -149,6 +177,9 @@ Deno.serve(async (req) => {
             case "no_outreach_lead": summary.accepted_not_in_outreach_leads++; break;
             case "sendspark_fail": summary.accepted_sendspark_failures++; break;
             case "missing_website": summary.accepted_missing_website++; break;
+            case "drafted_ai": summary.accepted_drafted_ai++; break;
+            case "drafted_ai_failed": summary.accepted_drafted_ai_failed++; break;
+            case "blocked_do_not_contact": summary.accepted_blocked_do_not_contact++; break;
           }
         } catch (e) {
           summary.errors.push(`accepted lead ${lead.id}: ${(e as Error).message}`);
@@ -162,7 +193,7 @@ Deno.serve(async (req) => {
   return json({ ok: true, summary });
 });
 
-async function fetchLeadsByStatus(campaignId: string, status: string): Promise<SendPilotLead[]> {
+async function fetchLeadsByStatus(campaignId: string, status: string, apiKey: string): Promise<SendPilotLead[]> {
   const all: SendPilotLead[] = [];
   let page = 1;
   const limit = 100;
@@ -170,7 +201,7 @@ async function fetchLeadsByStatus(campaignId: string, status: string): Promise<S
     const url =
       `https://api.sendpilot.ai/v1/leads?campaignId=${encodeURIComponent(campaignId)}` +
       `&status=${encodeURIComponent(status)}&page=${page}&limit=${limit}`;
-    const res = await fetch(url, { headers: { "X-API-Key": SP_API_KEY } });
+    const res = await fetch(url, { headers: { "X-API-Key": apiKey } });
     if (!res.ok) {
       throw new Error(`Sendpilot API ${res.status}: ${await res.text().catch(() => "")}`);
     }
@@ -260,6 +291,36 @@ async function processAcceptedLead(spLead: SendPilotLead): Promise<ProcessResult
     return "skipped";
   }
 
+  // Person-level do-not-contact (outreach_do_not_contact). Belt-and-suspenders
+  // alongside the import/invite skip and the no_outreach_lead path: a suppressed
+  // person must never produce an actionable pipeline row, only a rejected audit row.
+  const dncUrl = (linkedinUrl || "").toLowerCase().replace(/\/+$/, "").split("?")[0].replace(/^http:/, "https:");
+  if (dncUrl) {
+    const { data: dnc } = await supabase
+      .from("outreach_do_not_contact")
+      .select("linkedin_url")
+      .eq("linkedin_url", dncUrl)
+      .maybeSingle();
+    if (dnc) {
+      await supabase.from("outreach_pipeline").upsert({
+        sendpilot_lead_id: leadId,
+        linkedin_url: linkedinUrl,
+        contact_email: (lead?.contact_email as string) ?? "",
+        is_cold: true,
+        status: "rejected",
+        accepted_at: now,
+        workspace_id: workspaceId,
+        campaign_id: campaignId || null,
+        sendpilot_sender_id: senderId || null,
+        decided_at: now,
+        decided_by: "auto:do_not_contact",
+        error: "outreach_do_not_contact: suppressed person — no message",
+        ...play,
+      }, { onConflict: "sendpilot_lead_id" });
+      return "blocked_do_not_contact";
+    }
+  }
+
   if (!lead) {
     await supabase.from("outreach_pipeline").upsert({
       sendpilot_lead_id: leadId,
@@ -292,6 +353,36 @@ async function processAcceptedLead(spLead: SendPilotLead): Promise<ProcessResult
       ...play,
     }, { onConflict: "sendpilot_lead_id" });
     return "failed_no_email";
+  }
+
+  // AI-drafted-DM workspaces (OdaGroup, Bikenor/PUKY): no SendSpark video.
+  // Mirror sendpilot-webhook's branch — write pending_ai_draft then
+  // draftFirstMessage (fills rendered_message + strategy + status
+  // 'pending_approval'). MUST come before the website gate below, which would
+  // otherwise fail these leads (they have no website-driven video to render).
+  if (isAiDraftedDmWorkspace(workspaceId)) {
+    await supabase.from("outreach_pipeline").upsert({
+      sendpilot_lead_id: leadId,
+      linkedin_url: linkedinUrl,
+      contact_email: lead.contact_email,
+      is_cold: true,
+      status: "pending_ai_draft",
+      accepted_at: now,
+      workspace_id: workspaceId,
+      campaign_id: campaignId || null,
+      sendpilot_sender_id: senderId || null,
+      ...play,
+    }, { onConflict: "sendpilot_lead_id" });
+    const draft = await draftFirstMessage(supabase, leadId);
+    if ("error" in draft) {
+      await supabase.from("outreach_pipeline").update({
+        status: "failed",
+        error: `draft_first_message (poll): ${draft.error}`,
+      }).eq("sendpilot_lead_id", leadId);
+      return "drafted_ai_failed";
+    }
+    scheduleScoutPhones("pipeline", leadId);
+    return "drafted_ai";
   }
 
   // Polled accepted leads are treated as cold — they slipped past the
