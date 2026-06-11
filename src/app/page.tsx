@@ -795,12 +795,6 @@ export default function Home() {
           viewBox="-600 -600 1200 1200"
           className="pointer-events-none absolute left-1/2 top-[55%] -z-10 h-[110rem] w-[110rem] -translate-x-1/2 -translate-y-1/2"
         >
-          <defs>
-            <linearGradient id="radar-sweep" x1="0" y1="0" x2="0" y2="-1" gradientUnits="objectBoundingBox">
-              <stop offset="0" stopColor="rgba(255,107,44,0)" />
-              <stop offset="1" stopColor="rgba(255,107,44,0.5)" />
-            </linearGradient>
-          </defs>
           {/* rings */}
           <circle r="260" fill="none" stroke="rgba(255,248,234,0.10)" strokeWidth="1" />
           <circle r="380" fill="none" stroke="rgba(255,248,234,0.08)" strokeWidth="1" />
@@ -848,13 +842,15 @@ export default function Home() {
             <animate attributeName="r" values="5;30" dur="2.8s" repeatCount="indefinite" />
             <animate attributeName="opacity" values="0.6;0" dur="2.8s" repeatCount="indefinite" />
           </circle>
-          {/* sweep arm */}
-          <g>
-            <animateTransform attributeName="transform" type="rotate" from="0" to="360" dur="14s" repeatCount="indefinite" />
-            <line x1="0" y1="0" x2="0" y2="-500" stroke="url(#radar-sweep)" strokeWidth="2" />
-            <circle cx="0" cy="-380" r="5" fill="#ff6b2c" opacity="0.9" />
-          </g>
         </svg>
+        {/* Sweep wedge — classic scope look: hard leading edge at 75deg,
+            luminous tail fading ~75deg behind it. Sized to the outer ring
+            (500/1200 of the 110rem svg = 91.6rem). Rotates clockwise, so
+            the tail trails at smaller conic angles. */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute left-1/2 top-[55%] -z-10 h-[91.6rem] w-[91.6rem] -translate-x-1/2 -translate-y-1/2 animate-[spin_14s_linear_infinite] rounded-full [background:conic-gradient(from_0deg,transparent_0deg,rgba(255,107,44,0.025)_18deg,rgba(255,107,44,0.07)_45deg,rgba(255,107,44,0.16)_72deg,rgba(255,138,68,0.30)_74.5deg,transparent_75deg)]"
+        />
 
         <nav className="mx-auto flex w-full max-w-[1400px] items-center justify-between px-8 pt-8 sm:px-12">
         <div className="flex items-center gap-3">
