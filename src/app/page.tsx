@@ -951,11 +951,11 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="relative border-t border-[var(--cream)]/5 bg-[#0f0d0a] py-16 sm:py-20">
+      <section className="relative border-t border-[var(--cream)]/5 bg-[#0f0d0a] pb-14 pt-8 sm:pb-16 sm:pt-10">
         <p className="text-center text-[10px] font-bold uppercase tracking-[0.3em] text-[var(--clay)]">
           Bag systemet hos
         </p>
-        <div className="mt-10 overflow-hidden [mask-image:linear-gradient(to_right,transparent,black_10%,black_90%,transparent)] [-webkit-mask-image:linear-gradient(to_right,transparent,black_10%,black_90%,transparent)]">
+        <div className="mt-8 overflow-hidden [mask-image:linear-gradient(to_right,transparent,black_10%,black_90%,transparent)] [-webkit-mask-image:linear-gradient(to_right,transparent,black_10%,black_90%,transparent)]">
           <div className="flex w-max animate-marquee">
             {[0, 1].map((dup) => (
               <div
