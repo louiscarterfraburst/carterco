@@ -2642,14 +2642,26 @@ export default function Home() {
 
           {/* Export panel — the flex as an inline system mockup */}
           <div className="min-w-0">
-            <div className="overflow-hidden rounded-2xl border border-[#29261f]/12 bg-[#fffdf8] shadow-[0_30px_80px_-30px_rgba(41,38,31,0.35)]">
-              <div className="flex items-center justify-between border-b border-[#29261f]/10 px-5 py-3">
-                <span className="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-[#29261f]/55">
-                  Live export
-                </span>
-                <span className="font-mono text-[10px] text-[#29261f]/40">sharing screen…</span>
+            <div className="overflow-hidden rounded-2xl border border-[#29261f]/25 bg-[#14110d] shadow-[0_40px_90px_-30px_rgba(20,17,13,0.6)]">
+              <div className="flex items-center justify-between border-b border-[var(--cream)]/10 px-5 py-3">
+                <div className="flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-full bg-[#ff5f57]" />
+                  <span className="h-2.5 w-2.5 rounded-full bg-[#febc2e]" />
+                  <span className="h-2.5 w-2.5 rounded-full bg-[#28c840]" />
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#ff6b2c]" />
+                  <span className="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--cream)]/60">
+                    Live export · sharing screen
+                  </span>
+                </div>
               </div>
-              <div className="divide-y divide-[#29261f]/[0.07] text-[13px]">
+              <div className="hidden grid-cols-[minmax(0,5fr)_minmax(0,4fr)_minmax(0,7fr)] gap-4 border-b border-[var(--cream)]/[0.07] px-5 py-2 sm:grid">
+                <span className="font-mono text-[9px] uppercase tracking-[0.2em] text-[var(--cream)]/35">Company</span>
+                <span className="font-mono text-[9px] uppercase tracking-[0.2em] text-[var(--cream)]/35">Contact</span>
+                <span className="font-mono text-[9px] uppercase tracking-[0.2em] text-[var(--cream)]/35">Why now</span>
+              </div>
+              <div className="divide-y divide-[var(--cream)]/[0.06] text-[13px]">
                 {[
                   { who: "Machinery rental, Central Jutland", contact: "Owner · direct email", signal: "Opened location no. 2 last month" },
                   { who: "Catering wholesaler, Copenhagen", contact: "Head of purchasing · phone", signal: "Posted two new driver roles this week" },
@@ -2658,14 +2670,14 @@ export default function Home() {
                   { who: "Hotel laundry, Zealand", contact: "Operations lead · phone", signal: "Advertising for more warehouse space" },
                 ].map((row) => (
                   <div key={row.who} className="grid gap-1 px-5 py-3.5 sm:grid-cols-[minmax(0,5fr)_minmax(0,4fr)_minmax(0,7fr)] sm:gap-4">
-                    <span className="min-w-0 truncate font-semibold text-[#29261f]">{row.who}</span>
-                    <span className="min-w-0 truncate text-[#29261f]/60">{row.contact}</span>
-                    <span className="min-w-0 truncate text-[#29261f]/75">{row.signal}</span>
+                    <span className="min-w-0 truncate font-semibold text-[var(--cream)]">{row.who}</span>
+                    <span className="min-w-0 truncate text-[var(--cream)]/50">{row.contact}</span>
+                    <span className="min-w-0 truncate text-[#ffb86b]/90">{row.signal}</span>
                   </div>
                 ))}
               </div>
-              <div className="bg-[linear-gradient(180deg,transparent,rgba(246,239,228,0.9))] px-5 pb-4 pt-1">
-                <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#29261f]/40">
+              <div className="bg-[linear-gradient(180deg,transparent,rgba(20,17,13,0.95))] px-5 pb-4 pt-1">
+                <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--cream)]/40">
                   … and the rest of the list comes with it
                 </span>
               </div>
