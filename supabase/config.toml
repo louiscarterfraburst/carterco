@@ -481,3 +481,9 @@ s3_secret_key = "env(S3_SECRET_KEY)"
 # MUST stay false or Soho/CarterCo lead intake 401s at the gateway.
 [functions.meta-leadgen-webhook]
 verify_jwt = false
+
+# cal.com webhook receiver — cal.com signs with HMAC (X-Cal-Signature-256 via
+# CAL_WEBHOOK_SECRET), no user JWT. MUST stay false or every booking webhook
+# 401s at the gateway and bookings silently stop landing in /leads.
+[functions.cal-webhook]
+verify_jwt = false

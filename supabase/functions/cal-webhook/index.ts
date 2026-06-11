@@ -18,6 +18,7 @@
 // Deployed --no-verify-jwt (cal.com sends no Supabase JWT).
 
 import { createClient } from "npm:@supabase/supabase-js@2.103.3";
+import { extractScopingId, formatFlexNote } from "../_shared/flex-scoping.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -87,8 +88,9 @@ Deno.serve(async (request) => {
     if (!email) return json({ error: "Booking missing attendee email" }, 400);
     const nowIso = new Date().toISOString();
 
+    let leadId: string | null = null;
     const { data: existing, error: selectErr } = await supabase
-      .from("leads").select("id, workspace_id").eq("is_draft", false).ilike("email", email).limit(1);
+      .from("leads").select("id, workspace_id, notes").eq("is_draft", false).ilike("email", email).limit(1);
     if (selectErr) return json({ error: selectErr.message }, 500);
 
     if (existing && existing.length > 0) {
@@ -106,14 +108,57 @@ Deno.serve(async (request) => {
       if (!existing[0].workspace_id) updatePayload.workspace_id = await resolveDefaultWorkspaceId();
       const { error: updateErr } = await supabase.from("leads").update(updatePayload).eq("id", existing[0].id);
       if (updateErr) return json({ error: updateErr.message }, 500);
+      leadId = existing[0].id;
     } else {
       const workspaceId = await resolveDefaultWorkspaceId();
-      const { error: insertErr } = await supabase.from("leads").insert({
+      const { data: inserted, error: insertErr } = await supabase.from("leads").insert({
         name, email, source: "calcom", is_draft: false,
         outcome: "booked", outcome_at: nowIso, meeting_at: startAt,
         calendly_event_uri: uid, workspace_id: workspaceId,
-      });
+      }).select("id").single();
       if (insertErr) return json({ error: insertErr.message }, 500);
+      leadId = inserted?.id ?? null;
+    }
+
+    // Lead Flex join (persist-then-book): the scoping modal saved the
+    // visitor's answers before the redirect and put a `scoping:<id>` token
+    // in the booking notes. Join soft-fails by design — the lead is already
+    // created above; on any failure the answers still live in
+    // scoping_submissions and the token in the calendar booking.
+    try {
+      const scopingId = extractScopingId(rawBody);
+      if (scopingId && leadId) {
+        const { data: scoping } = await supabase
+          .from("scoping_submissions")
+          .select("id, icp, tried, lead_id")
+          .eq("id", scopingId)
+          .maybeSingle();
+        if (scoping && scoping.lead_id) {
+          // Already joined (reschedule / webhook retry) — appending the note
+          // again would duplicate it. Just keep the booking uid current.
+          const { error: uidErr } = await supabase
+            .from("scoping_submissions")
+            .update({ booking_uid: uid })
+            .eq("id", scopingId);
+          if (uidErr) console.warn("cal-webhook: scoping uid refresh failed", { scopingId, error: uidErr.message });
+        } else if (scoping) {
+          const note = formatFlexNote(scoping.icp, scoping.tried ?? []);
+          const existingNotes = existing && existing.length > 0 ? existing[0].notes : null;
+          const merged = [existingNotes, note].filter(Boolean).join("\n---\n");
+          const { error: noteErr } = await supabase
+            .from("leads").update({ notes: merged }).eq("id", leadId);
+          if (noteErr) console.warn("cal-webhook: flex note update failed", { scopingId, leadId, error: noteErr.message });
+          const { error: joinErr } = await supabase
+            .from("scoping_submissions")
+            .update({ lead_id: leadId, booking_uid: uid })
+            .eq("id", scopingId);
+          if (joinErr) console.warn("cal-webhook: scoping join failed", { scopingId, leadId, error: joinErr.message });
+        } else {
+          console.warn("cal-webhook: scoping token had no matching row", { scopingId, uid });
+        }
+      }
+    } catch (e) {
+      console.warn("cal-webhook: flex join threw", { uid, error: e instanceof Error ? e.message : String(e) });
     }
 
     await supabase.from("leads").delete().eq("is_draft", true).ilike("email", email);
