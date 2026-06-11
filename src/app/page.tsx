@@ -771,15 +771,90 @@ export default function Home() {
 
   return (
     <main className="relative flex min-h-screen flex-col bg-[#0f0d0a] text-[var(--cream)]">
-      <section className="relative flex min-h-screen flex-col overflow-hidden lg:min-h-[min(100vh,860px)]">
+      <section className="relative isolate flex min-h-screen flex-col overflow-hidden lg:min-h-[min(100vh,860px)]">
         <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_50%_62%,rgba(218,96,34,0.32),transparent_55%),radial-gradient(ellipse_at_15%_10%,rgba(25,70,58,0.28),transparent_50%)]" />
         <div
-          className="pointer-events-none absolute inset-0 -z-10 opacity-[0.06] mix-blend-overlay"
+          className="pointer-events-none absolute inset-0 -z-10 opacity-[0.09] mix-blend-overlay"
           style={{
             backgroundImage:
               "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>\")",
           }}
         />
+        {/* Naval radar (2026-06-11) — the system scanning for buyers.
+            Rings + bearing ticks, ember blips = leads on the radar, one
+            lock-on blip pulsing (the "why now" lead), dashed plotted
+            courses from center = outbound contact, and a sweep arm on a
+            60s rotation. Mechanism-motion per DESIGN.md, not decoration.
+            SMIL animations so globals.css stays untouched. */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 -z-10 [background-image:radial-gradient(rgba(255,248,234,0.17)_1px,transparent_1px)] [background-size:26px_26px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_55%,transparent_28%,black_58%,transparent_92%)]"
+        />
+        <svg
+          aria-hidden
+          viewBox="-600 -600 1200 1200"
+          className="pointer-events-none absolute left-1/2 top-[55%] -z-10 h-[110rem] w-[110rem] -translate-x-1/2 -translate-y-1/2"
+        >
+          <defs>
+            <linearGradient id="radar-sweep" x1="0" y1="0" x2="0" y2="-1" gradientUnits="objectBoundingBox">
+              <stop offset="0" stopColor="rgba(255,107,44,0)" />
+              <stop offset="1" stopColor="rgba(255,107,44,0.35)" />
+            </linearGradient>
+          </defs>
+          {/* rings */}
+          <circle r="260" fill="none" stroke="rgba(255,248,234,0.10)" strokeWidth="1" />
+          <circle r="380" fill="none" stroke="rgba(255,248,234,0.08)" strokeWidth="1" />
+          <circle r="500" fill="none" stroke="rgba(255,248,234,0.06)" strokeWidth="1" />
+          {/* crosshair */}
+          <line x1="-560" y1="0" x2="560" y2="0" stroke="rgba(255,248,234,0.05)" strokeWidth="1" />
+          <line x1="0" y1="-560" x2="0" y2="560" stroke="rgba(255,248,234,0.05)" strokeWidth="1" />
+          {/* bearing ticks every 30deg on the outer ring */}
+          {Array.from({ length: 12 }, (_, i) => {
+            const a = (i * 30 * Math.PI) / 180;
+            return (
+              <line
+                key={i}
+                x1={Math.sin(a) * 490}
+                y1={-Math.cos(a) * 490}
+                x2={Math.sin(a) * 510}
+                y2={-Math.cos(a) * 510}
+                stroke="rgba(255,248,234,0.12)"
+                strokeWidth="1.5"
+              />
+            );
+          })}
+          {/* plotted courses out to two leads (outbound contact, not missiles) */}
+          <path d="M 0 0 Q 150 30 330 210" fill="none" stroke="rgba(255,107,44,0.16)" strokeWidth="1.5" strokeDasharray="5 7" />
+          <path d="M 0 0 Q -160 -20 -310 150" fill="none" stroke="rgba(255,107,44,0.12)" strokeWidth="1.5" strokeDasharray="5 7" />
+          {/* lead blips */}
+          <circle cx="330" cy="210" r="4.5" fill="#ff6b2c">
+            <animate attributeName="opacity" values="0.4;1;0.4" dur="3.4s" repeatCount="indefinite" />
+          </circle>
+          <circle cx="-310" cy="150" r="3.5" fill="#ff8244">
+            <animate attributeName="opacity" values="0.3;0.85;0.3" dur="4.1s" repeatCount="indefinite" begin="1.2s" />
+          </circle>
+          <circle cx="-460" cy="-120" r="3" fill="#ff6b2c">
+            <animate attributeName="opacity" values="0.25;0.7;0.25" dur="5s" repeatCount="indefinite" begin="0.5s" />
+          </circle>
+          <circle cx="120" cy="365" r="2.5" fill="#ffb86b">
+            <animate attributeName="opacity" values="0.2;0.6;0.2" dur="4.6s" repeatCount="indefinite" begin="2s" />
+          </circle>
+          <circle cx="430" cy="-95" r="3" fill="#ff8244">
+            <animate attributeName="opacity" values="0.25;0.75;0.25" dur="3.8s" repeatCount="indefinite" begin="2.8s" />
+          </circle>
+          {/* lock-on: the lead with a reason to buy right now */}
+          <circle cx="-430" cy="80" r="4.5" fill="#ff6b2c" />
+          <circle cx="-430" cy="80" r="4.5" fill="none" stroke="rgba(255,107,44,0.55)" strokeWidth="1.5">
+            <animate attributeName="r" values="5;30" dur="2.8s" repeatCount="indefinite" />
+            <animate attributeName="opacity" values="0.6;0" dur="2.8s" repeatCount="indefinite" />
+          </circle>
+          {/* sweep arm */}
+          <g>
+            <animateTransform attributeName="transform" type="rotate" from="0" to="360" dur="60s" repeatCount="indefinite" />
+            <line x1="0" y1="0" x2="0" y2="-500" stroke="url(#radar-sweep)" strokeWidth="2" />
+            <circle cx="0" cy="-380" r="5" fill="#ff6b2c" opacity="0.9" />
+          </g>
+        </svg>
 
         <nav className="mx-auto flex w-full max-w-[1400px] items-center justify-between px-8 pt-8 sm:px-12">
         <div className="flex items-center gap-3">
