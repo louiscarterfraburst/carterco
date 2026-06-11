@@ -803,20 +803,32 @@ export default function Home() {
           <line x1="-560" y1="0" x2="560" y2="0" stroke="rgba(255,248,234,0.07)" strokeWidth="1" />
           <line x1="0" y1="-560" x2="0" y2="560" stroke="rgba(255,248,234,0.07)" strokeWidth="1" />
           {/* bearing ticks every 30deg on the outer ring */}
-          {Array.from({ length: 12 }, (_, i) => {
-            const a = (i * 30 * Math.PI) / 180;
-            return (
-              <line
-                key={i}
-                x1={Math.sin(a) * 490}
-                y1={-Math.cos(a) * 490}
-                x2={Math.sin(a) * 510}
-                y2={-Math.cos(a) * 510}
-                stroke="rgba(255,248,234,0.17)"
-                strokeWidth="1.5"
-              />
-            );
-          })}
+          {/* precomputed literals — runtime trig caused an SSR/client
+              float-precision hydration mismatch */}
+          {[
+            [0, -490, 0, -510],
+            [245, -424.35, 255, -441.67],
+            [424.35, -245, 441.67, -255],
+            [490, 0, 510, 0],
+            [424.35, 245, 441.67, 255],
+            [245, 424.35, 255, 441.67],
+            [0, 490, 0, 510],
+            [-245, 424.35, -255, 441.67],
+            [-424.35, 245, -441.67, 255],
+            [-490, 0, -510, 0],
+            [-424.35, -245, -441.67, -255],
+            [-245, -424.35, -255, -441.67],
+          ].map(([x1, y1, x2, y2]) => (
+            <line
+              key={`${x1},${y1}`}
+              x1={x1}
+              y1={y1}
+              x2={x2}
+              y2={y2}
+              stroke="rgba(255,248,234,0.17)"
+              strokeWidth="1.5"
+            />
+          ))}
           {/* plotted courses out to two leads (outbound contact, not missiles) */}
           <path d="M 0 0 Q 150 30 330 210" fill="none" stroke="rgba(255,107,44,0.22)" strokeWidth="1.5" strokeDasharray="5 7" />
           <path d="M 0 0 Q -160 -20 -310 150" fill="none" stroke="rgba(255,107,44,0.17)" strokeWidth="1.5" strokeDasharray="5 7" />
