@@ -82,15 +82,14 @@ Web fonts load via `next/font/google` in `src/app/layout.tsx`. System fonts are 
 
 | Role | Font | Source | Notes |
 |---|---|---|---|
-| Display / hero | **Georgia** | System | Italic carries the brand voice. Classical newspaper-masthead proportions with strong baseline stroke contrast that holds up at hero size. No web-font load. Fallback to Times New Roman, then generic serif. |
+| Display / hero | **Besley** | next/font/google | Variable 400–900, true italic. Clarendon revival: slab-serif bones with editorial finish. Italic carries the brand voice. Fallback to Georgia, then generic serif. |
 | Body / UI | **Manrope** | next/font/google | Variable weight. Humanist sans. Body, labels, buttons. |
 | Operator signature | **Homemade Apple** | next/font/google | Reserved for Louis's printed signature in the hero and the founder card. Never headlines. |
 | Marginalia / handwritten | **Caveat** | next/font/google | Small annotations only ("det er mig der svarer"). Never body copy, never headlines. |
 | Code / tabular | **Geist Mono** | next/font/google | Pipeline IDs, code blocks, monospaced microcopy in operator UI. |
+| Operator UI sans | **Geist Sans** | next/font/google | `font-sans` in operator-tool pre-blocks (/outreach, /tresyv). Not used on the marketing surface. |
 
-**Geist Sans is removed.** It was loaded but unused on the marketing surface.
-
-**Why Georgia, not a modern Google font?** A direct A/B was run on 2026-05-14 with Fraunces (weight 600, WONK 1, SOFT 50) versus Georgia. Georgia won on this brand because (1) its baseline stroke contrast carries the flame gradient at 137px hero size without going thin, (2) its italic curl feels classical-editorial rather than contemporary-editorial which matches "craftsman's notebook" better than "Stripe Press essay," and (3) the page is service-marketing in da_DK, not a typeface showcase — the "I gave up on typography" connotation Georgia carries in design discourse does not apply when the choice is deliberate and the rest of the system has taste.
+**Why Besley, not Georgia or a grotesque?** Chosen 2026-06-11 after a live competitor sweep (supersedes the 2026-05-14 Georgia decision). The GTM-tool landscape (Clay, Attio, Cargo, Unify, Default, Instantly) is uniformly neutral grotesque — Inter or Inter-alikes — so any clean sans reads "SaaS platform," which contradicts the service-not-SaaS positioning. The nearest DK competitor (Radiant) owns the classical-elegant-serif lane with EB Garamond, and Georgia-italic-on-dark had converged with the default AI-built-site aesthetic. Besley is a Clarendon revival: slab bones say workshop/letterpress (on brand for "smed mens jernet er varmt"), the true italic preserves the flame-gradient hero composition, and nobody in the category uses anything like it.
 
 ### Scale
 
@@ -305,3 +304,4 @@ Read each sentence aloud as if you're a 45-year-old Danish salgschef. Pause at e
 | 2026-05-14 | Marquee → contact sheet for logo proof | Match aesthetic; differentiate from agency tropes. |
 | 2026-05-14 | Display font: Georgia, not Fraunces | A/B compared on live hero. Georgia's baseline stroke contrast carries the flame gradient better at hero size. Italic curl reads classical-editorial. Deliberate choice, not a fallback. |
 | 2026-05-15 | Cherry-pick DESIGN.md from `homepage-redesign` to `main` | Doc was parked on a feature branch and invisible to future sessions. CLAUDE.md and skills can now reference it. The companion code on `homepage-redesign` remains parked separately. |
+| 2026-06-11 | Display font: Besley, supersedes Georgia (2026-05-14) | Louis flagged the site reads like every AI-built site. Live competitor sweep showed GTM tools are wall-to-wall Inter-grotesque and Radiant (DK) owns elegant serif (EB Garamond). Besley's Clarendon/slab bones differentiate from both, match the blacksmith brand, and its true italic preserves the flame-gradient hero. Picked from 15 candidates rendered live on the hero. |

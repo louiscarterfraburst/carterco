@@ -5,6 +5,7 @@ import {
   Homemade_Apple,
   Caveat,
   Manrope,
+  Besley,
 } from "next/font/google";
 import Script from "next/script";
 import { PwaRegistrar } from "./pwa-registrar";
@@ -36,6 +37,12 @@ const caveat = Caveat({
 const manrope = Manrope({
   variable: "--font-manrope",
   subsets: ["latin"],
+});
+
+const besley = Besley({
+  variable: "--font-besley",
+  subsets: ["latin"],
+  style: ["normal", "italic"],
 });
 
 const SITE_TITLE = "Carter & Co — Smed mens jernet er varmt";
@@ -98,7 +105,7 @@ export default function RootLayout({
   return (
     <html
       lang="da"
-      className={`${geistSans.variable} ${geistMono.variable} ${homemadeApple.variable} ${caveat.variable} ${manrope.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${homemadeApple.variable} ${caveat.variable} ${manrope.variable} ${besley.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
         <Script

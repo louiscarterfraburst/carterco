@@ -9,7 +9,7 @@
   --muted: #6c6254;
   --clay: #b97041;
   --forest: #19463a;
-  --font-display: "Fraunces", "Canela", "Georgia", serif;
+  --font-display: var(--font-besley), Georgia, serif;
   --font-body: var(--font-manrope), "Avenir Next", "Helvetica Neue", sans-serif;
 }
 
@@ -45,11 +45,6 @@ body {
 }
 
 /* ─── /leads tool styling ──────────────────────────────── */
-
-.font-display {
-  font-optical-sizing: auto;
-  font-variation-settings: "SOFT" 50, "WONK" 0;
-}
 
 .tabular {
   font-variant-numeric: tabular-nums;
