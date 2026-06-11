@@ -935,7 +935,7 @@ export default function Home() {
               the live export is the meeting's content, so the CTA still
               leads to a conversation per DESIGN.md. */}
           <div className="flex flex-col items-center gap-4">
-            <p className="max-w-md text-[14px] leading-relaxed text-[var(--cream)]/75">
+            <p className="max-w-lg text-[16px] leading-relaxed text-[var(--cream)]/85">
               Vis mig din ideelle kunde. Så finder jeg dig 100 leads med navn på beslutningstageren og grunden til at kontakte dem netop nu. Gratis.
             </p>
             <button
