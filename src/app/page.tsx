@@ -842,13 +842,16 @@ export default function Home() {
               (2026-06-11): mechanism-led promise in the visitor's own voice —
               the live export is the meeting's content, so the CTA still
               leads to a conversation per DESIGN.md. */}
-          <div className="flex">
+          <div className="flex flex-col gap-4">
+            <p className="max-w-md text-[14px] leading-relaxed text-[var(--cream)]/65">
+              Jeg finder dig 100 leads med navn på beslutningstageren og grunden til at kontakte dem netop nu.
+            </p>
             <button
               type="button"
               onClick={openScoping}
-              className="group inline-flex items-center gap-4 rounded-full bg-[#ff6b2c] px-8 py-5 text-sm font-bold uppercase tracking-[0.25em] text-[#0f0d0a] shadow-[0_18px_60px_rgba(255,107,44,0.35)] transition hover:-translate-y-1 hover:bg-[#ff8244] hover:shadow-[0_24px_80px_rgba(255,107,44,0.5)]"
+              className="group inline-flex items-center gap-4 self-start rounded-full bg-[#ff6b2c] px-8 py-5 text-sm font-bold uppercase tracking-[0.25em] text-[#0f0d0a] shadow-[0_18px_60px_rgba(255,107,44,0.35)] transition hover:-translate-y-1 hover:bg-[#ff8244] hover:shadow-[0_24px_80px_rgba(255,107,44,0.5)]"
             >
-              <span>Find mine købere</span>
+              <span>Find mig mine leads</span>
               <span className="text-lg">→</span>
             </button>
           </div>
@@ -924,7 +927,7 @@ export default function Home() {
                 onClick={openScoping}
                 className="inline-flex items-center gap-3 rounded-full bg-[#ff6b2c] px-7 py-3.5 text-xs font-bold uppercase tracking-[0.25em] text-[#0f0d0a] shadow-[0_18px_50px_-16px_rgba(255,107,44,0.55)] transition hover:-translate-y-0.5 hover:bg-[#ff8244]"
               >
-                Find mine købere <span aria-hidden>→</span>
+                Find mig mine leads <span aria-hidden>→</span>
               </button>
             </div>
           </div>
@@ -2659,7 +2662,7 @@ export default function Home() {
                       onClick={openScoping}
                       className="inline-flex items-center gap-3 rounded-full bg-[var(--forest)] px-7 py-3.5 text-xs font-bold uppercase tracking-[0.25em] text-[#fff8ea] shadow-[0_18px_50px_-16px_rgba(25,70,58,0.5)] transition hover:-translate-y-0.5 hover:shadow-[0_24px_60px_-16px_rgba(25,70,58,0.6)]"
                     >
-                      Find mine købere <span aria-hidden>→</span>
+                      Find mig mine leads <span aria-hidden>→</span>
                     </button>
                   </div>
                 </div>
