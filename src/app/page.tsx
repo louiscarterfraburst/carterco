@@ -849,7 +849,7 @@ export default function Home() {
             the tail trails at smaller conic angles. */}
         <div
           aria-hidden
-          className="pointer-events-none absolute left-1/2 top-[55%] -z-10 h-[91.6rem] w-[91.6rem] -translate-x-1/2 -translate-y-1/2 animate-[spin_14s_linear_infinite] rounded-full [background:conic-gradient(from_0deg,transparent_0deg,rgba(201,60,10,0.03)_20deg,rgba(255,107,44,0.09)_48deg,rgba(255,107,44,0.18)_71deg,rgba(255,184,107,0.42)_74.3deg,transparent_75deg)] [mask-image:radial-gradient(circle,transparent_24%,black_42%,black_98%,transparent_100%)]"
+          className="pointer-events-none absolute left-1/2 top-[55%] -z-10 h-[91.6rem] w-[91.6rem] -translate-x-1/2 -translate-y-1/2 animate-[spin_14s_linear_infinite] rounded-full [background:conic-gradient(from_0deg,transparent_0deg,rgba(201,60,10,0.03)_20deg,rgba(255,107,44,0.09)_48deg,rgba(255,107,44,0.18)_71deg,rgba(255,184,107,0.42)_74.3deg,transparent_75deg)] [mask-image:radial-gradient(circle,transparent_24%,black_42%,black_98%,transparent_100%),linear-gradient(to_bottom,transparent_31%,black_41%)] [mask-composite:intersect]"
         />
 
         {/* Text-protection scrim — darkens the column behind the copy so
