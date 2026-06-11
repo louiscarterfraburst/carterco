@@ -844,7 +844,7 @@ export default function Home() {
               leads to a conversation per DESIGN.md. */}
           <div className="flex flex-col items-center gap-4">
             <p className="max-w-md text-[14px] leading-relaxed text-[var(--cream)]/65">
-              I will find you 100 leads with the decision-maker&apos;s name and the reason to contact them right now.
+              Show me your ideal customer. Then I will find you 100 leads with the decision-maker&apos;s name and the reason to contact them right now. Free.
             </p>
             <button
               type="button"
