@@ -31,8 +31,15 @@ All tokens live in `.env.local`. Edge Functions read the same names from the Sup
 
 | Token | What it unlocks | Base URL | Used by |
 |-------|-----------------|----------|---------|
-| `ANTHROPIC_API_KEY` | Claude — used for reply classification, first-message drafting, AI triage, ICP tuning, referral parsing | `https://api.anthropic.com/v1` | `outreach-ai`, `ai-triage-reply`, `draft-first-message.ts`, `generate-icp-tuning-proposal`, `score-accepted-lead` |
+| `ANTHROPIC_API_KEY` | Claude — used for reply classification, first-message drafting, AI triage, ICP tuning, referral parsing, meeting-note summaries | `https://api.anthropic.com/v1` | `outreach-ai`, `ai-triage-reply`, `draft-first-message.ts`, `generate-icp-tuning-proposal`, `score-accepted-lead`, `fathom-webhook` |
 | `OPENAI_API_KEY` | OpenAI — fallback / embeddings if used | `https://api.openai.com/v1` | (audit before relying on) |
+
+## Fathom (meeting recorder)
+
+| Token | What it unlocks | Base URL | Used by |
+|-------|-----------------|----------|---------|
+| `FATHOM_API_KEY` | Fathom External API — manage webhooks, list meetings, fetch transcripts/summaries. `X-Api-Key` header. | `https://api.fathom.ai/external/v1` (e.g. `GET /meetings`) | `scripts/fathom/register-webhook.mjs` |
+| `FATHOM_WEBHOOK_SECRET` | `whsec_…` signing secret for the meeting-notes webhook (Svix-style verification). Printed once by `register-webhook.mjs`. | — | `fathom-webhook` (see `docs/fathom-meeting-notes.md`) |
 
 ## Infra
 

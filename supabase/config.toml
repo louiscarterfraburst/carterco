@@ -487,3 +487,9 @@ verify_jwt = false
 # 401s at the gateway and bookings silently stop landing in /leads.
 [functions.cal-webhook]
 verify_jwt = false
+
+# Fathom webhook receiver — Fathom signs Svix-style (webhook-signature via
+# FATHOM_WEBHOOK_SECRET), no user JWT. MUST stay false or meeting notes
+# silently stop landing on leads.
+[functions.fathom-webhook]
+verify_jwt = false
