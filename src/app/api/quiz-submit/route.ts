@@ -1,53 +1,44 @@
-// Lead-quiz submission endpoint. Persists the submission + mirrors into
-// the leads table. As of 2026-05-22 (Phase 1 SMS rebuild) does NOT fire
-// any outbound SMS — operator-triggered only via /leads.
+// Lead Flex scoping endpoint (CEO plan 2026-06-10, repurposed from the old
+// lead-quiz submission route — kept at this path so the modal's existing
+// fetch target survives; the old quiz body shape is gone with the quiz).
+//
+// Two kinds:
+//   "booking"      — persist-then-book: the two scoping answers are saved
+//                    BEFORE the cal.com redirect and the returned id travels
+//                    as a `scoping:<id>` token in the booking notes.
+//                    Anonymous by design; identity arrives via cal-webhook.
+//   "soft_capture" — the alternative exit ("skriv til mig i stedet"):
+//                    email + explicit consent required; mirrors into `leads`
+//                    (deduped by email) so the notify-new-lead trigger fires.
+//
+// Spam posture per owner decision: honeypot only, no rate limiting.
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/utils/supabase/admin";
+import { ICP_MAX, ICP_MIN, formatScopingNote } from "@/lib/scoping";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 type Body = {
-  name?: string;
+  kind?: "booking" | "soft_capture";
+  icp?: string;
+  tried?: string[];
   email?: string;
-  phone?: string;
-  url?: string;
-  // 2026-05-21: chosen path on the result step — "loom" = async audit via
-  // CRM share; "meeting" = 30-min call. Drives SMS body wording.
-  path?: "loom" | "meeting";
-  monthlyLeads?: number;
-  dealValue?: number;
-  closeRate?: number;
-  responseTime?: string;
-  channels?: string[];
-  outboundQuality?: string;
-  followupQuality?: string;
-  totalLoss?: number;
-  // 2026-05-18: renamed from speedLoss/closeRateLoss/channelLoss to the
-  // three-machine framing. Old field names removed; DB columns keep their
-  // existing names for now (speed_loss / close_rate_loss / channel_loss
-  // = hastighed / opfølgning / outbound respectively).
-  hastighedLoss?: number;
-  outboundLoss?: number;
-  opfølgningLoss?: number;
+  name?: string;
+  consent?: boolean;
+  locale?: string;
+  // Honeypot — visually hidden field; humans leave it empty.
+  website?: string;
 };
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+const TRIED_MAX_ITEMS = 8;
+const TRIED_MAX_LEN = 60;
+
 // CarterCo workspace — the leads table requires workspace_id and the
 // notify-new-lead trigger keys push notifications to it.
 const CARTERCO_WORKSPACE_ID = "1e067f9a-d453-41a7-8bc4-9fdb5644a5fa";
-
-function normalizePhone(raw: string): string | null {
-  const digits = raw.replace(/[^\d+]/g, "");
-  if (!digits) return null;
-  if (digits.startsWith("+")) return digits;
-  // Bare 8-digit DK number → +45 prefix.
-  if (/^\d{8}$/.test(digits)) return `+45${digits}`;
-  // Already has country digits but no +, accept as-is with leading +.
-  if (digits.length >= 10) return `+${digits}`;
-  return null;
-}
 
 export async function POST(req: Request) {
   let body: Body;
@@ -57,39 +48,55 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "invalid json" }, { status: 400 });
   }
 
-  const name = (body.name ?? "").trim();
-  const email = (body.email ?? "").trim().toLowerCase();
-  const rawPhone = (body.phone ?? "").trim();
-  const phone = rawPhone ? normalizePhone(rawPhone) : null;
+  // Honeypot tripped → pretend success, write nothing.
+  if ((body.website ?? "").trim()) {
+    return NextResponse.json({ ok: true });
+  }
 
-  if (!name) return NextResponse.json({ error: "name required" }, { status: 400 });
-  if (!EMAIL_RE.test(email)) return NextResponse.json({ error: "valid email required" }, { status: 400 });
-  if (!rawPhone) return NextResponse.json({ error: "phone required" }, { status: 400 });
-  if (!phone) return NextResponse.json({ error: "phone format invalid" }, { status: 400 });
+  const kind = body.kind;
+  if (kind !== "booking" && kind !== "soft_capture") {
+    return NextResponse.json({ error: "invalid kind" }, { status: 400 });
+  }
+
+  const icp = (body.icp ?? "").trim().slice(0, ICP_MAX);
+  if (icp.length < ICP_MIN) {
+    return NextResponse.json(
+      { error: `icp too short (min ${ICP_MIN} chars)` },
+      { status: 400 },
+    );
+  }
+
+  const tried = (Array.isArray(body.tried) ? body.tried : [])
+    .slice(0, TRIED_MAX_ITEMS)
+    .map((t) => String(t).trim().slice(0, TRIED_MAX_LEN))
+    .filter(Boolean);
+
+  const email = (body.email ?? "").trim().toLowerCase();
+  const name = (body.name ?? "").trim().slice(0, 120) || null;
+
+  if (kind === "soft_capture") {
+    if (!EMAIL_RE.test(email)) {
+      return NextResponse.json({ error: "valid email required" }, { status: 400 });
+    }
+    if (body.consent !== true) {
+      return NextResponse.json({ error: "consent required" }, { status: 400 });
+    }
+  }
 
   const supabase = createAdminClient();
   const userAgent = req.headers.get("user-agent")?.slice(0, 300) ?? null;
   const referer = req.headers.get("referer")?.slice(0, 300) ?? null;
 
   const { data: row, error: insErr } = await supabase
-    .from("quiz_submissions")
+    .from("scoping_submissions")
     .insert({
+      kind,
+      icp,
+      tried,
+      email: kind === "soft_capture" ? email : null,
       name,
-      email,
-      phone,
-      url: body.url ?? null,
-      monthly_leads: body.monthlyLeads ?? null,
-      deal_value: body.dealValue ?? null,
-      close_rate: body.closeRate ?? null,
-      response_time: body.responseTime ?? null,
-      channels: body.channels ?? null,
-      total_loss: body.totalLoss ?? null,
-      // DB columns kept (no migration); the new three-machine fields map
-      // to existing columns: speed_loss = hastighed, close_rate_loss =
-      // opfølgning, channel_loss = outbound.
-      speed_loss: body.hastighedLoss ?? null,
-      close_rate_loss: body.opfølgningLoss ?? null,
-      channel_loss: body.outboundLoss ?? null,
+      consent: kind === "soft_capture",
+      locale: body.locale === "en" ? "en" : "da",
       user_agent: userAgent,
       referrer: referer,
     })
@@ -103,30 +110,58 @@ export async function POST(req: Request) {
     );
   }
 
-  // Mirror into `leads` so the existing notify-new-lead DB trigger fires
-  // push notifications + the lead shows up in /leads. Failure non-fatal.
-  try {
-    await supabase.from("leads").insert({
-      name,
-      email,
-      phone,
-      source: "quiz",
-      page_url: referer,
-      user_agent: userAgent,
-      monthly_leads:
-        body.monthlyLeads != null ? String(body.monthlyLeads) : null,
-      response_time: body.responseTime ?? null,
-      workspace_id: CARTERCO_WORKSPACE_ID,
-      is_draft: false,
-    });
-  } catch (e) {
-    console.error("quiz-submit: leads-mirror failed", e);
+  if (kind === "soft_capture") {
+    // Mirror into `leads` (notify-new-lead trigger fires push + the lead
+    // shows in /leads). Dedupe by email: an existing non-draft lead gets the
+    // scoping context appended instead of a duplicate row. Failure non-fatal —
+    // the scoping row above is the durable record.
+    try {
+      const note = formatScopingNote(icp, tried);
+      const { data: existing } = await supabase
+        .from("leads")
+        .select("id, notes")
+        .eq("is_draft", false)
+        .ilike("email", email)
+        .limit(1);
+      if (existing && existing.length > 0) {
+        const merged = [existing[0].notes, note].filter(Boolean).join("\n---\n");
+        const { error: updErr } = await supabase
+          .from("leads")
+          .update({ notes: merged })
+          .eq("id", existing[0].id);
+        if (updErr) console.error("quiz-submit: leads-dedupe-update failed", updErr);
+        await supabase
+          .from("scoping_submissions")
+          .update({ lead_id: existing[0].id })
+          .eq("id", row.id);
+      } else {
+        const { data: lead, error: leadErr } = await supabase
+          .from("leads")
+          .insert({
+            name,
+            email,
+            source: "flex_soft_capture",
+            notes: note,
+            page_url: referer,
+            user_agent: userAgent,
+            workspace_id: CARTERCO_WORKSPACE_ID,
+            is_draft: false,
+          })
+          .select("id")
+          .single();
+        if (leadErr) {
+          console.error("quiz-submit: leads-mirror failed", leadErr);
+        } else if (lead) {
+          await supabase
+            .from("scoping_submissions")
+            .update({ lead_id: lead.id })
+            .eq("id", row.id);
+        }
+      }
+    } catch (e) {
+      console.error("quiz-submit: leads-mirror failed", e);
+    }
   }
-
-  // Auto-SMS removed 2026-05-22 — Phase 1 of the SMS rebuild. All
-  // outgoing SMS is now operator-triggered from /leads via Louis's
-  // personal iPhone (Phase 2). Lead row is still saved + mirrored to
-  // /leads, just no auto-text on submission.
 
   return NextResponse.json({ ok: true, id: row.id });
 }

@@ -1,5 +1,40 @@
 # TODOS
 
+## Website / Lead Flex CTA
+
+### Align the outbound hook copy with the new site CTA
+**Priority:** P2
+The site now promises "jeg finder dine købere og viser dig dem live" (Lead Flex
+CTA plan, ~/.gstack/.../ceo-plans/2026-06-10-leadflex-website-cta.md). The
+outbound DM hook ("want me to find your buyers?", design doc 2026-06-08 open
+question) should speak the same language so a prospect who sees both channels
+meets one offer, not two. Draft in human-typed Danish (humanize-compliant), per
+niche channel. Effort S. Depends on: CTA copy landing first.
+
+### Iterate the flex section + promise after the first real flex
+**Priority:** P2
+The flex-mockup section ships with clearly-fictional example data and a
+mechanism-led promise because no live flex has run yet. After the first real
+flex (customoffice): replace the illustrative panel with a real-shaped
+(anonymized) artifact, recalibrate whether "100" can be promised harder, and
+fold call learnings into the scoping questions. Effort S-M. Trigger: first
+completed live flex.
+
+### Add rate limiting to quiz-submit only if junk appears
+**Priority:** P3
+Soft-capture ships honeypot-only by explicit owner choice (no over-engineering;
+the booking path is cal.com's spam problem). If bot junk starts landing in
+/leads or push notifications get noisy, add a simple per-IP limit then.
+Effort S. Trigger: observed junk rows.
+
+### Optional: one "scoping_completed" Plausible event
+**Priority:** P3
+Step-level funnel events were explicitly skipped (twice) by the owner. The
+outside-voice review dissented: without a redirect-to-cal.com event, leaks
+between modal and booking are invisible. If the CTA swap underperforms on raw
+bookings and the cause is unclear, this one event is the cheapest diagnostic.
+Effort XS. Logged as cross-model tension in the CEO plan.
+
 ## Outreach / plays
 
 ### Wire play-aware follow-up sequences

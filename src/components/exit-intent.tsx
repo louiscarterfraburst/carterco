@@ -12,15 +12,15 @@ type Props = {
 const COPY = {
   da: {
     eyebrow: "Inden du går",
-    headline: "Jeg har et tal til dig.",
-    body: "Svar på 5 spørgsmål — så regner jeg hvor meget du mister.",
-    cta: "Tag lead-quizzen →",
+    headline: "Skal jeg finde jeres købere?",
+    body: "Fortæl mig hvad I sælger. Så kortlægger jeg jeres marked og viser jer køberne live på et kort møde.",
+    cta: "Find mine købere →",
   },
   en: {
     eyebrow: "Before you go",
-    headline: "I've got a number for you.",
-    body: "Answer 5 questions — I'll work out how much you're losing.",
-    cta: "Take the lead quiz →",
+    headline: "Want me to find your buyers?",
+    body: "Tell me what you sell. I'll map your market and show you the buyers live on a short call.",
+    cta: "Find my buyers →",
   },
 } as const;
 
