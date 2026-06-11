@@ -130,7 +130,7 @@ Deno.serve(async (request) => {
       if (scopingId && leadId) {
         const { data: scoping } = await supabase
           .from("scoping_submissions")
-          .select("id, icp, tried, lead_id")
+          .select("id, icp, customer_source, tried, lead_id")
           .eq("id", scopingId)
           .maybeSingle();
         if (scoping && scoping.lead_id) {
@@ -142,7 +142,11 @@ Deno.serve(async (request) => {
             .eq("id", scopingId);
           if (uidErr) console.warn("cal-webhook: scoping uid refresh failed", { scopingId, error: uidErr.message });
         } else if (scoping) {
-          const note = formatFlexNote(scoping.icp, scoping.tried ?? []);
+          const note = formatFlexNote({
+            icp: scoping.icp,
+            customerSource: scoping.customer_source,
+            tried: scoping.tried,
+          });
           const existingNotes = existing && existing.length > 0 ? existing[0].notes : null;
           const merged = [existingNotes, note].filter(Boolean).join("\n---\n");
           const { error: noteErr } = await supabase

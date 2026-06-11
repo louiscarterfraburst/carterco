@@ -14,7 +14,13 @@
 // Spam posture per owner decision: honeypot only, no rate limiting.
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/utils/supabase/admin";
-import { ICP_MAX, ICP_MIN, formatScopingNote } from "@/lib/scoping";
+import {
+  CUSTOMER_SOURCE_MAX,
+  CUSTOMER_SOURCE_MIN,
+  ICP_MAX,
+  ICP_MIN,
+  formatScopingNote,
+} from "@/lib/scoping";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,7 +28,7 @@ export const dynamic = "force-dynamic";
 type Body = {
   kind?: "booking" | "soft_capture";
   icp?: string;
-  tried?: string[];
+  customerSource?: string;
   email?: string;
   name?: string;
   consent?: boolean;
@@ -32,9 +38,6 @@ type Body = {
 };
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-const TRIED_MAX_ITEMS = 8;
-const TRIED_MAX_LEN = 60;
 
 // CarterCo workspace — the leads table requires workspace_id and the
 // notify-new-lead trigger keys push notifications to it.
@@ -66,10 +69,15 @@ export async function POST(req: Request) {
     );
   }
 
-  const tried = (Array.isArray(body.tried) ? body.tried : [])
-    .slice(0, TRIED_MAX_ITEMS)
-    .map((t) => String(t).trim().slice(0, TRIED_MAX_LEN))
-    .filter(Boolean);
+  const customerSource = (body.customerSource ?? "")
+    .trim()
+    .slice(0, CUSTOMER_SOURCE_MAX);
+  if (customerSource.length < CUSTOMER_SOURCE_MIN) {
+    return NextResponse.json(
+      { error: `customerSource too short (min ${CUSTOMER_SOURCE_MIN} chars)` },
+      { status: 400 },
+    );
+  }
 
   const email = (body.email ?? "").trim().toLowerCase();
   const name = (body.name ?? "").trim().slice(0, 120) || null;
@@ -92,7 +100,7 @@ export async function POST(req: Request) {
     .insert({
       kind,
       icp,
-      tried,
+      customer_source: customerSource,
       email: kind === "soft_capture" ? email : null,
       name,
       consent: kind === "soft_capture",
@@ -116,7 +124,7 @@ export async function POST(req: Request) {
     // scoping context appended instead of a duplicate row. Failure non-fatal —
     // the scoping row above is the durable record.
     try {
-      const note = formatScopingNote(icp, tried);
+      const note = formatScopingNote(icp, customerSource);
       // Workspace-scoped dedupe (leads is multi-tenant) + ilike-metachar
       // escape so a crafted email can't pattern-match another lead.
       const emailPattern = email.replace(/[%_]/g, "\\$&");

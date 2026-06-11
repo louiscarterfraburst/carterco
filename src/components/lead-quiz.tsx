@@ -2,14 +2,19 @@
 
 import { useEffect, useRef, useState } from "react";
 import { flexBookingUrl } from "@/lib/booking";
-import { ICP_MIN, ICP_MAX } from "@/lib/scoping";
+import {
+  ICP_MIN,
+  ICP_MAX,
+  CUSTOMER_SOURCE_MIN,
+  CUSTOMER_SOURCE_MAX,
+} from "@/lib/scoping";
 
 // Lead Flex scoping flow (CEO plan 2026-06-10-leadflex-website-cta).
 // Replaced the lead-quiz content 2026-06-11; the modal shell (chapter-marker
 // header, StepShell, PrimaryButton, escape-close, reset-on-open) is reused.
 //
-// Flow: icp → tried → book. Persist-then-book: clicking "Book mødet" POSTs
-// the two answers to /api/quiz-submit first (anonymous scoping row), then
+// Flow: icp → source → book. Persist-then-book: clicking "Book mødet" POSTs
+// the scoping answers to /api/quiz-submit first (anonymous scoping row), then
 // redirects to cal.com with only a `scoping:<id>` token in the notes.
 // Alternative exit on the book step: soft-capture (email + explicit consent)
 // → "done" step. Honeypot field rides along on both submits.
@@ -22,7 +27,7 @@ type Props = {
   locale?: Locale;
 };
 
-type StepLabelKey = "icp" | "tried" | "book" | "done";
+type StepLabelKey = "icp" | "source" | "book" | "done";
 
 type CopyT = {
   step: string;
@@ -38,10 +43,10 @@ type CopyT = {
   icpQuestionAfter: string;
   icpHint: string;
   icpPlaceholder: string;
-  // Tried step
-  triedQuestion: string;
-  triedHint: string;
-  triedOptions: string[];
+  // Source step (where current customers come from — free text, no chips)
+  sourceQuestion: string;
+  sourceHint: string;
+  sourcePlaceholder: string;
   // Book step
   bookQuestion: string;
   bookBody: string;
@@ -67,7 +72,7 @@ const COPY: Record<Locale, CopyT> = {
     sending: "Sender…",
     stepLabels: {
       icp: "Jeres købere",
-      tried: "Erfaring",
+      source: "Jeres kunder",
       book: "Mødet",
       done: "Tak",
     },
@@ -76,15 +81,10 @@ const COPY: Record<Locale, CopyT> = {
     icpQuestionAfter: "?",
     icpHint: "To linjer er nok. Det er det jeg bruger til at kortlægge jeres marked inden mødet.",
     icpPlaceholder: "Fx: Vi sælger engros rengøringsartikler til hoteller og kantiner i hele landet",
-    triedQuestion: "Hvad har I prøvet for at skaffe leads?",
-    triedHint: "Vælg alt det der passer. Det former hvad jeg viser jer.",
-    triedOptions: [
-      "Apollo eller lignende værktøj",
-      "Bureau eller lead-leverandør",
-      "Købte lister",
-      "Selv på LinkedIn",
-      "Ikke noget endnu",
-    ],
+    sourceQuestion: "Hvor kommer jeres kunder fra i dag?",
+    sourceHint: "Frit felt, skriv det som det er. Et par linjer er fint.",
+    sourcePlaceholder:
+      "Fx: De fleste kommer gennem henvisninger. Vi har flere hundrede gamle kunder i CRM'et, som ingen følger op på.",
     bookQuestion: "Så er jeg klar til at finde dem.",
     bookBody: "Book 30 minutter. Inden mødet kortlægger jeg jeres marked, og på mødet deler jeg skærm og viser jer køberne live, med en grund til at række ud for hver enkelt. I beholder listen.",
     bookCta: "Book mødet →",
@@ -106,7 +106,7 @@ const COPY: Record<Locale, CopyT> = {
     sending: "Sending…",
     stepLabels: {
       icp: "Your buyers",
-      tried: "Experience",
+      source: "Your customers",
       book: "The meeting",
       done: "Thanks",
     },
@@ -115,15 +115,10 @@ const COPY: Record<Locale, CopyT> = {
     icpQuestionAfter: "?",
     icpHint: "Two lines is plenty. This is what I use to map your market before the meeting.",
     icpPlaceholder: "E.g.: We sell wholesale cleaning supplies to hotels and canteens nationwide",
-    triedQuestion: "What have you tried for lead generation?",
-    triedHint: "Pick everything that applies. It shapes what I show you.",
-    triedOptions: [
-      "Apollo or a similar tool",
-      "An agency or lead vendor",
-      "Bought lists",
-      "LinkedIn ourselves",
-      "Nothing yet",
-    ],
+    sourceQuestion: "Where do your customers come from today?",
+    sourceHint: "Free field, tell it like it is. A couple of lines is fine.",
+    sourcePlaceholder:
+      "E.g.: Most come through referrals. We have a few hundred old customers in the CRM nobody follows up on.",
     bookQuestion: "Then I'm ready to find them.",
     bookBody: "Book 30 minutes. Before the meeting I map your market, and on the call I share my screen and show you the buyers live, each with a reason to reach out. The list is yours to keep.",
     bookCta: "Book the meeting →",
@@ -138,7 +133,7 @@ const COPY: Record<Locale, CopyT> = {
   },
 };
 
-const STEP_KEYS = ["icp", "tried", "book", "done"] as const;
+const STEP_KEYS = ["icp", "source", "book", "done"] as const;
 
 type StepKey = (typeof STEP_KEYS)[number];
 
@@ -148,7 +143,7 @@ export function LeadQuiz({ open, onClose, locale = "da" }: Props) {
   const t = COPY[locale];
   const [stepIndex, setStepIndex] = useState(0);
   const [icp, setIcp] = useState("");
-  const [tried, setTried] = useState<string[]>([]);
+  const [customerSource, setCustomerSource] = useState("");
   const [softOpen, setSoftOpen] = useState(false);
   const [softEmail, setSoftEmail] = useState("");
   const [softName, setSoftName] = useState("");
@@ -192,14 +187,6 @@ export function LeadQuiz({ open, onClose, locale = "da" }: Props) {
     setStepIndex((i) => Math.max(0, i - 1));
   }
 
-  function toggleTried(option: string) {
-    setTried((prev) =>
-      prev.includes(option)
-        ? prev.filter((o) => o !== option)
-        : [...prev, option],
-    );
-  }
-
   // Persist-then-book: save the answers first, then send the visitor to
   // cal.com with only the scoping token in the notes. cal.com collects
   // name/email itself on the booking page.
@@ -214,7 +201,7 @@ export function LeadQuiz({ open, onClose, locale = "da" }: Props) {
         body: JSON.stringify({
           kind: "booking",
           icp: icp.trim(),
-          tried,
+          customerSource: customerSource.trim(),
           locale,
           website,
         }),
@@ -254,7 +241,7 @@ export function LeadQuiz({ open, onClose, locale = "da" }: Props) {
         body: JSON.stringify({
           kind: "soft_capture",
           icp: icp.trim(),
-          tried,
+          customerSource: customerSource.trim(),
           email: softEmail.trim(),
           name: softName.trim() || undefined,
           consent,
@@ -332,10 +319,10 @@ export function LeadQuiz({ open, onClose, locale = "da" }: Props) {
           {currentStepKey === "icp" && (
             <IcpStep value={icp} onChange={setIcp} onSubmit={next} t={t} />
           )}
-          {currentStepKey === "tried" && (
-            <TriedStep
-              selected={tried}
-              onToggle={toggleTried}
+          {currentStepKey === "source" && (
+            <SourceStep
+              value={customerSource}
+              onChange={setCustomerSource}
               onSubmit={next}
               t={t}
             />
@@ -483,48 +470,37 @@ function IcpStep({
   );
 }
 
-function TriedStep({
-  selected,
-  onToggle,
+function SourceStep({
+  value,
+  onChange,
   onSubmit,
   t,
 }: {
-  selected: string[];
-  onToggle: (option: string) => void;
+  value: string;
+  onChange: (v: string) => void;
   onSubmit: () => void;
   t: CopyT;
 }) {
-  const valid = selected.length > 0;
+  const valid = value.trim().length >= CUSTOMER_SOURCE_MIN;
   return (
     <StepShell
-      question={t.triedQuestion}
-      hint={t.triedHint}
+      question={t.sourceQuestion}
+      hint={t.sourceHint}
       footer={
         <PrimaryButton onClick={onSubmit} disabled={!valid}>
           {t.next}
         </PrimaryButton>
       }
     >
-      <div className="flex flex-wrap gap-2.5">
-        {t.triedOptions.map((option) => {
-          const active = selected.includes(option);
-          return (
-            <button
-              key={option}
-              type="button"
-              aria-pressed={active}
-              onClick={() => onToggle(option)}
-              className={`rounded-full border px-5 py-2.5 text-[13px] transition ${
-                active
-                  ? "border-[#ff6b2c] bg-[#ff6b2c]/10 text-[var(--cream)]"
-                  : "border-[var(--cream)]/15 text-[var(--cream)]/65 hover:border-[var(--cream)]/40 hover:text-[var(--cream)]"
-              }`}
-            >
-              {option}
-            </button>
-          );
-        })}
-      </div>
+      <textarea
+        autoFocus
+        value={value}
+        maxLength={CUSTOMER_SOURCE_MAX}
+        rows={3}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={t.sourcePlaceholder}
+        className="w-full resize-none border-b border-[var(--cream)]/20 bg-transparent pb-3 text-[17px] leading-relaxed text-[var(--cream)] placeholder:text-[var(--cream)]/30 focus:border-[#ff6b2c] focus:outline-none sm:text-[19px]"
+      />
     </StepShell>
   );
 }

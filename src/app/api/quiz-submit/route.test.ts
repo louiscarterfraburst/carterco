@@ -58,6 +58,7 @@ function post(body: unknown): Promise<Response> {
 }
 
 const VALID_ICP = "Vi sælger engros rengøringsartikler til hoteller";
+const VALID_SOURCE = "Mest henvisninger, vi har 300 gamle kunder i CRM'et";
 
 describe("POST /api/quiz-submit (scoping contract)", () => {
   beforeEach(() => {
@@ -81,6 +82,13 @@ describe("POST /api/quiz-submit (scoping contract)", () => {
     expect(res.status).toBe(400);
   });
 
+  it("rejects missing or too-short customerSource", async () => {
+    const missing = await post({ kind: "booking", icp: VALID_ICP });
+    expect(missing.status).toBe(400);
+    const short = await post({ kind: "booking", icp: VALID_ICP, customerSource: "aaa" });
+    expect(short.status).toBe(400);
+  });
+
   it("honeypot: pretends success and writes nothing", async () => {
     const fake = makeFakeClient();
     holder.client = fake.client;
@@ -92,24 +100,37 @@ describe("POST /api/quiz-submit (scoping contract)", () => {
   it("booking: persists an anonymous scoping row and returns its id", async () => {
     const fake = makeFakeClient();
     holder.client = fake.client;
-    const res = await post({ kind: "booking", icp: VALID_ICP, tried: ["Købte lister"], locale: "da" });
+    const res = await post({
+      kind: "booking",
+      icp: VALID_ICP,
+      customerSource: VALID_SOURCE,
+      locale: "da",
+    });
     expect(res.status).toBe(200);
     const data = (await res.json()) as { id?: string };
     expect(data.id).toBeTruthy();
     expect(fake.inserts).toHaveLength(1);
     expect(fake.inserts[0].table).toBe("scoping_submissions");
     expect(fake.inserts[0].payload.kind).toBe("booking");
+    expect(fake.inserts[0].payload.customer_source).toBe(VALID_SOURCE);
     expect(fake.inserts[0].payload.email).toBeNull();
     expect(fake.inserts[0].payload.consent).toBe(false);
   });
 
+  it("booking: an oversized customerSource is capped at 400 chars", async () => {
+    const fake = makeFakeClient();
+    holder.client = fake.client;
+    await post({ kind: "booking", icp: VALID_ICP, customerSource: "x".repeat(1000) });
+    expect(String(fake.inserts[0].payload.customer_source)).toHaveLength(400);
+  });
+
   it("soft_capture: rejects missing email", async () => {
-    const res = await post({ kind: "soft_capture", icp: VALID_ICP, consent: true });
+    const res = await post({ kind: "soft_capture", icp: VALID_ICP, customerSource: VALID_SOURCE, consent: true });
     expect(res.status).toBe(400);
   });
 
   it("soft_capture: rejects missing consent", async () => {
-    const res = await post({ kind: "soft_capture", icp: VALID_ICP, email: "a@b.dk" });
+    const res = await post({ kind: "soft_capture", icp: VALID_ICP, customerSource: VALID_SOURCE, email: "a@b.dk" });
     expect(res.status).toBe(400);
   });
 
@@ -119,7 +140,7 @@ describe("POST /api/quiz-submit (scoping contract)", () => {
     const res = await post({
       kind: "soft_capture",
       icp: VALID_ICP,
-      tried: ["Selv på LinkedIn"],
+      customerSource: "Mest genkøb, lidt henvisninger",
       email: "ny@firma.dk",
       consent: true,
     });
@@ -130,6 +151,7 @@ describe("POST /api/quiz-submit (scoping contract)", () => {
     const lead = fake.inserts.find((c) => c.table === "leads")!;
     expect(lead.payload.source).toBe("flex_soft_capture");
     expect(String(lead.payload.notes)).toContain("ICP:");
+    expect(String(lead.payload.notes)).toContain("Kunder kommer fra: Mest genkøb, lidt henvisninger");
   });
 
   it("soft_capture: dedupes by email — updates the existing lead instead of inserting", async () => {
@@ -138,6 +160,7 @@ describe("POST /api/quiz-submit (scoping contract)", () => {
     const res = await post({
       kind: "soft_capture",
       icp: VALID_ICP,
+      customerSource: VALID_SOURCE,
       email: "kendt@firma.dk",
       consent: true,
     });

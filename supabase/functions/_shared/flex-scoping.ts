@@ -15,8 +15,19 @@ export function extractScopingId(raw: string): string | null {
   return m ? m[1].toLowerCase() : null;
 }
 
-export function formatFlexNote(icp: string, tried: string[]): string {
-  const lines = ["Flex-møde booket via carterco.dk", `ICP: ${icp}`];
-  if (tried.length) lines.push(`Har prøvet: ${tried.join(", ")}`);
+// `tried` is the pre-2026-06-11 form's answer ("hvad har I prøvet"); rows
+// from the current form carry `customerSource` (free text) instead. A row
+// only ever has one of the two filled, so customerSource wins when present.
+export function formatFlexNote(s: {
+  icp: string;
+  customerSource?: string | null;
+  tried?: string[] | null;
+}): string {
+  const lines = ["Flex-møde booket via carterco.dk", `ICP: ${s.icp}`];
+  if (s.customerSource) {
+    lines.push(`Kunder kommer fra: ${s.customerSource}`);
+  } else if (s.tried?.length) {
+    lines.push(`Har prøvet: ${s.tried.join(", ")}`);
+  }
   return lines.join("\n");
 }
