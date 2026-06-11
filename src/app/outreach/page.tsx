@@ -28,8 +28,9 @@ import {
 import "@xyflow/react/dist/style.css";
 import {
   ARM_META,
-  FLOW_MAIN_PATH,
-  FLOW_STEP_META,
+  FLOW_MAIN_PATHS,
+  type WorkspaceOutreachStyle,
+  flowStepMeta,
   OUTCOME_DEFS,
   activeArms,
   buildTreeNodes,
@@ -299,6 +300,10 @@ type Play = {
   position: number;
   is_default: boolean;
   trigger_sequence_id: string | null;
+  // Registry flag: this play's intake automation logs to hiring_pipeline_runs,
+  // so the Plays tab shows the daily-runs panel for it. Replaces the old
+  // hardcoded `play.id === "hiring_signal"` gate.
+  has_intake_runs: boolean;
 };
 
 // A play-tagged lead staged in outreach_leads, before any invite has fired
@@ -411,11 +416,16 @@ type SortKey = "queued_oldest" | "queued_newest" | "name";
 type ColdFilter = "all" | "cold" | "warm";
 
 // Identity drives the click-to-handoff message templates on Signaler cards
-// (sms:, mailto:, vCard). Same shape as /leads; sourced from user_settings.
+// (sms:, mailto:, vCard). Resolved per ACTIVE WORKSPACE from its voice
+// playbook (owner_first_name, company_display_name, booking_link) so a
+// handoff fired from a client workspace introduces the CLIENT's sender, not
+// the operator. user_settings is the fallback for workspaces without a
+// playbook row. calendlyUrl null = workspace has no booking link; the email
+// template omits the booking line rather than leaking another tenant's.
 type Identity = {
   displayName: string;
   companyName: string;
-  calendlyUrl: string;
+  calendlyUrl: string | null;
   signoff: string;
 };
 
@@ -445,14 +455,13 @@ function buildSignalSmsBody(name: string | null, identity: Identity, companyName
 function buildSignalEmailDraft(name: string | null, identity: Identity, companyName: string | null) {
   const where = companyName ? `hos ${companyName}` : "i jeres team";
   const subject = `Hilsen efter jeres besøg på ${identity.companyName}`;
+  const bookingLine = identity.calendlyUrl ? `\nDu kan også booke direkte her: ${identity.calendlyUrl}\n` : "";
   const body = `Hej ${firstName(name)},
 
 Det er ${identity.displayName} fra ${identity.companyName}. Jeg så I ${where} kiggede på vores side – formentlig fordi noget af det vi gør er relevant lige nu.
 
 Har du 20 minutter til en kort snak om, hvordan vi kan gøre jeres leads varme hurtigere?
-
-Du kan også booke direkte her: ${identity.calendlyUrl}
-
+${bookingLine}
 /${identity.signoff}`;
   return { subject, body };
 }
@@ -562,28 +571,61 @@ export default function OutreachPage() {
     return () => { mounted = false; subscription.unsubscribe(); };
   }, [supabase]);
 
-  // Identity: pulled from user_settings, used by the click-to-handoff message
-  // templates on Signaler. Same shape as /leads — when /leads moves to a
-  // shared util this duplication goes away.
+  // Identity: resolved per ACTIVE WORKSPACE from its voice playbook, so a
+  // Signaler handoff fired while a client workspace is selected introduces
+  // the client's sender ("det er Rasmus fra Tresyv"), never the operator's
+  // own company. user_settings is the fallback for workspaces without a
+  // playbook row (same shape as /leads — shared util TODO still stands).
   useEffect(() => {
     if (!user?.email) return;
     let cancelled = false;
     (async () => {
-      const { data: settings } = await supabase
-        .from("user_settings")
-        .select("display_name, company_name, calendly_url, signoff")
-        .eq("user_email", user.email)
-        .maybeSingle();
-      if (cancelled || !settings) return;
+      const [settingsRes, playbookRes] = await Promise.all([
+        supabase
+          .from("user_settings")
+          .select("display_name, company_name, calendly_url, signoff")
+          .eq("user_email", user.email)
+          .maybeSingle(),
+        activeWorkspaceId
+          ? supabase
+              .from("outreach_voice_playbooks")
+              .select("owner_first_name, company_display_name, booking_link")
+              .eq("workspace_id", activeWorkspaceId)
+              .maybeSingle()
+          : Promise.resolve({ data: null }),
+      ]);
+      if (cancelled) return;
+      const settings = settingsRes.data as {
+        display_name: string | null; company_name: string | null;
+        calendly_url: string | null; signoff: string | null;
+      } | null;
+      const playbook = playbookRes.data as {
+        owner_first_name: string | null; company_display_name: string | null;
+        booking_link: string | null;
+      } | null;
+      if (!settings && !playbook) return;
+      const displayName = playbook?.owner_first_name?.trim()
+        || settings?.display_name?.trim()
+        || "Louis";
       setIdentity({
-        displayName: settings.display_name?.trim() || "Louis",
-        companyName: settings.company_name?.trim() || "Carter & Co",
-        calendlyUrl: settings.calendly_url?.trim() || "https://cal.com/louis-carter-3twilu/20min",
-        signoff: settings.signoff?.trim() || settings.display_name?.trim() || "Louis",
+        displayName,
+        companyName: playbook?.company_display_name?.trim()
+          || activeWorkspace?.name
+          || settings?.company_name?.trim()
+          || "Carter & Co",
+        // With a playbook row, the workspace's own booking link (or none) is
+        // authoritative — never fall through to the operator's link.
+        calendlyUrl: playbook
+          ? (playbook.booking_link?.trim() || activeWorkspace?.booking_url || null)
+          : (settings?.calendly_url?.trim() || null),
+        signoff: activeWorkspace?.signoff?.trim()
+          || playbook?.owner_first_name?.trim()
+          || settings?.signoff?.trim()
+          || displayName,
       });
     })();
     return () => { cancelled = true; };
-  }, [user, supabase]);
+  }, [user, supabase, activeWorkspaceId, activeWorkspace]);
 
   // ---------- data load ----------
   const load = useCallback(async () => {
@@ -597,11 +639,23 @@ export default function OutreachPage() {
       .limit(1000);
     if (pipeErr) { setErr(pipeErr.message); return; }
     const emails = Array.from(new Set((pipe ?? []).map((r) => r.contact_email).filter(Boolean)));
-    const { data: leads } = await supabase
-      .from("outreach_leads")
-      .select("contact_email, first_name, last_name, company, title, website")
-      .eq("workspace_id", activeWorkspaceId)
-      .in("contact_email", emails.length ? emails : [""]);
+    // Chunked .in() lookup: PostgREST encodes the list into the GET query
+    // string, and at ~500+ addresses (long carterco+ aliases) the URL passes
+    // common proxy caps — the query would fail and every contact would render
+    // nameless with no visible error. 150 per request stays far under any cap.
+    const EMAIL_CHUNK = 150;
+    const leadChunks = await Promise.all(
+      Array.from({ length: Math.ceil(emails.length / EMAIL_CHUNK) }, (_, i) =>
+        supabase
+          .from("outreach_leads")
+          .select("contact_email, first_name, last_name, company, title, website")
+          .eq("workspace_id", activeWorkspaceId)
+          .in("contact_email", emails.slice(i * EMAIL_CHUNK, (i + 1) * EMAIL_CHUNK)),
+      ),
+    );
+    const leadFetchErr = leadChunks.find((c) => c.error)?.error;
+    if (leadFetchErr) console.error("outreach: lead enrichment lookup failed", leadFetchErr.message);
+    const leads = leadChunks.flatMap((c) => c.data ?? []);
     const leadMap = new Map((leads ?? []).map((l) => [l.contact_email, l as LeadEnrich]));
     setRows(((pipe ?? []) as PipelineRow[]).map((r) => ({ ...r, lead: leadMap.get(r.contact_email) })));
 
@@ -610,7 +664,7 @@ export default function OutreachPage() {
     // and the play filter on Flow/Kontakter.
     const { data: playRows } = await supabase
       .from("outreach_plays")
-      .select("id, workspace_id, label, description, status, position, is_default, trigger_sequence_id")
+      .select("id, workspace_id, label, description, status, position, is_default, trigger_sequence_id, has_intake_runs")
       .or(`workspace_id.is.null,workspace_id.eq.${activeWorkspaceId}`)
       .order("position", { ascending: true });
     const resolvedPlays = resolvePlays((playRows ?? []) as Play[]);
@@ -632,13 +686,20 @@ export default function OutreachPage() {
       : { data: [] as StagedLead[] };
     setStagedPlays((stagedLeads ?? []) as StagedLead[]);
 
-    // Recent hiring-signal pipeline runs (cron + manual) — drives the daily-run
-    // panel in the Plays overview. Global to CarterCo, not workspace-scoped.
-    const { data: runRows } = await supabase
-      .from("hiring_pipeline_runs")
-      .select("ran_at, trigger, companies_found, decision_makers, leads_staged, leads_added_sendpilot, skipped_existing, skipped_cross_workspace, unresolved, held_company_dialogue, status")
-      .order("ran_at", { ascending: false })
-      .limit(14);
+    // Recent intake-pipeline runs (cron + manual) — drives the daily-run panel
+    // for plays flagged has_intake_runs. Scoped to the active workspace (and
+    // RLS enforces membership on top), so a client cockpit never renders
+    // another tenant's intake telemetry. Skipped entirely when no resolved
+    // play has intake runs.
+    const anyIntakeRuns = resolvedPlays.some((p) => p.has_intake_runs);
+    const { data: runRows } = anyIntakeRuns
+      ? await supabase
+          .from("hiring_pipeline_runs")
+          .select("ran_at, trigger, companies_found, decision_makers, leads_staged, leads_added_sendpilot, skipped_existing, skipped_cross_workspace, unresolved, held_company_dialogue, status")
+          .eq("workspace_id", activeWorkspaceId)
+          .order("ran_at", { ascending: false })
+          .limit(14)
+      : { data: [] as HiringRun[] };
     setHiringRuns((runRows ?? []) as HiringRun[]);
 
     const { data: replyRows } = await supabase
@@ -1630,6 +1691,7 @@ export default function OutreachPage() {
         ) : tab === "flow" ? (
           <FlowTab rows={rows} sequences={sequences} replies={replies} armStats={armStats}
             plays={plays} playFilter={playFilter} onPlayFilter={setPlayFilter}
+            outreachStyle={activeWorkspace?.outreach_style === "ai_drafted_dm" ? "ai_drafted_dm" : "video_render"}
             busyLead={busyLead}
             onRetry={(id) => void decide(id, "approve").then((ok) => { if (ok) { setInfo("Sendt — prøvede igen."); void load(); } })} />
         ) : tab === "kontakter" ? (
@@ -1836,8 +1898,8 @@ const FLOW_NODE_TYPES = { flowCard: FlowCardNode };
 // The main journey — always shown so the spine never disconnects, even when a
 // stage is momentarily empty. Everything else shows only when it holds
 // contacts (workspace-aware), so client-specific side-branches don't clutter.
-// Single source: FLOW_MAIN_PATH in flow.ts (linearizeFlow lays it out).
-const FLOW_SPINE = new Set<string>(FLOW_MAIN_PATH);
+// Single source: FLOW_MAIN_PATHS in flow.ts, keyed by the active workspace's
+// outreach_style (linearizeFlow lays it out).
 
 function MessageBlueprint({ nodeId, seqStep }: {
   nodeId: string;
@@ -1918,7 +1980,7 @@ function ContactMessages({ row, reply }: { row: PipelineRow; reply: Reply | null
 // runs more than one play OR a filter is active — an active filter must
 // always be visible and clearable, even in a single-play workspace (the
 // Plays tab's deep-links set it unconditionally).
-function FlowTab({ rows, sequences, replies, armStats, plays, playFilter, onPlayFilter, busyLead, onRetry }: {
+function FlowTab({ rows, sequences, replies, armStats, plays, playFilter, onPlayFilter, outreachStyle, busyLead, onRetry }: {
   rows: PipelineRow[];
   sequences: SeqLite[];
   replies: Reply[];
@@ -1926,6 +1988,7 @@ function FlowTab({ rows, sequences, replies, armStats, plays, playFilter, onPlay
   plays: Play[];
   playFilter: string;
   onPlayFilter: (playId: string) => void;
+  outreachStyle: WorkspaceOutreachStyle;
   busyLead: string | null;
   onRetry: (leadId: string) => void;
 }) {
@@ -2002,8 +2065,12 @@ function FlowTab({ rows, sequences, replies, armStats, plays, playFilter, onPlay
   // occupied. Arm-mode trees pass through linearizeFlow untouched.
   const layoutDefs = useMemo(() => {
     const occupied = new Set([...counts.entries()].filter(([, c]) => c > 0).map(([id]) => id));
-    return linearizeFlow(treeDefs, occupied);
-  }, [treeDefs, counts]);
+    return linearizeFlow(treeDefs, occupied, outreachStyle);
+  }, [treeDefs, counts, outreachStyle]);
+
+  // Spine + card semantics follow the workspace's outreach style.
+  const flowSpine = useMemo(() => new Set<string>(FLOW_MAIN_PATHS[outreachStyle]), [outreachStyle]);
+  const stepMeta = useMemo(() => flowStepMeta(outreachStyle), [outreachStyle]);
 
   // Pill counts: live pipeline rows per play (unscoped, so the numbers don't
   // change as you click through plays).
@@ -2026,10 +2093,10 @@ function FlowTab({ rows, sequences, replies, armStats, plays, playFilter, onPlay
       // Always show the spine, arms, and the sequence skeleton (so every arm
       // shows its follow-ups even at 0 leads); plus anything holding contacts.
       // linearizeFlow already dropped empty exception branches.
-      if (FLOW_SPINE.has(n.id) || n.kind === "arm" || n.kind === "sequence" || (counts.get(n.id) ?? 0) > 0) s.add(n.id);
+      if (flowSpine.has(n.id) || n.kind === "arm" || n.kind === "sequence" || (counts.get(n.id) ?? 0) > 0) s.add(n.id);
     }
     return s;
-  }, [layoutDefs, counts]);
+  }, [layoutDefs, counts, flowSpine]);
 
   const rfNodes = useMemo<RFNode[]>(() => {
     // Vertical automation: the main journey is ONE centered column going down;
@@ -2062,10 +2129,10 @@ function FlowTab({ rows, sequences, replies, armStats, plays, playFilter, onPlay
             // once the oldest contact has sat ≥5 days.
             const oldest = oldestByNode.get(n.id) ?? null;
             const ageMs = oldest ? Date.now() - Date.parse(oldest) : 0;
-            // Automation semantics: statuses carry FLOW_STEP_META; sequence
-            // steps describe their wait gate so the card reads like an
-            // ActiveCampaign wait+send step.
-            const meta = n.kind === "status" ? FLOW_STEP_META[n.id] : undefined;
+            // Automation semantics: statuses carry style-aware step meta;
+            // sequence steps describe their wait gate so the card reads like
+            // an ActiveCampaign wait+send step.
+            const meta = n.kind === "status" ? stepMeta[n.id] : undefined;
             const seqInfo = n.kind === "sequence" ? lookupSeqStep(n.id, scopedSequences) : null;
             const seqDesc = seqInfo
               ? (seqInfo.step.waitHours
@@ -2982,11 +3049,9 @@ function PlayDetail({ play, pipe, stagedLeads, runs, sequences, onOpenContacts }
   onOpenContacts: (playId: string) => void;
 }) {
   const lastRun = runs[0];
-  // Intake-run panel: hiring_pipeline_runs is the hiring-signal play's intake
-  // infrastructure (run_hiring_pipeline.sh). Keyed on the play id here because
-  // the runs table has no play column yet — generalising intake runs to other
-  // plays means adding one and dropping this check.
-  const showRuns = play.id === "hiring_signal";
+  // Intake-run panel: shown for any play whose registry row opts in via
+  // has_intake_runs. The runs themselves are workspace-scoped at fetch + RLS.
+  const showRuns = play.has_intake_runs;
 
   // Funnel stages in flow order; "Klargjort" only exists for plays whose
   // intake pre-stages leads (the default play's universe is every imported

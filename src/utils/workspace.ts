@@ -11,6 +11,9 @@ export type Workspace = {
   // Workspace-owned no-answer SMS message ({fornavn}/{medarbejder}/{brand}/
   // {booking}/{slots} tokens). NULL = built-in default in leads/messages.ts.
   sms_template?: string | null;
+  // First-message mechanism (video_render | ai_drafted_dm) — drives the Flow
+  // board's main spine in /outreach.
+  outreach_style?: string | null;
 };
 
 // Returns the workspaces the authenticated user is a member of. RLS filters the
@@ -30,7 +33,7 @@ export function useWorkspace(
 
     void supabase
       .from("workspaces")
-      .select("id, name, sms_enabled, booking_url, signoff, outcome_preset, sms_template")
+      .select("id, name, sms_enabled, booking_url, signoff, outcome_preset, sms_template, outreach_style")
       .order("name", { ascending: true })
       .then(({ data }) => {
         if (cancelled) return;
@@ -44,6 +47,7 @@ export function useWorkspace(
             signoff: w.signoff ?? null,
             outcome_preset: w.outcome_preset ?? "standard",
             sms_template: w.sms_template ?? null,
+            outreach_style: w.outreach_style ?? "video_render",
           })),
         });
       });

@@ -16,20 +16,9 @@ const SUPABASE_KEY =
   process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??
   "sb_publishable_rKCrGrKGUr48lEhjqWj3dw_V0kAEKQl";
 
-// Mirrors supabase/functions/_shared/workspaces.ts. The Next app cannot import
-// across that boundary, so we duplicate the small mapping here. When you add a
-// client, update both files.
-const WORKSPACE_OUTREACH_STYLE: Record<string, "video_render" | "ai_drafted_dm"> = {
-  "1e067f9a-d453-41a7-8bc4-9fdb5644a5fa": "video_render",  // CarterCo
-  "2740ba1f-d5d5-4008-bf43-b45367c73134": "video_render",  // Tresyv
-  "f4777612-4615-4734-94de-4745eade3318": "video_render",  // Haugefrom
-  "cdfd80d8-33bb-4b64-b778-0a2c5ab78cc6": "ai_drafted_dm", // OdaGroup
-};
-
-// Maps workspace UUID → slug under clients/<slug>/agent-brief.md.
-const WORKSPACE_BRIEF_SLUG: Record<string, string> = {
-  "cdfd80d8-33bb-4b64-b778-0a2c5ab78cc6": "odagroup",
-};
+// outreach_style and brief_slug live on the workspaces row (single source of
+// truth, shared with sendpilot-webhook via outreachStyleFor) — onboarding a
+// client is a column update, not a two-file code edit.
 
 type VoicePlaybook = {
   owner_first_name: string | null;
@@ -277,7 +266,7 @@ export async function GET(req: NextRequest) {
 
   const { data: workspaces, error: wsErr } = await sb
     .from("workspaces")
-    .select("id, name, owner_email")
+    .select("id, name, owner_email, outreach_style, brief_slug")
     .order("name", { ascending: true });
 
   if (wsErr) {
@@ -348,7 +337,7 @@ export async function GET(req: NextRequest) {
       }
 
       let agentBrief: AgentBrief | null = null;
-      const slug = WORKSPACE_BRIEF_SLUG[ws.id];
+      const slug = (ws as { brief_slug?: string | null }).brief_slug ?? null;
       if (slug) {
         try {
           const briefPath = path.join(process.cwd(), "clients", slug, "agent-brief.md");
@@ -364,7 +353,10 @@ export async function GET(req: NextRequest) {
         }
       }
 
-      const style = WORKSPACE_OUTREACH_STYLE[ws.id] ?? "video_render";
+      const style: "video_render" | "ai_drafted_dm" =
+        (ws as { outreach_style?: string | null }).outreach_style === "ai_drafted_dm"
+          ? "ai_drafted_dm"
+          : "video_render";
       return {
         workspace: { id: ws.id, name: ws.name, owner_email: ws.owner_email ?? null },
         outreach_style: style,
