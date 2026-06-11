@@ -2638,9 +2638,6 @@ export default function Home() {
             <p className="mt-6 max-w-md text-[15px] leading-[1.7] text-[#29261f]/75">
               Fortæl mig hvad I sælger. På mødet deler jeg skærm og eksporterer listen live: hvem, hvordan du fanger dem, og hvorfor lige nu.
             </p>
-            <p className="mt-3 max-w-md text-[13px] leading-[1.6] text-[#29261f]/55">
-              Findes der kun 40 ægte købere i jeres niche, får I 40. Ikke 100 tynde.
-            </p>
             <div className="mt-8">
               <button
                 type="button"

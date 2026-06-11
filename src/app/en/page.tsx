@@ -2638,9 +2638,6 @@ export default function Home() {
             <p className="mt-6 max-w-md text-[15px] leading-[1.7] text-[#29261f]/75">
               Tell me what you sell. On the call I share my screen and export the list live: who, where you reach them, and why right now.
             </p>
-            <p className="mt-3 max-w-md text-[13px] leading-[1.6] text-[#29261f]/55">
-              If your niche holds 40 real buyers, you get 40. Not 100 thin ones.
-            </p>
             <div className="mt-8">
               <button
                 type="button"
