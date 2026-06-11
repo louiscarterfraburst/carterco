@@ -21,6 +21,20 @@ export function workspaceLabel(id: string | null | undefined): string {
   return WORKSPACE_LABELS[id] ?? id.slice(0, 8);
 }
 
+// Workspaces whose first cold DM is AI-drafted (draftFirstMessage) instead of
+// a SendSpark video render. The accept handlers (sendpilot-webhook + the poll
+// backfill) branch on this: AI-drafted workspaces skip the video/website path
+// and go straight to pending_ai_draft → draftFirstMessage → pending_approval.
+// Keep in sync with WORKSPACE_OUTREACH_STYLE in the Next client-config route.
+const AI_DRAFTED_DM_WORKSPACES = new Set([
+  ODAGROUP_WORKSPACE_ID,
+  BIKENOR_WORKSPACE_ID,
+]);
+
+export function isAiDraftedDmWorkspace(id: string | null | undefined): boolean {
+  return !!id && AI_DRAFTED_DM_WORKSPACES.has(id);
+}
+
 // Looks up the canonical (active) SendPilot sender for a workspace via the
 // workspace_senders table. ALL send paths (outreach-approve, invite-alt-
 // contact, outreach-engagement-tick) call this and use the result as the
