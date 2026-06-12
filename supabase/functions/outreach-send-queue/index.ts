@@ -155,11 +155,24 @@ Deno.serve(async (request) => {
     // couldn't verify, so the send is skipped this tick and retried next —
     // an outage must never terminally reject queued DMs or stamp phantom
     // last_reply_at values into the stats.
-    const { data: leadForName } = await admin
+    // Scope by the queued row's workspace: the queue scan is global, and the
+    // same contact_email can exist as an outreach_leads row in another tenant.
+    // limit(1) instead of maybeSingle so an in-workspace duplicate degrades to
+    // "first match" rather than an error that silently drops the name (the
+    // name feeds checkLeadReplied's participant fallback).
+    const { data: leadNameRows, error: leadNameErr } = await admin
       .from("outreach_leads")
       .select("first_name, last_name, full_name")
+      .eq("workspace_id", row.workspace_id ?? "")
       .eq("contact_email", row.contact_email ?? "")
-      .maybeSingle();
+      .limit(1);
+    if (leadNameErr) {
+      console.warn("send-queue: lead name lookup failed — reply check runs without name fallback", {
+        leadId,
+        error: leadNameErr.message,
+      });
+    }
+    const leadForName = leadNameRows?.[0];
     const fullName = (leadForName?.full_name as string | undefined)?.trim()
       || [leadForName?.first_name, leadForName?.last_name].filter(Boolean).join(" ").trim()
       || undefined;

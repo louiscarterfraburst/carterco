@@ -5,7 +5,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.103.3";
 import { normalizeWebsiteUrl, firstNameForGreeting } from "../_shared/text.ts";
-import { CARTERCO_WORKSPACE_ID, ODAGROUP_WORKSPACE_ID } from "../_shared/workspaces.ts";
+import { CARTERCO_WORKSPACE_ID, ODAGROUP_WORKSPACE_ID, outreachStyleFor } from "../_shared/workspaces.ts";
 import { draftFirstMessage } from "../_shared/draft-first-message.ts";
 import { autoRenderEnabled, getDefaultPlayId, getPlayConfig, hookAllowed, playPaused, playStamp } from "../_shared/plays.ts";
 import { sendsparkRender } from "../_shared/sendspark-render.ts";
@@ -195,18 +195,24 @@ Deno.serve(async (request) => {
       return json({ ok: true, recorded: "pre_connected_skipped" });
     }
 
-    // OdaGroup branch: no SendSpark video. Write the pipeline row, then
+    // AI-drafted branch: no SendSpark video. Write the pipeline row, then
     // call draftFirstMessage which writes rendered_message + strategy +
     // status='pending_approval' inline. The /outreach UI shows it in the
-    // approval queue same as a CarterCo render. Errors fall through to
+    // approval queue same as a video render. Errors fall through to
     // status='failed' so the row is visible for manual handling.
-    if (workspaceId === ODAGROUP_WORKSPACE_ID) {
+    // Routed on workspaces.outreach_style (registry data) instead of a
+    // workspace-id literal, so onboarding the next AI-drafted client is a
+    // column update, not a redeploy.
+    if ((await outreachStyleFor(supabase, workspaceId)) === "ai_drafted_dm") {
       // Hard blocklist: Novo Nordisk is Oda's flagship customer — never
       // outreach to anyone employed there, even if they slip through Sales
       // Nav filters. Belt-and-suspenders against the proof point becoming
       // an embarrassment ("we use it at Novo!" → recipient works at Novo).
+      // Deliberately still keyed to OdaGroup: it's THEIR customer, not a
+      // property of the ai_drafted_dm style.
       const companyLower = String(lead.company ?? "").toLowerCase();
-      if (companyLower.includes("novo nordisk") || companyLower.includes("novonordisk")) {
+      if (workspaceId === ODAGROUP_WORKSPACE_ID &&
+          (companyLower.includes("novo nordisk") || companyLower.includes("novonordisk"))) {
         await supabase.from("outreach_pipeline").upsert({
           sendpilot_lead_id: leadId,
           linkedin_url: linkedinUrl,

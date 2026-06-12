@@ -326,34 +326,63 @@ export const STATUS_LABELS: Record<string, string> = {
 // when they actually hold contacts. The grid layout buildTreeNodes emits is
 // the data model; linearizeFlow re-targets col/lane for readability.
 
-// The canonical main journey, in order. Every node here is ALWAYS visible so
-// the spine never breaks, even at 0 contacts (the chain is the explanation).
-export const FLOW_MAIN_PATH = [
-  "invited",
-  "accepted",
-  "pending_pre_render",
-  "rendering",
-  "pending_approval",
-  "approved_queued",
-  "sent",
-] as const;
+// Per-workspace first-message mechanism (workspaces.outreach_style). The
+// spine the Flow board shows is the journey THIS workspace's leads actually
+// travel — a video-render tenant renders, an AI-draft tenant drafts. Before
+// this, the video path was hardcoded as every workspace's main journey and
+// an AI-draft tenant saw its real main step demoted to a side branch.
+export type WorkspaceOutreachStyle = "video_render" | "ai_drafted_dm";
+
+// The canonical main journey per style, in order. Every node here is ALWAYS
+// visible so the spine never breaks, even at 0 contacts (the chain is the
+// explanation).
+export const FLOW_MAIN_PATHS: Record<WorkspaceOutreachStyle, readonly string[]> = {
+  video_render: [
+    "invited",
+    "accepted",
+    "pending_pre_render",
+    "rendering",
+    "pending_approval",
+    "approved_queued",
+    "sent",
+  ],
+  ai_drafted_dm: [
+    "invited",
+    "accepted",
+    "pending_ai_draft",
+    "pending_approval",
+    "approved_queued",
+    "sent",
+  ],
+};
 
 // Exception states branch off the spine and only render when occupied.
-// Keyed to the main-path node whose row they sit beside.
-export const FLOW_EXCEPTION_ANCHOR: Record<string, string> = {
-  pre_connected: "accepted",
-  pending_alt_review: "accepted",
-  pending_ai_draft: "pending_pre_render",
-  rendered: "rendering",
+// Keyed to the main-path node whose row they sit beside. The OTHER style's
+// statuses anchor as exceptions, so a stray row (e.g. a video render in an
+// AI-draft workspace) still surfaces instead of disappearing.
+export const FLOW_EXCEPTION_ANCHORS: Record<WorkspaceOutreachStyle, Record<string, string>> = {
+  video_render: {
+    pre_connected: "accepted",
+    pending_alt_review: "accepted",
+    pending_ai_draft: "pending_pre_render",
+    rendered: "rendering",
+  },
+  ai_drafted_dm: {
+    pre_connected: "accepted",
+    pending_alt_review: "accepted",
+    pending_pre_render: "pending_ai_draft",
+    rendering: "pending_ai_draft",
+    rendered: "pending_ai_draft",
+  },
 };
 
 // Step semantics for the cards: who acts, and what actually happens. This is
 // what makes the flow read like an automation instead of a status taxonomy.
 export type FlowStepKind = "auto" | "manuel" | "venter" | "send";
-export const FLOW_STEP_META: Record<string, { stepKind: FlowStepKind; desc: string }> = {
+const FLOW_STEP_META_BASE: Record<string, { stepKind: FlowStepKind; desc: string }> = {
   invited: { stepKind: "auto", desc: "Blank invite sendes fra din konto" },
   accepted: { stepKind: "venter", desc: "Forbindelsen er accepteret" },
-  pending_pre_render: { stepKind: "auto", desc: "Render starter (auto for hiring-signal)" },
+  pending_pre_render: { stepKind: "auto", desc: "Render frigives (auto for plays med auto-render)" },
   rendering: { stepKind: "auto", desc: "SendSpark laver den personlige video" },
   pending_approval: { stepKind: "manuel", desc: "Du godkender den præcise tekst" },
   approved_queued: { stepKind: "venter", desc: "Driper ud, 6-10 min mellemrum, hverdage 08-18" },
@@ -364,16 +393,33 @@ export const FLOW_STEP_META: Record<string, { stepKind: FlowStepKind; desc: stri
   pending_alt_review: { stepKind: "manuel", desc: "Lav ICP-score: vælg rigtig person" },
 };
 
+// Style overrides: the AI-draft journey's own wording for nodes whose video
+// phrasing would describe automation that workspace never runs.
+const FLOW_STEP_META_AI: Record<string, { stepKind: FlowStepKind; desc: string }> = {
+  pending_ai_draft: { stepKind: "auto", desc: "Claude skriver første DM fra agent-brief" },
+  sent: { stepKind: "send", desc: "Første DM leveret" },
+};
+
+export function flowStepMeta(style: WorkspaceOutreachStyle): Record<string, { stepKind: FlowStepKind; desc: string }> {
+  return style === "ai_drafted_dm" ? { ...FLOW_STEP_META_BASE, ...FLOW_STEP_META_AI } : FLOW_STEP_META_BASE;
+}
+
 // Re-layout the non-arm tree as a single centered spine. Main-path nodes get
 // one row each (col 0..n, lane 0); occupied exceptions sit one lane right of
 // their anchor's row; unoccupied exceptions are dropped entirely; sequence
 // steps keep their lanes and chain on below the spine. Arm-mode trees pass
 // through untouched — the per-arm lanes already read vertically.
-export function linearizeFlow(nodes: NodeDef[], occupied: Set<string>): NodeDef[] {
+export function linearizeFlow(
+  nodes: NodeDef[],
+  occupied: Set<string>,
+  style: WorkspaceOutreachStyle = "video_render",
+): NodeDef[] {
   if (nodes.some((n) => n.kind === "arm")) return nodes;
 
-  const rowOf = new Map<string, number>(FLOW_MAIN_PATH.map((id, i) => [id, i]));
-  const seqBase = FLOW_MAIN_PATH.length; // sequence rows start under "sent"
+  const mainPath = FLOW_MAIN_PATHS[style];
+  const anchors = FLOW_EXCEPTION_ANCHORS[style];
+  const rowOf = new Map<string, number>(mainPath.map((id, i) => [id, i]));
+  const seqBase = mainPath.length; // sequence rows start under "sent"
   const minSeqCol = Math.min(...nodes.filter((n) => n.kind === "sequence").map((n) => n.col), Infinity);
 
   const out: NodeDef[] = [];
@@ -387,7 +433,7 @@ export function linearizeFlow(nodes: NodeDef[], occupied: Set<string>): NodeDef[
       out.push({ ...n, col: row, lane: 0 });
       continue;
     }
-    const anchor = FLOW_EXCEPTION_ANCHOR[n.id];
+    const anchor = anchors[n.id];
     if (anchor != null) {
       if (!occupied.has(n.id)) continue; // empty side-branch: drop
       out.push({ ...n, col: rowOf.get(anchor) ?? 0, lane: 1.15 });

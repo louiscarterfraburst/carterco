@@ -10,14 +10,9 @@ import Link from "next/link";
 import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/utils/supabase/client";
 
-const WORKSPACES: { id: string; name: string }[] = [
-  { id: "1e067f9a-d453-41a7-8bc4-9fdb5644a5fa", name: "Carter & Co" },
-  { id: "2740ba1f-d5d5-4008-bf43-b45367c73134", name: "Tresyv" },
-  { id: "f4777612-4615-4734-94de-4745eade3318", name: "Haugefrom" },
-  { id: "cdfd80d8-33bb-4b64-b778-0a2c5ab78cc6", name: "Oda Group" },
-];
-const WS_NAME = new Map(WORKSPACES.map((w) => [w.id, w.name]));
-const WS_IDS = WORKSPACES.map((w) => w.id);
+// Workspaces are loaded from the workspaces table (RLS scopes to membership)
+// so a newly provisioned client appears here without a code change.
+type Workspace = { id: string; name: string };
 
 const WARM_INTENT = new Set(["interested", "question", "referral"]);
 const PENDING_STATUS = new Set(["pending_approval", "pending_alt_review"]);
@@ -79,23 +74,31 @@ export default function OverviewPage() {
     let cancelled = false;
     void (async () => {
       setLoading(true);
+      const { data: wsData } = await supabase
+        .from("workspaces")
+        .select("id, name")
+        .order("name", { ascending: true });
+      if (cancelled) return;
+      const workspaces = (wsData ?? []) as Workspace[];
+      const wsIds = workspaces.map((w) => w.id);
+
       const [{ data: pipeData }, { data: replyData }, { data: leadData }] = await Promise.all([
         supabase
           .from("outreach_pipeline")
           .select("sendpilot_lead_id, contact_email, workspace_id, status, last_reply_at, last_reply_intent, outcome, thread_out_of_sync")
-          .in("workspace_id", WS_IDS)
+          .in("workspace_id", wsIds)
           .limit(8000),
         supabase
           .from("outreach_replies")
           .select("sendpilot_lead_id, workspace_id, intent, handled")
-          .in("workspace_id", WS_IDS)
+          .in("workspace_id", wsIds)
           .eq("direction", "inbound")
           .eq("handled", false)
           .limit(4000),
         supabase
           .from("outreach_leads")
           .select("contact_email, first_name, last_name")
-          .in("workspace_id", WS_IDS)
+          .in("workspace_id", wsIds)
           .limit(20000),
       ]);
       if (cancelled) return;
@@ -116,7 +119,7 @@ export default function OverviewPage() {
       }
       const now = Date.now();
 
-      const result: ClientAttention[] = WORKSPACES.map((w) => {
+      const result: ClientAttention[] = workspaces.map((w) => {
         const rows = pipe.filter((p) => p.workspace_id === w.id);
         const nameOf = (leadId: string) => nameByLead.get(leadId) ?? "Lead";
 

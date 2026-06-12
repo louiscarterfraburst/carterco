@@ -4,8 +4,9 @@ import {
   buildTreeEdges,
   buildTreeNodes,
   classifyNode,
-  FLOW_MAIN_PATH,
-  FLOW_STEP_META,
+  FLOW_MAIN_PATHS,
+  FLOW_EXCEPTION_ANCHORS,
+  flowStepMeta,
   linearizeFlow,
   lookupSeqStep,
   nodeLabel,
@@ -327,12 +328,14 @@ describe("scopeSequencesToPlay", () => {
 
 describe("linearizeFlow (ActiveCampaign-style spine)", () => {
   const occupied = (...ids: string[]) => new Set(ids);
+  const VIDEO = FLOW_MAIN_PATHS.video_render;
+  const AI = FLOW_MAIN_PATHS.ai_drafted_dm;
 
-  it("gives every main-path node its own row in journey order, lane 0", () => {
+  it("gives every main-path node its own row in journey order, lane 0 (video_render default)", () => {
     const nodes = buildTreeNodes(SEQUENCES, [row()], []);
     const lin = linearizeFlow(nodes, occupied());
     const byId = new Map(lin.map((n) => [n.id, n]));
-    FLOW_MAIN_PATH.forEach((id, i) => {
+    VIDEO.forEach((id, i) => {
       expect(byId.get(id)).toMatchObject({ col: i, lane: 0 });
     });
   });
@@ -346,7 +349,7 @@ describe("linearizeFlow (ActiveCampaign-style spine)", () => {
     const withParked = linearizeFlow(nodes, occupied("rendered"));
     const parked = withParked.find((n) => n.id === "rendered");
     // Sits beside the "rendering" row, offset into its own lane.
-    expect(parked?.col).toBe(FLOW_MAIN_PATH.indexOf("rendering"));
+    expect(parked?.col).toBe(VIDEO.indexOf("rendering"));
     expect(parked?.lane ?? 0).toBeGreaterThan(0);
   });
 
@@ -355,22 +358,61 @@ describe("linearizeFlow (ActiveCampaign-style spine)", () => {
     const lin = linearizeFlow(nodes, occupied());
     const step0 = lin.find((n) => n.id === "seq:hiring_signal_v1:0");
     const step1 = lin.find((n) => n.id === "seq:hiring_signal_v1:1");
-    expect(step0?.col).toBe(FLOW_MAIN_PATH.length);
-    expect(step1?.col).toBe(FLOW_MAIN_PATH.length + 1);
+    expect(step0?.col).toBe(VIDEO.length);
+    expect(step1?.col).toBe(VIDEO.length + 1);
   });
 
-  it("passes arm-mode trees through untouched", () => {
+  it("ai_drafted_dm spine: AI-draft is a main-path row, render statuses are exceptions", () => {
+    const nodes = buildTreeNodes([], [row()], []);
+    const lin = linearizeFlow(nodes, occupied(), "ai_drafted_dm");
+    const byId = new Map(lin.map((n) => [n.id, n]));
+    AI.forEach((id, i) => {
+      expect(byId.get(id)).toMatchObject({ col: i, lane: 0 });
+    });
+    // Empty video branches drop from an AI-draft workspace's board…
+    expect(lin.some((n) => n.id === "pending_pre_render")).toBe(false);
+    expect(lin.some((n) => n.id === "rendering")).toBe(false);
+
+    // …but a stray occupied render row still surfaces beside its anchor.
+    const withStray = linearizeFlow(nodes, occupied("rendering"), "ai_drafted_dm");
+    const stray = withStray.find((n) => n.id === "rendering");
+    expect(stray?.col).toBe(AI.indexOf("pending_ai_draft"));
+    expect(stray?.lane ?? 0).toBeGreaterThan(0);
+  });
+
+  it("ai_drafted_dm chains sequence steps under its (shorter) spine", () => {
+    const nodes = buildTreeNodes(SEQUENCES, [row()], []);
+    const lin = linearizeFlow(nodes, occupied(), "ai_drafted_dm");
+    expect(lin.find((n) => n.id === "seq:hiring_signal_v1:0")?.col).toBe(AI.length);
+    expect(lin.find((n) => n.id === "seq:hiring_signal_v1:1")?.col).toBe(AI.length + 1);
+  });
+
+  it("passes arm-mode trees through untouched in both styles", () => {
     const nodes = buildTreeNodes(ARM_SEQUENCES, [row({ first_dm_variant: "v1_long" })], []);
     expect(linearizeFlow(nodes, occupied())).toEqual(nodes);
+    expect(linearizeFlow(nodes, occupied(), "ai_drafted_dm")).toEqual(nodes);
   });
 
-  it("has step semantics for every main-path and exception node", () => {
-    for (const id of FLOW_MAIN_PATH) {
-      expect(FLOW_STEP_META[id]?.desc, id).toBeTruthy();
-      expect(FLOW_STEP_META[id]?.stepKind, id).toBeTruthy();
+  it("has step semantics for every main-path and exception node in both styles", () => {
+    for (const style of ["video_render", "ai_drafted_dm"] as const) {
+      const meta = flowStepMeta(style);
+      for (const id of FLOW_MAIN_PATHS[style]) {
+        expect(meta[id]?.desc, `${style}:${id}`).toBeTruthy();
+        expect(meta[id]?.stepKind, `${style}:${id}`).toBeTruthy();
+      }
+      for (const id of Object.keys(FLOW_EXCEPTION_ANCHORS[style])) {
+        expect(meta[id]?.desc, `${style}:${id}`).toBeTruthy();
+      }
     }
-    for (const id of ["rendered", "pending_ai_draft", "pre_connected", "pending_alt_review"]) {
-      expect(FLOW_STEP_META[id]?.desc, id).toBeTruthy();
+  });
+
+  it("anchors every exception to a node on that style's own main path", () => {
+    for (const style of ["video_render", "ai_drafted_dm"] as const) {
+      const main = new Set(FLOW_MAIN_PATHS[style]);
+      for (const [exception, anchor] of Object.entries(FLOW_EXCEPTION_ANCHORS[style])) {
+        expect(main.has(anchor), `${style}: ${exception} → ${anchor}`).toBe(true);
+        expect(main.has(exception), `${style}: ${exception} must not be on the spine`).toBe(false);
+      }
     }
   });
 });

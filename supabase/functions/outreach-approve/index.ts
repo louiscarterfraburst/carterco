@@ -143,17 +143,25 @@ Deno.serve(async (request) => {
   if (defaultPlay && (pipe.play ?? defaultPlay) === defaultPlay) {
     const orParts = [`sendpilot_lead_id.eq.${leadId}`];
     if (pipe.contact_email) orParts.unshift(`contact_email.eq.${pipe.contact_email}`);
+    // Scope to the pipeline row's workspace: the same contact_email can exist
+    // as an outreach_leads row in another tenant, and stamping that tenant's
+    // play here would misroute counts, filters and sequence scoping.
     const { data: leadPlayRows } = await admin
       .from("outreach_leads")
       .select("play")
+      .eq("workspace_id", pipe.workspace_id as string)
       .or(orParts.join(","))
       .limit(1);
     const truePlay = (leadPlayRows?.[0]?.play as string | undefined)?.trim();
     if (truePlay && truePlay !== defaultPlay) {
-      await admin.from("outreach_pipeline")
+      const { error: playUpdateErr } = await admin.from("outreach_pipeline")
         .update({ play: truePlay })
         .eq("sendpilot_lead_id", leadId);
-      pipe.play = truePlay;
+      if (playUpdateErr) {
+        console.warn("outreach-approve: play re-derivation update failed", { lead: leadId, error: playUpdateErr.message });
+      } else {
+        pipe.play = truePlay;
+      }
     }
   }
 

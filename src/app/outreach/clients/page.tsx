@@ -378,7 +378,7 @@ function ClientCard({ config }: { config: ClientConfig }) {
             </>
           ) : (
             <p className="tabular text-[11px] uppercase tracking-[0.22em] text-[var(--ink)]/45">
-              Ingen brief-fil fundet. Tilføj <code>clients/&lt;slug&gt;/agent-brief.md</code> og kortlæg den i <code>WORKSPACE_BRIEF_SLUG</code>.
+              Ingen brief-fil fundet. Tilføj <code>clients/&lt;slug&gt;/agent-brief.md</code> og sæt <code>workspaces.brief_slug</code> for workspacet.
             </p>
           )}
         </Block>

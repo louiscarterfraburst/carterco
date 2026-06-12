@@ -17,6 +17,35 @@ export function workspaceLabel(id: string | null | undefined): string {
   return WORKSPACE_LABELS[id] ?? id.slice(0, 8);
 }
 
+// Per-workspace first-message mechanism, read from workspaces.outreach_style
+// (single source of truth, shared with /api/outreach/client-config). Cached
+// per isolate like the play registry — the value changes when a client is
+// onboarded, not per event. Fails to 'video_render' on error: the render path
+// parks in pending_pre_render behind a manual gate, so a wrong fallback is an
+// operator-visible stall, never an unreviewed AI DM.
+export type OutreachStyle = "video_render" | "ai_drafted_dm";
+const STYLE_CACHE_TTL_MS = 60_000;
+const styleCache = new Map<string, { at: number; style: OutreachStyle }>();
+
+// deno-lint-ignore no-explicit-any
+export async function outreachStyleFor(supabase: any, workspaceId: string | null | undefined): Promise<OutreachStyle> {
+  if (!workspaceId) return "video_render";
+  const hit = styleCache.get(workspaceId);
+  if (hit && Date.now() - hit.at < STYLE_CACHE_TTL_MS) return hit.style;
+  const { data, error } = await supabase
+    .from("workspaces")
+    .select("outreach_style")
+    .eq("id", workspaceId)
+    .maybeSingle();
+  if (error) {
+    console.error("outreachStyleFor query failed — falling back to video_render", { workspaceId, error: error.message });
+    return "video_render";
+  }
+  const style: OutreachStyle = data?.outreach_style === "ai_drafted_dm" ? "ai_drafted_dm" : "video_render";
+  styleCache.set(workspaceId, { at: Date.now(), style });
+  return style;
+}
+
 // Looks up the canonical (active) SendPilot sender for a workspace via the
 // workspace_senders table. ALL send paths (outreach-approve, invite-alt-
 // contact, outreach-engagement-tick) call this and use the result as the
