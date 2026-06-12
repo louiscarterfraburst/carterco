@@ -21,9 +21,10 @@ export const SMS_ACK_MAX_AGE_MS = 24 * 60 * 60 * 1000; // never SMS stale leads
 // Soho Telavox seat, so the sender must make sense to the lead). Klosterstræde
 // is deliberately NOT enabled: Lee doesn't use Telavox.
 export const SMS_ACK_COPY: Record<string, (firstName: string | null) => string> = {
-  // Soho (mødelokaler + kontorer) — reception calls from 88 27 64 01.
+  // Soho (mødelokaler + kontorer) — reception's outbound shows the main
+  // number 70 13 60 00 (soho.dk), not the seat's direct number.
   "7f13f551-9514-4a5a-b1bf-98eb95c1a469": (first) =>
-    `${first ? `Hej ${first}` : "Hej"}, tak for din henvendelse til SOHO. Vi ringer til dig snarest fra 88 27 64 01.`,
+    `${first ? `Hej ${first}` : "Hej"}, tak for din henvendelse til SOHO. Vi ringer til dig snarest fra 70 13 60 00.`,
   // Soho Events (Sahra) — Telavox-dialled, no fixed outbound number promised.
   "9d2a8cd2-ea01-4ab0-92c5-84e4256ccca7": (first) =>
     `${first ? `Hej ${first}` : "Hej"}, tak for din henvendelse om events hos SOHO. Vi ringer til dig snarest.`,
