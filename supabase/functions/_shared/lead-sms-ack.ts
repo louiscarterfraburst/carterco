@@ -16,14 +16,17 @@ export const SMS_ACK_WINDOW = { startHour: 8, endHour: 17 };
 export const SMS_ACK_GATE_MS = 5 * 60 * 1000; // reception's head start
 export const SMS_ACK_MAX_AGE_MS = 24 * 60 * 60 * 1000; // never SMS stale leads
 
-// Per-workspace copy. A workspace absent here never sends.
+// Per-workspace copy. A workspace absent here never sends — only workspaces
+// whose team actually dials via Telavox belong here (the SMS goes out from a
+// Soho Telavox seat, so the sender must make sense to the lead). Klosterstræde
+// is deliberately NOT enabled: Lee doesn't use Telavox.
 export const SMS_ACK_COPY: Record<string, (firstName: string | null) => string> = {
   // Soho (mødelokaler + kontorer) — reception calls from 88 27 64 01.
   "7f13f551-9514-4a5a-b1bf-98eb95c1a469": (first) =>
     `${first ? `Hej ${first}` : "Hej"}, tak for din henvendelse til SOHO. Vi ringer til dig snarest fra 88 27 64 01.`,
-  // Klosterstræde (faste pladser) — no fixed outbound number promised.
-  "c61aaffb-518b-4995-ac31-5a2e7300b1f2": (first) =>
-    `${first ? `Hej ${first}` : "Hej"}, tak for din interesse i en fast plads i Klosterstræde. Vi ringer til dig snarest.`,
+  // Soho Events (Sahra) — Telavox-dialled, no fixed outbound number promised.
+  "9d2a8cd2-ea01-4ab0-92c5-84e4256ccca7": (first) =>
+    `${first ? `Hej ${first}` : "Hej"}, tak for din henvendelse om events hos SOHO. Vi ringer til dig snarest.`,
 };
 
 export type SmsAckLead = {
