@@ -1685,7 +1685,11 @@ function Header({ pushStatus, onEnablePush, onReload, onSignOut, workspaces, act
 }) {
   return (
     <div className="safe-pad-top sticky top-0 z-20 border-b border-[var(--ink)]/[0.10] bg-[var(--sand)]/85 backdrop-blur-xl">
-      <div className="mx-auto flex w-full max-w-[1400px] items-center justify-between gap-3 px-4 py-3 sm:gap-4 sm:px-8 lg:px-12">
+      {/* flex-wrap + justify-end: the five action buttons total ~450px and
+          cannot share a phone-width row with the breadcrumb + workspace
+          select — without wrapping they overflow past main's overflow-hidden
+          edge and become unreachable. */}
+      <div className="mx-auto flex w-full max-w-[1400px] flex-wrap items-center justify-between gap-3 px-4 py-3 sm:gap-4 sm:px-8 lg:px-12">
         <div className="flex min-w-0 items-center gap-3">
           <Link href="/" className="tabular truncate text-[10px] uppercase tracking-[0.24em] text-[var(--ink)]/50 hover:text-[var(--ink)]/80 sm:tracking-[0.35em]">
             CarterCo<span className="mx-2 text-[var(--ink)]/25">/</span><span className="text-[var(--ink)]/75">Outreach</span>
@@ -1694,7 +1698,7 @@ function Header({ pushStatus, onEnablePush, onReload, onSignOut, workspaces, act
             <select
               value={activeWorkspace?.id ?? ""}
               onChange={(e) => onWorkspaceChange(e.target.value)}
-              className="focus-cream tabular rounded-sm border border-[var(--ink)]/15 bg-transparent px-2 py-1.5 text-[10px] uppercase tracking-[0.18em] text-[var(--ink)]/65 outline-none hover:border-[var(--ink)]/35 focus:border-[var(--ink)]/35"
+              className="focus-cream tabular max-w-[45vw] rounded-sm border border-[var(--ink)]/15 bg-transparent px-2 py-1.5 text-[10px] uppercase tracking-[0.18em] text-[var(--ink)]/65 outline-none hover:border-[var(--ink)]/35 focus:border-[var(--ink)]/35 sm:max-w-none"
               title="Dashboard"
             >
               {workspaces.map((w) => (
@@ -1703,7 +1707,7 @@ function Header({ pushStatus, onEnablePush, onReload, onSignOut, workspaces, act
             </select>
           ) : null}
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
           <Link href="/outreach/clients"
             className="focus-cream tabular rounded-sm border border-[var(--ink)]/15 px-3 py-1.5 text-[10px] uppercase tracking-[0.22em] text-[var(--ink)]/65 hover:border-[var(--ink)]/35 hover:text-[var(--ink)]"
             title="Klient-oversigt (read-only)"

@@ -374,9 +374,13 @@ export default function LeadsPage() {
   const visibleLeads = useMemo(() => {
     if (view === "active") {
       // Fresh queue: actionable AND not yet dialled. Reply-waiting leads bubble
-      // to the top. Dialled leads move to "I gang" so nobody double-dials.
+      // to the top. Dialled leads move to "I gang" so nobody double-dials —
+      // EXCEPT leads I rang in THIS session (hasRungIds), which stay put until
+      // their outcome is marked. Otherwise the row vanishes mid-call, before
+      // you can record what happened. Other agents' views still move the lead
+      // out (hasRungIds is local), so the double-dial guard holds.
       return leads
-        .filter((l) => isActiveLead(l) && !isDialled(l))
+        .filter((l) => isActiveLead(l) && (!isDialled(l) || hasRungIds.has(l.id)))
         .sort((a, b) => {
           const aWaiting = leadsWithInboundReply.has(a.id) ? 1 : 0;
           const bWaiting = leadsWithInboundReply.has(b.id) ? 1 : 0;
@@ -384,9 +388,10 @@ export default function LeadsPage() {
         });
     }
     if (view === "in_progress") {
-      // Actionable AND already dialled — being worked.
+      // Actionable AND already dialled — being worked. My own this-session
+      // calls are still parked in Aktive (see above), not dual-listed here.
       return leads
-        .filter((l) => isActiveLead(l) && isDialled(l))
+        .filter((l) => isActiveLead(l) && isDialled(l) && !hasRungIds.has(l.id))
         .sort((a, b) => {
           const aWaiting = leadsWithInboundReply.has(a.id) ? 1 : 0;
           const bWaiting = leadsWithInboundReply.has(b.id) ? 1 : 0;
@@ -420,7 +425,7 @@ export default function LeadsPage() {
     }
     return leads;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [leads, view, dialledLeadIds, leadsWithInboundReply]);
+  }, [leads, view, dialledLeadIds, leadsWithInboundReply, hasRungIds]);
 
   const pendingOutcomeLeads = useMemo(
     () => leads.filter((l) => l.call_status === "answered" && !l.outcome),
@@ -428,9 +433,11 @@ export default function LeadsPage() {
   );
 
   const stats = useMemo(() => {
+    // Same predicates as visibleLeads, so the masthead numbers match the lists
+    // (my this-session calls count as Aktive, where they are shown).
     const actionable = leads.filter(isActiveLead);
-    const active = actionable.filter((l) => !isDialled(l)).length;
-    const inProgress = actionable.filter((l) => isDialled(l)).length;
+    const active = actionable.filter((l) => !isDialled(l) || hasRungIds.has(l.id)).length;
+    const inProgress = actionable.filter((l) => isDialled(l) && !hasRungIds.has(l.id)).length;
     const waiting = leads.filter(isWaitingLead).length;
     const customers = leads.filter((l) => l.outcome === "customer").length;
     const pending = pendingOutcomeLeads.length;
@@ -438,7 +445,7 @@ export default function LeadsPage() {
     const latest = leads[0]?.created_at ?? null;
     return { active, inProgress, waiting, customers, pending, total, latest };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [leads, pendingOutcomeLeads, dialledLeadIds]);
+  }, [leads, pendingOutcomeLeads, dialledLeadIds, hasRungIds]);
 
   useEffect(() => {
     let mounted = true;
@@ -1167,8 +1174,13 @@ export default function LeadsPage() {
     <main className="safe-screen safe-pad-bottom relative min-h-screen max-w-full overflow-x-hidden bg-[var(--sand)] text-[var(--ink)]">
       <div className="grain-overlay" />
 
-      {/* Sticky top bar */}
-      <div className="safe-pad-top sticky top-0 z-20 border-b border-[var(--ink)]/[0.10] bg-[var(--sand)]/85 backdrop-blur-xl">
+      {/* Sticky top bar. ONE sticky wrapper holds the header, the mobile view
+          toggle and the pending-outcome bar, so each sits below the previous
+          one's real rendered height — a hardcoded top offset can't account for
+          env(safe-area-inset-top), which buried the outcome buttons under the
+          header on phones. */}
+      <div className="sticky top-0 z-20">
+      <div className="safe-pad-top border-b border-[var(--ink)]/[0.10] bg-[var(--sand)]/85 backdrop-blur-xl">
         <div className="mx-auto flex w-full max-w-[1400px] min-w-0 items-center justify-between gap-3 px-4 py-3 sm:gap-4 sm:px-8 lg:px-12">
           <div className="flex min-w-0 items-center gap-3">
             <Link
@@ -1183,7 +1195,7 @@ export default function LeadsPage() {
               <select
                 value={activeWorkspace?.id ?? ""}
                 onChange={(e) => chooseWorkspace(e.target.value)}
-                className="focus-cream tabular shrink-0 rounded-sm border border-[var(--ink)]/15 bg-transparent px-2 py-1.5 text-[10px] uppercase tracking-[0.18em] text-[var(--ink)]/65 outline-none hover:border-[var(--ink)]/35 focus:border-[var(--ink)]/35"
+                className="focus-cream tabular max-w-[45vw] shrink-0 rounded-sm border border-[var(--ink)]/15 bg-transparent px-2 py-1.5 text-[10px] uppercase tracking-[0.18em] text-[var(--ink)]/65 outline-none hover:border-[var(--ink)]/35 focus:border-[var(--ink)]/35 sm:max-w-none"
                 title="Workspace"
               >
                 {workspaces.map((w) => (
@@ -1194,7 +1206,12 @@ export default function LeadsPage() {
           </div>
 
           <div className="flex min-w-0 shrink-0 items-center gap-1 sm:gap-2">
-            <SegmentedToggle value={view} onChange={setView} />
+            {/* The 6-tab toggle can't share a phone-width row with the
+                breadcrumb + workspace select; below sm it gets its own
+                scrollable row under the bar. */}
+            <div className="hidden sm:block">
+              <SegmentedToggle value={view} onChange={setView} />
+            </div>
             <div className="mx-1 hidden h-4 w-px bg-[var(--ink)]/10 sm:block" />
             <Link
               href="/meetings"
@@ -1239,6 +1256,11 @@ export default function LeadsPage() {
             </IconButton>
           </div>
         </div>
+        <div className="overflow-x-auto px-4 pb-3 sm:hidden">
+          <div className="w-max">
+            <SegmentedToggle value={view} onChange={setView} />
+          </div>
+        </div>
       </div>
 
       {pendingOutcomeLeads.length > 0 ? (
@@ -1248,6 +1270,7 @@ export default function LeadsPage() {
           setOutcome={setOutcome}
         />
       ) : null}
+      </div>
 
       {/* Masthead */}
       <section className="relative mx-auto w-full max-w-[1400px] min-w-0 px-4 pt-10 pb-8 sm:px-8 sm:pt-16 sm:pb-10 lg:px-12">
@@ -2265,7 +2288,7 @@ function PendingOutcomeBar({
 }) {
   const displayName = lead.name ?? lead.email ?? "Unavngivet";
   return (
-    <div className="sticky top-[56px] z-10 border-b border-[var(--clay)]/30 bg-[var(--clay)]/[0.08] backdrop-blur-xl">
+    <div className="border-b border-[var(--clay)]/30 bg-[var(--clay)]/[0.08] backdrop-blur-xl">
       <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-8 lg:px-12">
         <div className="min-w-0">
           <p className="tabular text-[10px] uppercase tracking-[0.26em] text-[var(--clay)]">
@@ -2332,7 +2355,7 @@ function PendingQuickButton({
     <button
       type="button"
       onClick={onClick}
-      className={`focus-cream tabular rounded-sm px-2.5 py-1.5 text-[10px] uppercase tracking-[0.16em] transition ${
+      className={`focus-cream tabular rounded-sm px-3 py-2.5 text-[11px] uppercase tracking-[0.16em] transition sm:px-2.5 sm:py-1.5 sm:text-[10px] ${
         accent
           ? "bg-[var(--forest)] text-[var(--cream)] hover:bg-[#2f5e4e]"
           : "border border-[var(--ink)]/15 text-[var(--ink)]/75 hover:border-[var(--ink)]/35 hover:text-[var(--ink)]"
