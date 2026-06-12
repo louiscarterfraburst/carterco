@@ -16,8 +16,9 @@ import {
 // Flow: icp → source → book. Persist-then-book: clicking "Book mødet" POSTs
 // the scoping answers to /api/quiz-submit first (anonymous scoping row), then
 // redirects to cal.com with only a `scoping:<id>` token in the notes.
-// Alternative exit on the book step: soft-capture (email + explicit consent)
-// → "done" step. Honeypot field rides along on both submits.
+// Booking is the only exit (soft-capture removed 2026-06-12 per owner call —
+// the API still accepts kind "soft_capture" but no UI reaches it). Honeypot
+// field rides along on the submit.
 
 type Locale = "da" | "en";
 
@@ -27,7 +28,7 @@ type Props = {
   locale?: Locale;
 };
 
-type StepLabelKey = "icp" | "source" | "book" | "done";
+type StepLabelKey = "icp" | "source" | "book";
 
 type CopyT = {
   step: string;
@@ -52,14 +53,6 @@ type CopyT = {
   bookBody: string;
   bookCta: string;
   bookNote: string;
-  softToggle: string;
-  softEmailPlaceholder: string;
-  softNamePlaceholder: string;
-  softConsentLabel: string;
-  softCta: string;
-  // Done step (soft-capture confirmation)
-  doneHeading: string;
-  doneBody: string;
 };
 
 const COPY: Record<Locale, CopyT> = {
@@ -74,28 +67,20 @@ const COPY: Record<Locale, CopyT> = {
       icp: "Jeres købere",
       source: "Jeres kunder",
       book: "Mødet",
-      done: "Tak",
     },
     icpQuestionBefore: "Hvad sælger I, og til ",
     icpQuestionAccent: "hvem",
     icpQuestionAfter: "?",
     icpHint: "To linjer er nok. Det er det jeg bruger til at kortlægge jeres marked inden mødet.",
     icpPlaceholder: "Fx: Vi sælger engros rengøringsartikler til hoteller og kantiner i hele landet",
-    sourceQuestion: "Hvor kommer jeres kunder fra i dag?",
-    sourceHint: "Frit felt, skriv det som det er. Et par linjer er fint.",
+    sourceQuestion: "Hvor kom jeres sidste 10 kunder primært fra?",
+    sourceHint: "Frit felt, skriv det som det er. Et enkelt ord er også et svar.",
     sourcePlaceholder:
-      "Fx: De fleste kommer gennem henvisninger. Vi har flere hundrede gamle kunder i CRM'et, som ingen følger op på.",
+      "Fx: De fleste kom gennem henvisninger. Vi har flere hundrede gamle kunder i CRM'et, som ingen følger op på.",
     bookQuestion: "Så er jeg klar til at finde dem.",
     bookBody: "Book 30 minutter. Inden mødet kortlægger jeg jeres marked, og på mødet deler jeg skærm og viser jer køberne live, med en grund til at række ud for hver enkelt. I beholder listen.",
     bookCta: "Book mødet →",
     bookNote: "30 min på Google Meet",
-    softToggle: "Vil du hellere have det på skrift først?",
-    softEmailPlaceholder: "Email",
-    softNamePlaceholder: "Navn (valgfrit)",
-    softConsentLabel: "I må kontakte mig på mail om det her.",
-    softCta: "Skriv til mig →",
-    doneHeading: "Tak. Du hører fra mig.",
-    doneBody: "Jeg kigger på jeres marked og vender tilbage på mail inden for et par dage.",
   },
   en: {
     step: "Step",
@@ -108,54 +93,39 @@ const COPY: Record<Locale, CopyT> = {
       icp: "Your buyers",
       source: "Your customers",
       book: "The meeting",
-      done: "Thanks",
     },
     icpQuestionBefore: "What do you sell, and to ",
     icpQuestionAccent: "whom",
     icpQuestionAfter: "?",
     icpHint: "Two lines is plenty. This is what I use to map your market before the meeting.",
     icpPlaceholder: "E.g.: We sell wholesale cleaning supplies to hotels and canteens nationwide",
-    sourceQuestion: "Where do your customers come from today?",
-    sourceHint: "Free field, tell it like it is. A couple of lines is fine.",
+    sourceQuestion: "Where did your last 10 customers primarily come from?",
+    sourceHint: "Free field, tell it like it is. A single word is an answer too.",
     sourcePlaceholder:
-      "E.g.: Most come through referrals. We have a few hundred old customers in the CRM nobody follows up on.",
+      "E.g.: Most came through referrals. We have a few hundred old customers in the CRM nobody follows up on.",
     bookQuestion: "Then I'm ready to find them.",
     bookBody: "Book 30 minutes. Before the meeting I map your market, and on the call I share my screen and show you the buyers live, each with a reason to reach out. The list is yours to keep.",
     bookCta: "Book the meeting →",
     bookNote: "30 min on Google Meet",
-    softToggle: "Rather get it in writing first?",
-    softEmailPlaceholder: "Email",
-    softNamePlaceholder: "Name (optional)",
-    softConsentLabel: "You may contact me by email about this.",
-    softCta: "Write to me →",
-    doneHeading: "Thanks. You'll hear from me.",
-    doneBody: "I'll look at your market and get back to you by email within a few days.",
   },
 };
 
-const STEP_KEYS = ["icp", "source", "book", "done"] as const;
+const STEP_KEYS = ["icp", "source", "book"] as const;
 
 type StepKey = (typeof STEP_KEYS)[number];
-
-const EMAIL_RE_CLIENT = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function LeadQuiz({ open, onClose, locale = "da" }: Props) {
   const t = COPY[locale];
   const [stepIndex, setStepIndex] = useState(0);
   const [icp, setIcp] = useState("");
   const [customerSource, setCustomerSource] = useState("");
-  const [softOpen, setSoftOpen] = useState(false);
-  const [softEmail, setSoftEmail] = useState("");
-  const [softName, setSoftName] = useState("");
-  const [consent, setConsent] = useState(false);
   // Honeypot — humans never see or fill this.
   const [website, setWebsite] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   const currentStepKey: StepKey = STEP_KEYS[stepIndex];
-  const isDoneStep = currentStepKey === "done";
-  const totalInputSteps = STEP_KEYS.length - 1; // exclude done
+  const totalInputSteps = STEP_KEYS.length;
 
   // Reset to first step when modal transitions from closed → open.
   // Ref-tracked transition so the effect's setState only fires on the edge,
@@ -164,7 +134,6 @@ export function LeadQuiz({ open, onClose, locale = "da" }: Props) {
   useEffect(() => {
     if (open && !wasOpenRef.current) {
       setStepIndex(0);
-      setSoftOpen(false);
       setSubmitError(null);
     }
     wasOpenRef.current = open;
@@ -230,38 +199,6 @@ export function LeadQuiz({ open, onClose, locale = "da" }: Props) {
     }
   }
 
-  async function submitSoftCapture() {
-    if (submitting) return;
-    setSubmitError(null);
-    setSubmitting(true);
-    try {
-      const res = await fetch("/api/quiz-submit", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          kind: "soft_capture",
-          icp: icp.trim(),
-          customerSource: customerSource.trim(),
-          email: softEmail.trim(),
-          name: softName.trim() || undefined,
-          consent,
-          locale,
-          website,
-        }),
-      });
-      const data = (await res.json().catch(() => ({}))) as { error?: string };
-      if (!res.ok) {
-        setSubmitError(data.error || `HTTP ${res.status}`);
-        return;
-      }
-      next();
-    } catch (e) {
-      setSubmitError(e instanceof Error ? e.message : t.unknownError);
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
   if (!open) return null;
 
   return (
@@ -272,26 +209,19 @@ export function LeadQuiz({ open, onClose, locale = "da" }: Props) {
       />
       <div className="relative z-10 flex max-h-[92vh] w-[calc(100%-2rem)] max-w-2xl flex-col overflow-hidden rounded-2xl border border-[var(--cream)]/10 bg-[#14110d] text-[var(--cream)] shadow-[0_40px_120px_rgba(0,0,0,0.6)]">
         {/* Header — editorial chapter marker. Big serif italic numeral +
-            mono caption (kept from the quiz shell). On the done step we drop
-            the numeral and just show the step label. */}
+            mono caption (kept from the quiz shell). */}
         <div className="flex items-baseline justify-between px-8 pt-6">
-          {isDoneStep ? (
-            <span className="font-mono text-[10px] font-bold uppercase tracking-[0.3em] text-[var(--cream)]/55">
-              {t.stepLabels.done}
+          <div className="flex items-baseline gap-3">
+            <span className="font-display text-3xl italic leading-none text-[var(--cream)]/25 sm:text-[2.25rem]">
+              {String(stepIndex + 1).padStart(2, "0")}
             </span>
-          ) : (
-            <div className="flex items-baseline gap-3">
-              <span className="font-display text-3xl italic leading-none text-[var(--cream)]/25 sm:text-[2.25rem]">
-                {String(stepIndex + 1).padStart(2, "0")}
-              </span>
-              <span className="font-mono text-[10px] uppercase tracking-[0.3em] text-[var(--cream)]/30">
-                / {totalInputSteps}
-              </span>
-              <span className="ml-1 font-mono text-[10px] font-bold uppercase tracking-[0.3em] text-[var(--cream)]/55">
-                · {t.stepLabels[currentStepKey]}
-              </span>
-            </div>
-          )}
+            <span className="font-mono text-[10px] uppercase tracking-[0.3em] text-[var(--cream)]/30">
+              / {totalInputSteps}
+            </span>
+            <span className="ml-1 font-mono text-[10px] font-bold uppercase tracking-[0.3em] text-[var(--cream)]/55">
+              · {t.stepLabels[currentStepKey]}
+            </span>
+          </div>
           <button
             type="button"
             aria-label={t.close}
@@ -330,15 +260,6 @@ export function LeadQuiz({ open, onClose, locale = "da" }: Props) {
           {currentStepKey === "book" && (
             <BookStep
               onBook={submitBooking}
-              softOpen={softOpen}
-              onSoftToggle={() => setSoftOpen((v) => !v)}
-              softEmail={softEmail}
-              softName={softName}
-              consent={consent}
-              onSoftEmailChange={setSoftEmail}
-              onSoftNameChange={setSoftName}
-              onConsentChange={setConsent}
-              onSoftSubmit={submitSoftCapture}
               website={website}
               onWebsiteChange={setWebsite}
               submitting={submitting}
@@ -346,19 +267,9 @@ export function LeadQuiz({ open, onClose, locale = "da" }: Props) {
               t={t}
             />
           )}
-          {currentStepKey === "done" && (
-            <div className="flex flex-col gap-5">
-              <h2 className="font-display text-[1.75rem] leading-[1.1] tracking-tight text-[var(--cream)] sm:text-[2.5rem]">
-                {t.doneHeading}
-              </h2>
-              <p className="text-[14px] leading-[1.65] text-[var(--cream)]/70">
-                {t.doneBody}
-              </p>
-            </div>
-          )}
 
           {/* Back button */}
-          {!isDoneStep && stepIndex > 0 && (
+          {stepIndex > 0 && (
             <button
               type="button"
               onClick={back}
@@ -507,15 +418,6 @@ function SourceStep({
 
 function BookStep({
   onBook,
-  softOpen,
-  onSoftToggle,
-  softEmail,
-  softName,
-  consent,
-  onSoftEmailChange,
-  onSoftNameChange,
-  onConsentChange,
-  onSoftSubmit,
   website,
   onWebsiteChange,
   submitting,
@@ -523,22 +425,12 @@ function BookStep({
   t,
 }: {
   onBook: () => void;
-  softOpen: boolean;
-  onSoftToggle: () => void;
-  softEmail: string;
-  softName: string;
-  consent: boolean;
-  onSoftEmailChange: (v: string) => void;
-  onSoftNameChange: (v: string) => void;
-  onConsentChange: (v: boolean) => void;
-  onSoftSubmit: () => void;
   website: string;
   onWebsiteChange: (v: string) => void;
   submitting: boolean;
   error: string | null;
   t: CopyT;
 }) {
-  const softValid = EMAIL_RE_CLIENT.test(softEmail.trim()) && consent;
   return (
     <StepShell question={t.bookQuestion}>
       <p className="-mt-3 max-w-xl text-[14px] leading-[1.7] text-[var(--cream)]/70">
@@ -568,53 +460,6 @@ function BookStep({
             {t.bookNote}
           </span>
         </div>
-
-        <button
-          type="button"
-          onClick={onSoftToggle}
-          className="mt-4 self-start text-[12px] text-[var(--cream)]/55 underline decoration-[var(--cream)]/25 underline-offset-4 transition hover:text-[var(--cream)]"
-        >
-          {t.softToggle}
-        </button>
-
-        {softOpen && (
-          <div className="mt-2 flex w-full max-w-md flex-col gap-3">
-            <input
-              type="email"
-              autoComplete="email"
-              inputMode="email"
-              value={softEmail}
-              onChange={(e) => onSoftEmailChange(e.target.value)}
-              placeholder={t.softEmailPlaceholder}
-              className="w-full border-b border-[var(--cream)]/20 bg-transparent pb-2 text-[16px] text-[var(--cream)] placeholder:text-[var(--cream)]/25 focus:border-[#ff6b2c] focus:outline-none"
-            />
-            <input
-              type="text"
-              autoComplete="name"
-              value={softName}
-              onChange={(e) => onSoftNameChange(e.target.value)}
-              placeholder={t.softNamePlaceholder}
-              className="w-full border-b border-[var(--cream)]/20 bg-transparent pb-2 text-[16px] text-[var(--cream)] placeholder:text-[var(--cream)]/25 focus:border-[#ff6b2c] focus:outline-none"
-            />
-            <label className="flex cursor-pointer items-start gap-2.5 text-[13px] leading-relaxed text-[var(--cream)]/65">
-              <input
-                type="checkbox"
-                checked={consent}
-                onChange={(e) => onConsentChange(e.target.checked)}
-                className="mt-0.5 accent-[#ff6b2c]"
-              />
-              {t.softConsentLabel}
-            </label>
-            <button
-              type="button"
-              onClick={onSoftSubmit}
-              disabled={!softValid || submitting}
-              className="self-start rounded-full border border-[var(--cream)]/25 px-6 py-3 text-[11px] font-bold uppercase tracking-[0.2em] text-[var(--cream)]/80 transition hover:border-[#ff6b2c] hover:text-[var(--cream)] disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {t.softCta}
-            </button>
-          </div>
-        )}
 
         {error && <p className="mt-2 text-[12px] text-[#ff6b2c]">{error}</p>}
         {submitting && (

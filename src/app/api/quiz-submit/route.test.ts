@@ -85,7 +85,7 @@ describe("POST /api/quiz-submit (scoping contract)", () => {
   it("rejects missing or too-short customerSource", async () => {
     const missing = await post({ kind: "booking", icp: VALID_ICP });
     expect(missing.status).toBe(400);
-    const short = await post({ kind: "booking", icp: VALID_ICP, customerSource: "aaa" });
+    const short = await post({ kind: "booking", icp: VALID_ICP, customerSource: "a" });
     expect(short.status).toBe(400);
   });
 

@@ -2,7 +2,8 @@
 // quiz-submit route (server) and the scoping modal (client validation).
 export const ICP_MIN = 10;
 export const ICP_MAX = 240;
-export const CUSTOMER_SOURCE_MIN = 10;
+// Low floor on purpose: legit answers can be a single word ("SEO", "messer").
+export const CUSTOMER_SOURCE_MIN = 2;
 export const CUSTOMER_SOURCE_MAX = 400;
 
 export function formatScopingNote(icp: string, customerSource: string): string {
