@@ -31,7 +31,7 @@ describe("smsAckDecision", () => {
     expect(d).toEqual({
       action: "send",
       to: "004520112233",
-      message: "Hej Mette, tak for din henvendelse til SOHO. Vi ringer til dig snarest fra 88 27 64 01.",
+      message: "Hej Mette, tak for din henvendelse til SOHO. Vi ringer til dig snarest fra 70 13 60 00.",
     });
   });
 
@@ -76,7 +76,7 @@ describe("smsAckDecision", () => {
     const d = smsAckDecision(lead({ workspace_id: SOHO_EVENTS, name: "Jonas Holm" }), base);
     expect(d).toMatchObject({ action: "send" });
     expect((d as { message: string }).message).toContain("events hos SOHO");
-    expect((d as { message: string }).message).not.toContain("88 27 64 01");
+    expect((d as { message: string }).message).not.toContain("70 13 60 00");
   });
 
   it("never texts Klosterstræde leads (Lee doesn't dial via Telavox)", () => {
