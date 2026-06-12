@@ -189,6 +189,7 @@ export default function LeadsPage() {
     signoff: activeWorkspace?.signoff ?? null,
     companyName: activeWorkspace?.name ?? null,
     signerName: (user?.email ? memberNames[user.email] : null) ?? null,
+    smsTemplate: activeWorkspace?.sms_template ?? null,
   };
   const [loading, setLoading] = useState(true);
   const [notifications, setNotifications] =

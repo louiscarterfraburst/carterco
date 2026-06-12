@@ -84,13 +84,19 @@ export async function POST(req: Request) {
   let senderName = "Louis";
   let brandName = "Carter & Co";
   let bookingUrl: string | null = null;
+  let smsTemplate: string | null = null;
   if (lead.workspace_id) {
     const [wsRes, memberRes] = await Promise.all([
       supabase
         .from("workspaces")
-        .select("name, signoff, booking_url")
+        .select("name, signoff, booking_url, sms_template")
         .eq("id", lead.workspace_id)
-        .maybeSingle<{ name: string | null; signoff: string | null; booking_url: string | null }>(),
+        .maybeSingle<{
+          name: string | null;
+          signoff: string | null;
+          booking_url: string | null;
+          sms_template: string | null;
+        }>(),
       supabase
         .from("workspace_members")
         .select("display_name")
@@ -102,6 +108,7 @@ export async function POST(req: Request) {
     if (ws) {
       brandName = ws.signoff?.trim() || ws.name?.trim() || brandName;
       bookingUrl = ws.booking_url?.trim() || null;
+      smsTemplate = ws.sms_template?.trim() || null;
     }
     senderName = memberRes.data?.display_name?.trim() || senderName;
   }
@@ -133,7 +140,13 @@ export async function POST(req: Request) {
     ? `- Hvis det er deres første svar, byd dem velkommen kort og foreslå næste skridt (book direkte: ${bookingUrl} — eller et opkald).`
     : `- Hvis det er deres første svar, byd dem velkommen kort og foreslå næste skridt (typisk: en 30-min snak eller view-only CRM-adgang til Loom-audit).`;
 
-  const systemPrompt = `Du er ${senderName} fra ${brandName}. Du skriver korte, varme SMS-svar på dansk til en B2B-prospect.
+  // Workspaces with their own no-answer template (workspaces.sms_template)
+  // anchor the draft's tone and vocabulary to that message.
+  const toneLine = smsTemplate
+    ? `\n\nWorkspacets faste no-answer SMS lyder sådan (match tone og ordvalg, men kopiér ikke {pladsholdere}):\n"${smsTemplate}"`
+    : "";
+
+  const systemPrompt = `Du er ${senderName} fra ${brandName}. Du skriver korte, varme SMS-svar på dansk til en B2B-prospect.${toneLine}
 
 Stil:
 - 1-2 korte sætninger, max 280 tegn.

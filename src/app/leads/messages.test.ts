@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { buildSmsBody, firstName, type Branding, type Identity } from "./messages";
+import {
+  buildSmsBody,
+  firstName,
+  renderSmsTemplate,
+  type Branding,
+  type Identity,
+} from "./messages";
 
 const OPERATOR: Identity = {
   displayName: "Louis",
@@ -13,6 +19,7 @@ const KLOSTERSTRAEDE: Branding = {
   signoff: "Soho",
   companyName: "Klosterstræde",
   signerName: "Lee",
+  smsTemplate: null,
 };
 
 describe("firstName", () => {
@@ -68,7 +75,58 @@ describe("buildSmsBody", () => {
       signoff: null,
       companyName: "Bikenor",
       signerName: "Nikolaj",
+      smsTemplate: null,
     });
     expect(body).toContain("det er Louis fra Carter & Co");
+  });
+
+  it("a workspace sms_template owns the message outright", () => {
+    const body = buildSmsBody("Mette Frederiksen", OPERATOR, undefined, {
+      ...KLOSTERSTRAEDE,
+      smsTemplate:
+        "Hej {fornavn}, det er {medarbejder} fra Soho - jeg prøvede lige at ringe ang. jeres forespørgsel om mødelokale i Klosterstræde. Du kan booke direkte her: {booking} - eller ring/skriv når det passer dig. /{medarbejder}",
+    });
+    expect(body).toBe(
+      "Hej Mette, det er Lee fra Soho - jeg prøvede lige at ringe ang. jeres forespørgsel om mødelokale i Klosterstræde. Du kan booke direkte her: https://soho.dk/da-dk/kontorer/klosterstraede - eller ring/skriv når det passer dig. /Lee",
+    );
+  });
+
+  it("template wins even without a booking link, with operator-name fallback", () => {
+    const body = buildSmsBody("Mette", OPERATOR, undefined, {
+      bookingUrl: null,
+      signoff: null,
+      companyName: "Bikenor",
+      signerName: null,
+      smsTemplate: "Hej {fornavn}, {medarbejder} fra {brand} her. /{medarbejder}",
+    });
+    expect(body).toBe("Hej Mette, Louis fra Bikenor her. /Louis");
+  });
+});
+
+describe("renderSmsTemplate", () => {
+  const VARS = {
+    fornavn: "Mette",
+    medarbejder: "Lee",
+    brand: "Soho",
+    booking: null,
+    slots: null,
+  };
+
+  it("drops the {slots} token cleanly when no slots are configured", () => {
+    const out = renderSmsTemplate("Hej {fornavn}. {slots} /{medarbejder}", VARS);
+    expect(out).toBe("Hej Mette. /Lee");
+  });
+
+  it("renders the calendar question when slots exist", () => {
+    const out = renderSmsTemplate("Hej {fornavn}. {slots} /{medarbejder}", {
+      ...VARS,
+      slots: "i morgen kl. 10",
+    });
+    expect(out).toBe("Hej Mette. Hvordan ser din kalender ud i morgen kl. 10? /Lee");
+  });
+
+  it("substitutes an empty string for {booking} when the workspace has none", () => {
+    const out = renderSmsTemplate("Book her: {booking} /{medarbejder}", VARS);
+    expect(out).toBe("Book her: /Lee");
   });
 });
