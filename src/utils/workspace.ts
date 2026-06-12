@@ -6,9 +6,16 @@ export type Workspace = {
   name: string;
   sms_enabled?: boolean;
   booking_url?: string | null;
-  mail_provider?: string | null;
   signoff?: string | null;
   outcome_preset?: string | null;
+  // Workspace-owned no-answer SMS message ({fornavn}/{medarbejder}/{brand}/
+  // {booking}/{slots} tokens). NULL = built-in default in leads/messages.ts.
+  sms_template?: string | null;
+  // First-message mechanism (video_render | ai_drafted_dm) — drives the Flow
+  // board's main spine in /outreach.
+  outreach_style?: string | null;
+  // Where "Skriv mail" opens the draft: mailto | gmail | outlook.
+  mail_provider?: string | null;
 };
 
 // Returns the workspaces the authenticated user is a member of. RLS filters the
@@ -28,7 +35,7 @@ export function useWorkspace(
 
     void supabase
       .from("workspaces")
-      .select("id, name, sms_enabled, booking_url, signoff, outcome_preset, mail_provider")
+      .select("id, name, sms_enabled, booking_url, signoff, outcome_preset, sms_template, outreach_style, mail_provider")
       .order("name", { ascending: true })
       .then(({ data }) => {
         if (cancelled) return;
@@ -39,9 +46,11 @@ export function useWorkspace(
             name: w.name,
             sms_enabled: w.sms_enabled ?? false,
             booking_url: w.booking_url ?? null,
-            mail_provider: w.mail_provider ?? "mailto",
             signoff: w.signoff ?? null,
             outcome_preset: w.outcome_preset ?? "standard",
+            sms_template: w.sms_template ?? null,
+            outreach_style: w.outreach_style ?? "video_render",
+            mail_provider: w.mail_provider ?? "mailto",
           })),
         });
       });
