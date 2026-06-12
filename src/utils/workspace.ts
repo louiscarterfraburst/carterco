@@ -14,7 +14,7 @@ export type Workspace = {
   // First-message mechanism (video_render | ai_drafted_dm) — drives the Flow
   // board's main spine in /outreach.
   outreach_style?: string | null;
-  // How "Skriv mail" composes: mailto | gmail | outlook (web composer).
+  // Where "Skriv mail" opens the draft: mailto | gmail | outlook.
   mail_provider?: string | null;
 };
 
