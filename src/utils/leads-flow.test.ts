@@ -61,6 +61,22 @@ describe("buildLeadsFlow", () => {
     expect(buildLeadsFlow(soho).some((s) => s.key === "sms")).toBe(false);
   });
 
+  it("splits Soho into mødelokale- and kontor-outcomes (per-lead presets)", () => {
+    const steps = buildLeadsFlow(soho);
+    const office = steps.find((s) => s.key === "outcome_office");
+    expect(office).toBeDefined();
+    expect(office!.branches!.map((b) => b.label)).toEqual([
+      "Fremvisning booket",
+      "Lejet",
+      "Interesseret",
+      "Ring tilbage",
+      "Ikke relevant",
+    ]);
+    expect(office!.branches!.filter((b) => b.closes).map((b) => b.label)).toEqual(["Ikke relevant"]);
+    // Klosterstræde keeps a single outcome step.
+    expect(buildLeadsFlow(klosterstraede).some((s) => s.key === "outcome_office")).toBe(false);
+  });
+
   it("shows preset-specific outcome buttons and exactly one closing branch", () => {
     for (const ws of [soho, carterco]) {
       const outcome = buildLeadsFlow(ws).find((s) => s.key === "outcome")!;

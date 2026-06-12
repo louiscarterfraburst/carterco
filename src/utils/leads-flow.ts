@@ -68,35 +68,75 @@ export function buildLeadsFlow(ws: Pick<Workspace, "id" | "name" | "booking_url"
     });
   }
 
-  if (preset === "meeting_room") {
-    steps.push({
-      key: "outcome",
-      title: "Udfald efter samtale",
-      actor: "operatør",
-      detail: "Fire knapper i leadets sprog — kun “Ikke relevant” lukker.",
-      branches: [
-        {
-          label: "Delt link",
-          detail:
-            "Leadet overvåges: genopdukker til et nudge dag 1, 2 og 4 efter linket blev delt — derefter stille. Lukker aldrig.",
-        },
-        {
-          label: "Ring tilbage",
-          detail: "Aftalt tidspunkt sættes på leadet, og det resurfacer i køen til tiden.",
-        },
-        {
-          label: "Booket",
-          detail: nexudus
-            ? "Sættes automatisk når leadet booker i Nexudus (webhook matcher på e-mail) — og bookingen meldes til Meta (CAPI), så annoncerne optimerer mod bookinger. Kan også sættes manuelt."
-            : "Sættes manuelt når aftalen (fremvisning/prøvedag) er i hus — mødetidspunkt registreres på leadet.",
-        },
-        {
-          label: "Ikke relevant",
-          detail: "Lukker leadet. Den eneste vej til lukket.",
-          closes: true,
-        },
-      ],
-    });
+  const meetingRoomStep = (key: string, title: string): FlowStep => ({
+    key,
+    title,
+    actor: "operatør",
+    detail: "Fire knapper i leadets sprog — kun “Ikke relevant” lukker.",
+    branches: [
+      {
+        label: "Delt link",
+        detail:
+          "Leadet overvåges: genopdukker til et nudge dag 1, 2 og 4 efter linket blev delt — derefter stille. Lukker aldrig.",
+      },
+      {
+        label: "Ring tilbage",
+        detail: "Aftalt tidspunkt sættes på leadet, og det resurfacer i køen til tiden.",
+      },
+      {
+        label: "Booket",
+        detail: nexudus
+          ? "Sættes automatisk når leadet booker i Nexudus (webhook matcher på e-mail) — og bookingen meldes til Meta (CAPI), så annoncerne optimerer mod bookinger. Kan også sættes manuelt."
+          : "Sættes manuelt når aftalen (fremvisning/prøvedag) er i hus — mødetidspunkt registreres på leadet.",
+      },
+      {
+        label: "Ikke relevant",
+        detail: "Lukker leadet. Den eneste vej til lukket.",
+        closes: true,
+      },
+    ],
+  });
+
+  const officeStep = (key: string, title: string): FlowStep => ({
+    key,
+    title,
+    actor: "operatør",
+    detail: "Kontor-leads lukker via fremvisning → lejet — kun “Ikke relevant” lukker.",
+    branches: [
+      {
+        label: "Fremvisning booket",
+        detail: "Fremvisningen er i kalenderen — mødetidspunkt registreres på leadet.",
+      },
+      {
+        label: "Lejet",
+        detail: "Kontoret er lejet — den endelige konvertering.",
+      },
+      {
+        label: "Interesseret",
+        detail: "Holdes varm: leadet resurfacer efter 2 dage til opfølgning. Lukker aldrig.",
+      },
+      {
+        label: "Ring tilbage",
+        detail: "Aftalt tidspunkt sættes på leadet, og det resurfacer i køen til tiden.",
+      },
+      {
+        label: "Ikke relevant",
+        detail: "Lukker leadet. Den eneste vej til lukket.",
+        closes: true,
+      },
+    ],
+  });
+
+  // Soho's workspace receives both mødelokale-leads (CR New-copy form) and
+  // kontor-leads (Office-carter form); the panel picks outcome buttons per
+  // lead via meta_form_id (src/utils/lead-presets.ts), so the flow shows both.
+  const SOHO_SPLIT_WS = "7f13f551-9514-4a5a-b1bf-98eb95c1a469";
+
+  if (ws.id === SOHO_SPLIT_WS) {
+    steps.push(meetingRoomStep("outcome", "Udfald — mødelokale-leads"));
+    steps.push(officeStep("outcome_office", "Udfald — kontor-leads"));
+  } else if (preset === "meeting_room") {
+    steps.push(meetingRoomStep("outcome", "Udfald efter samtale"));
   } else {
     steps.push({
       key: "outcome",
