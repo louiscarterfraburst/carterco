@@ -33,6 +33,8 @@
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.103.3";
+import { routeLeadForm } from "../_shared/meta-leadgen-routing.ts";
+import { parseFieldData, type LeadFieldData } from "../_shared/meta-lead-fields.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -54,6 +56,9 @@ const PAGE_TOKEN_MAP: Record<string, string> = parseJsonEnv("META_PAGE_TOKEN_MAP
 // Optional per-page form allowlist — only these forms ingest (Soho: Mødelokaler
 // in, Kontor out). JSON: {"146975948684005":["1539910014404003"]}
 const PAGE_FORM_ALLOWLIST: Record<string, string[]> = parseJsonArrayEnv("META_PAGE_FORM_ALLOWLIST");
+// Optional form-level workspace override — forms on a shared page can land in
+// different workspaces (Soho's K9 form → Klosterstræde). JSON: {"<form_id>":"<workspace_uuid>"}
+const FORM_WORKSPACE_MAP: Record<string, string> = parseJsonEnv("META_FORM_WORKSPACE_MAP");
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL") ?? "",
@@ -99,12 +104,9 @@ Deno.serve(async (request) => {
 
   for (const entry of body.entry) {
     const pageId = String(entry.id ?? "");
-    const workspaceId = await resolveWorkspace(pageId);
-    if (!workspaceId) {
-      console.warn("meta-leadgen-webhook: unmapped page, skipping", pageId);
-      results.push({ leadgen_id: "", status: `skipped:unmapped_page:${pageId}` });
-      continue;
-    }
+    // Page-level default; a form-level mapping can still route a lead even if
+    // the page itself is unmapped, so no early skip here.
+    const pageWorkspaceId = await resolveWorkspace(pageId);
 
     for (const change of entry.changes ?? []) {
       if (change.field !== "leadgen") continue;
@@ -115,18 +117,23 @@ Deno.serve(async (request) => {
         continue;
       }
 
-      // Form scope: skip out-of-scope forms before the Graph fetch (Kontor).
-      // Fail-closed semantics for allowlisted pages: a missing form_id and an
-      // explicitly-empty allowlist array both BLOCK (an empty array means
-      // "allow nothing", not "no filter"). Pages absent from the env map have
-      // no filter at all. Skips are recorded in `results` for auditability.
+      // Form scope + destination in one decision (see _shared/meta-leadgen-routing.ts):
+      // allowlisted pages stay fail-closed, and META_FORM_WORKSPACE_MAP lets a
+      // form override the page workspace (Soho's K9 form → Klosterstræde).
       const formId = String(v.form_id ?? "");
-      const allow = PAGE_FORM_ALLOWLIST[pageId];
-      if (allow && (!formId || !allow.includes(formId))) {
-        console.warn("meta-leadgen: form out of scope, lead skipped", { pageId, formId: formId || "none", leadgenId });
-        results.push({ leadgen_id: leadgenId, status: `skipped:form_out_of_scope:${formId || "none"}` });
+      const route = routeLeadForm({
+        pageId,
+        formId,
+        pageWorkspaceId,
+        formWorkspaceMap: FORM_WORKSPACE_MAP,
+        pageFormAllowlist: PAGE_FORM_ALLOWLIST,
+      });
+      if (route.action === "skip") {
+        console.warn("meta-leadgen: lead skipped", { pageId, formId: formId || "none", leadgenId, reason: route.reason });
+        results.push({ leadgen_id: leadgenId, status: `skipped:${route.reason}` });
         continue;
       }
+      const workspaceId = route.workspaceId;
 
       try {
         const pageToken = PAGE_TOKEN_MAP[pageId] ?? PAGE_ACCESS_TOKEN;
@@ -184,7 +191,6 @@ type MetaWebhookBody = {
   }>;
 };
 
-type LeadFieldData = { name: string; values: string[] };
 type MetaLead = {
   id: string;
   created_time?: string;
@@ -229,44 +235,6 @@ async function fetchCampaignId(adId: string, token: string): Promise<string | nu
 // Field names from Meta lead forms come back as machine-readable slugs. The
 // standard prefilled fields are stable; custom questions use the slug of the
 // question label. We map known slugs and keep the rest in raw for later use.
-function parseFieldData(fields: LeadFieldData[] | undefined): {
-  name: string | null;
-  email: string | null;
-  phone: string | null;
-  company: string | null;
-  qualifier: string | null;
-  extra: Record<string, string>;
-} {
-  const out = { name: null as string | null, email: null as string | null, phone: null as string | null, company: null as string | null, qualifier: null as string | null, extra: {} as Record<string, string> };
-  if (!Array.isArray(fields)) return out;
-  for (const f of fields) {
-    const slug = (f.name ?? "").toLowerCase();
-    const val = (f.values?.[0] ?? "").trim();
-    if (!val) continue;
-    if (!out.name && (slug === "full_name" || slug === "name")) { out.name = val; continue; }
-    if (!out.name && (slug === "first_name" || slug === "last_name")) {
-      out.extra[slug] = val;
-      // Combine on second occurrence
-      if (out.extra.first_name && out.extra.last_name) out.name = `${out.extra.first_name} ${out.extra.last_name}`.trim();
-      continue;
-    }
-    if (!out.email && slug === "email") { out.email = val.toLowerCase(); continue; }
-    if (!out.phone && (slug === "phone_number" || slug === "phone")) { out.phone = val; continue; }
-    if (!out.company && (slug === "company_name" || slug === "company")) { out.company = val; continue; }
-    // Anything else (qualifier slug varies with the question label) lands in extra
-    out.extra[slug] = val;
-  }
-  // Use first non-standard field as the qualifier if we have one
-  if (!out.qualifier) {
-    for (const [k, v] of Object.entries(out.extra)) {
-      if (["first_name", "last_name"].includes(k)) continue;
-      out.qualifier = v;
-      break;
-    }
-  }
-  return out;
-}
-
 async function insertLead(args: {
   workspaceId: string;
   leadgenId: string;
