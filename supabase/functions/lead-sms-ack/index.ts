@@ -50,7 +50,7 @@ Deno.serve(async (request) => {
   // Candidates: untouched meta leads past the gate but not stale.
   const { data: leads, error } = await supabase
     .from("leads")
-    .select("id, workspace_id, name, phone, source, is_draft, call_status, outcome, created_at")
+    .select("id, workspace_id, name, phone, source, is_draft, call_status, outcome, created_at, meta_form_id")
     .in("workspace_id", enabledWorkspaces)
     .eq("source", "meta_leadgen")
     .eq("is_draft", false)
