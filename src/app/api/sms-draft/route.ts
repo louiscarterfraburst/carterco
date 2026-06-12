@@ -24,6 +24,7 @@ type LeadRow = {
   company: string | null;
   notes: string | null;
   source: string | null;
+  workspace_id: string | null;
 };
 
 type ConversationEvent = {
@@ -64,7 +65,7 @@ export async function POST(req: Request) {
 
   const { data: lead, error: leadErr } = await supabase
     .from("leads")
-    .select("id, name, company, notes, source")
+    .select("id, name, company, notes, source, workspace_id")
     .eq("id", leadId)
     .maybeSingle<LeadRow>();
 
@@ -73,6 +74,36 @@ export async function POST(req: Request) {
   }
   if (!lead) {
     return NextResponse.json({ error: "lead not found" }, { status: 404 });
+  }
+
+  // Sender identity follows the lead's WORKSPACE, not a hardcoded operator:
+  // the brand is the workspace's outbound name (signoff, e.g. "Soho", falling
+  // back to its internal name) and the signer is the requesting user's roster
+  // name in that workspace. Only with no workspace at all do we fall back to
+  // the CarterCo identity this route originally hardcoded.
+  let senderName = "Louis";
+  let brandName = "Carter & Co";
+  let bookingUrl: string | null = null;
+  if (lead.workspace_id) {
+    const [wsRes, memberRes] = await Promise.all([
+      supabase
+        .from("workspaces")
+        .select("name, signoff, booking_url")
+        .eq("id", lead.workspace_id)
+        .maybeSingle<{ name: string | null; signoff: string | null; booking_url: string | null }>(),
+      supabase
+        .from("workspace_members")
+        .select("display_name")
+        .eq("workspace_id", lead.workspace_id)
+        .eq("user_email", user.email ?? "")
+        .maybeSingle<{ display_name: string | null }>(),
+    ]);
+    const ws = wsRes.data;
+    if (ws) {
+      brandName = ws.signoff?.trim() || ws.name?.trim() || brandName;
+      bookingUrl = ws.booking_url?.trim() || null;
+    }
+    senderName = memberRes.data?.display_name?.trim() || senderName;
   }
 
   // Conversation history — last 20 SMS events, oldest-first for prompt clarity.
@@ -89,13 +120,20 @@ export async function POST(req: Request) {
   const firstName = (lead.name ?? "").split(/\s+/)[0] || "der";
   const conversationLines = conversation
     .map((e) => {
-      const who = e.direction === "inbound" ? firstName : "Louis";
+      const who = e.direction === "inbound" ? firstName : senderName;
       return `${who}: ${(e.body ?? "").trim()}`;
     })
     .filter((line) => line.split(": ")[1])
     .join("\n");
 
-  const systemPrompt = `Du er Louis fra Carter & Co. Du skriver korte, varme SMS-svar på dansk til en B2B-prospect.
+  // Next-step suggestion differs by workspace type: client panels with a
+  // booking link nudge towards that link; the CarterCo pipeline nudges towards
+  // its own next steps (snak / CRM-adgang).
+  const nextStepLine = bookingUrl
+    ? `- Hvis det er deres første svar, byd dem velkommen kort og foreslå næste skridt (book direkte: ${bookingUrl} — eller et opkald).`
+    : `- Hvis det er deres første svar, byd dem velkommen kort og foreslå næste skridt (typisk: en 30-min snak eller view-only CRM-adgang til Loom-audit).`;
+
+  const systemPrompt = `Du er ${senderName} fra ${brandName}. Du skriver korte, varme SMS-svar på dansk til en B2B-prospect.
 
 Stil:
 - 1-2 korte sætninger, max 280 tegn.
@@ -103,7 +141,7 @@ Stil:
 - Brug "I/jeres" (formelt B2B-plural), ikke "du/dit".
 - Ingen emojis. Ingen marketing-floskler.
 - Hvis prospecten har stillet et konkret spørgsmål, svar konkret.
-- Hvis det er deres første svar, byd dem velkommen kort og foreslå næste skridt (typisk: en 30-min snak eller view-only CRM-adgang til Loom-audit).
+${nextStepLine}
 - Aldrig opfind tal, navne på kunder, eller løfter du ikke kan holde.
 
 Returnér KUN selve SMS-teksten. Ingen forklaring, ingen citationstegn, ingen prefix.`;
@@ -118,7 +156,7 @@ Returnér KUN selve SMS-teksten. Ingen forklaring, ingen citationstegn, ingen pr
     .join("\n");
 
   const userPrompt = conversationLines
-    ? `Kontext om leadet:\n${contextBlock}\n\nSamtalehistorik (ældst først):\n${conversationLines}\n\nSkriv næste SMS fra Louis.`
+    ? `Kontext om leadet:\n${contextBlock}\n\nSamtalehistorik (ældst først):\n${conversationLines}\n\nSkriv næste SMS fra ${senderName}.`
     : `Kontext om leadet:\n${contextBlock}\n\nDer er ingen tidligere SMS-historik. Skriv den første SMS efter et missed call.`;
 
   const client = new Anthropic({ apiKey });

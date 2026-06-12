@@ -14,6 +14,7 @@ import { createClient } from "@/utils/supabase/client";
 import { clampToBusinessHours, wasClamped } from "@/utils/businessHours";
 import { useWorkspace } from "@/utils/workspace";
 import { leadOutcomePreset } from "@/utils/lead-presets";
+import { buildSmsBody, firstName, type Branding, type Identity } from "./messages";
 
 /* ─── types ─────────────────────────────────────────────────────────── */
 
@@ -1782,11 +1783,12 @@ function DetailPanel({
     );
   }
 
-  // SMS handoff is CarterCo-only (smsEnabled). When off, the "Intet svar · SMS"
-  // variant and the AI-svar button both drop out — client panels stay call-first.
+  // SMS handoff is gated per workspace (smsEnabled). When off, the
+  // "Intet svar · SMS" variant and the AI-svar button both drop out — those
+  // client panels stay call-first.
   const canSms =
     smsEnabled && !!lead.phone && lead.phone.replace(/\D/g, "").length >= 8;
-  const smsBody = buildSmsBody(lead.name, identity, slotsLine);
+  const smsBody = buildSmsBody(lead.name, identity, slotsLine, branding);
   const hasEmail = !!lead.email && lead.email.includes("@");
   const hasDialled = hasRung || lead.call_status !== null;
   const showOutcomeSection = lead.call_status === "answered";
@@ -2984,33 +2986,6 @@ function TrashIcon() {
 
 function outcomeStripe(outcome: Exclude<Outcome, null>) {
   return OUTCOME_TONE[outcome].edge;
-}
-
-function firstName(name: string | null) {
-  if (!name) return "der";
-  return name.trim().split(/\s+/)[0] ?? name;
-}
-
-type Identity = {
-  displayName: string;
-  companyName: string;
-  calendlyUrl: string;
-  signoff: string;
-};
-
-// Per-workspace email branding. When bookingUrl is set (e.g. Soho's Nexudus
-// link), the email draft uses the client's follow-up template instead of the
-// operator's CarterCo identity. PLACEHOLDER booking link until Louis sets it.
-type Branding = {
-  bookingUrl: string | null;
-  signoff: string | null;
-  companyName: string | null;
-  signerName: string | null;
-};
-
-function buildSmsBody(name: string | null, identity: Identity, slotsLine?: string) {
-  const slot = slotsLine ? ` Hvordan ser din kalender ud ${slotsLine}?` : "";
-  return `Hej ${firstName(name)}, det er ${identity.displayName} fra ${identity.companyName} - jeg prøvede lige at ringe.${slot} /${identity.signoff}`;
 }
 
 function buildEmailDraft(
