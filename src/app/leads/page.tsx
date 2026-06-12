@@ -14,7 +14,7 @@ import { createClient } from "@/utils/supabase/client";
 import { clampToBusinessHours, wasClamped } from "@/utils/businessHours";
 import { useWorkspace } from "@/utils/workspace";
 import { leadOutcomePreset } from "@/utils/lead-presets";
-import { buildSmsBody, firstName, type Branding, type Identity } from "./messages";
+import { mailComposeUrl, opensInNewTab } from "@/utils/mail-compose";
 
 /* ─── types ─────────────────────────────────────────────────────────── */
 
@@ -189,7 +189,7 @@ export default function LeadsPage() {
     signoff: activeWorkspace?.signoff ?? null,
     companyName: activeWorkspace?.name ?? null,
     signerName: (user?.email ? memberNames[user.email] : null) ?? null,
-    smsTemplate: activeWorkspace?.sms_template ?? null,
+    mailProvider: activeWorkspace?.mail_provider ?? "mailto",
   };
   const [loading, setLoading] = useState(true);
   const [notifications, setNotifications] =
@@ -376,13 +376,9 @@ export default function LeadsPage() {
   const visibleLeads = useMemo(() => {
     if (view === "active") {
       // Fresh queue: actionable AND not yet dialled. Reply-waiting leads bubble
-      // to the top. Dialled leads move to "I gang" so nobody double-dials —
-      // EXCEPT leads I rang in THIS session (hasRungIds), which stay put until
-      // their outcome is marked. Otherwise the row vanishes mid-call, before
-      // you can record what happened. Other agents' views still move the lead
-      // out (hasRungIds is local), so the double-dial guard holds.
+      // to the top. Dialled leads move to "I gang" so nobody double-dials.
       return leads
-        .filter((l) => isActiveLead(l) && (!isDialled(l) || hasRungIds.has(l.id)))
+        .filter((l) => isActiveLead(l) && !isDialled(l))
         .sort((a, b) => {
           const aWaiting = leadsWithInboundReply.has(a.id) ? 1 : 0;
           const bWaiting = leadsWithInboundReply.has(b.id) ? 1 : 0;
@@ -390,10 +386,9 @@ export default function LeadsPage() {
         });
     }
     if (view === "in_progress") {
-      // Actionable AND already dialled — being worked. My own this-session
-      // calls are still parked in Aktive (see above), not dual-listed here.
+      // Actionable AND already dialled — being worked.
       return leads
-        .filter((l) => isActiveLead(l) && isDialled(l) && !hasRungIds.has(l.id))
+        .filter((l) => isActiveLead(l) && isDialled(l))
         .sort((a, b) => {
           const aWaiting = leadsWithInboundReply.has(a.id) ? 1 : 0;
           const bWaiting = leadsWithInboundReply.has(b.id) ? 1 : 0;
@@ -427,7 +422,7 @@ export default function LeadsPage() {
     }
     return leads;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [leads, view, dialledLeadIds, leadsWithInboundReply, hasRungIds]);
+  }, [leads, view, dialledLeadIds, leadsWithInboundReply]);
 
   const pendingOutcomeLeads = useMemo(
     () => leads.filter((l) => l.call_status === "answered" && !l.outcome),
@@ -435,11 +430,9 @@ export default function LeadsPage() {
   );
 
   const stats = useMemo(() => {
-    // Same predicates as visibleLeads, so the masthead numbers match the lists
-    // (my this-session calls count as Aktive, where they are shown).
     const actionable = leads.filter(isActiveLead);
-    const active = actionable.filter((l) => !isDialled(l) || hasRungIds.has(l.id)).length;
-    const inProgress = actionable.filter((l) => isDialled(l) && !hasRungIds.has(l.id)).length;
+    const active = actionable.filter((l) => !isDialled(l)).length;
+    const inProgress = actionable.filter((l) => isDialled(l)).length;
     const waiting = leads.filter(isWaitingLead).length;
     const customers = leads.filter((l) => l.outcome === "customer").length;
     const pending = pendingOutcomeLeads.length;
@@ -447,7 +440,7 @@ export default function LeadsPage() {
     const latest = leads[0]?.created_at ?? null;
     return { active, inProgress, waiting, customers, pending, total, latest };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [leads, pendingOutcomeLeads, dialledLeadIds, hasRungIds]);
+  }, [leads, pendingOutcomeLeads, dialledLeadIds]);
 
   useEffect(() => {
     let mounted = true;
@@ -1176,13 +1169,8 @@ export default function LeadsPage() {
     <main className="safe-screen safe-pad-bottom relative min-h-screen max-w-full overflow-x-hidden bg-[var(--sand)] text-[var(--ink)]">
       <div className="grain-overlay" />
 
-      {/* Sticky top bar. ONE sticky wrapper holds the header, the mobile view
-          toggle and the pending-outcome bar, so each sits below the previous
-          one's real rendered height — a hardcoded top offset can't account for
-          env(safe-area-inset-top), which buried the outcome buttons under the
-          header on phones. */}
-      <div className="sticky top-0 z-20">
-      <div className="safe-pad-top border-b border-[var(--ink)]/[0.10] bg-[var(--sand)]/85 backdrop-blur-xl">
+      {/* Sticky top bar */}
+      <div className="safe-pad-top sticky top-0 z-20 border-b border-[var(--ink)]/[0.10] bg-[var(--sand)]/85 backdrop-blur-xl">
         <div className="mx-auto flex w-full max-w-[1400px] min-w-0 items-center justify-between gap-3 px-4 py-3 sm:gap-4 sm:px-8 lg:px-12">
           <div className="flex min-w-0 items-center gap-3">
             <Link
@@ -1197,7 +1185,7 @@ export default function LeadsPage() {
               <select
                 value={activeWorkspace?.id ?? ""}
                 onChange={(e) => chooseWorkspace(e.target.value)}
-                className="focus-cream tabular max-w-[45vw] shrink-0 rounded-sm border border-[var(--ink)]/15 bg-transparent px-2 py-1.5 text-[10px] uppercase tracking-[0.18em] text-[var(--ink)]/65 outline-none hover:border-[var(--ink)]/35 focus:border-[var(--ink)]/35 sm:max-w-none"
+                className="focus-cream tabular shrink-0 rounded-sm border border-[var(--ink)]/15 bg-transparent px-2 py-1.5 text-[10px] uppercase tracking-[0.18em] text-[var(--ink)]/65 outline-none hover:border-[var(--ink)]/35 focus:border-[var(--ink)]/35"
                 title="Workspace"
               >
                 {workspaces.map((w) => (
@@ -1208,12 +1196,7 @@ export default function LeadsPage() {
           </div>
 
           <div className="flex min-w-0 shrink-0 items-center gap-1 sm:gap-2">
-            {/* The 6-tab toggle can't share a phone-width row with the
-                breadcrumb + workspace select; below sm it gets its own
-                scrollable row under the bar. */}
-            <div className="hidden sm:block">
-              <SegmentedToggle value={view} onChange={setView} />
-            </div>
+            <SegmentedToggle value={view} onChange={setView} />
             <div className="mx-1 hidden h-4 w-px bg-[var(--ink)]/10 sm:block" />
             <Link
               href="/meetings"
@@ -1258,11 +1241,6 @@ export default function LeadsPage() {
             </IconButton>
           </div>
         </div>
-        <div className="overflow-x-auto px-4 pb-3 sm:hidden">
-          <div className="w-max">
-            <SegmentedToggle value={view} onChange={setView} />
-          </div>
-        </div>
       </div>
 
       {pendingOutcomeLeads.length > 0 ? (
@@ -1272,7 +1250,6 @@ export default function LeadsPage() {
           setOutcome={setOutcome}
         />
       ) : null}
-      </div>
 
       {/* Masthead */}
       <section className="relative mx-auto w-full max-w-[1400px] min-w-0 px-4 pt-10 pb-8 sm:px-8 sm:pt-16 sm:pb-10 lg:px-12">
@@ -1784,12 +1761,11 @@ function DetailPanel({
     );
   }
 
-  // SMS handoff is gated per workspace (smsEnabled). When off, the
-  // "Intet svar · SMS" variant and the AI-svar button both drop out — those
-  // client panels stay call-first.
+  // SMS handoff is CarterCo-only (smsEnabled). When off, the "Intet svar · SMS"
+  // variant and the AI-svar button both drop out — client panels stay call-first.
   const canSms =
     smsEnabled && !!lead.phone && lead.phone.replace(/\D/g, "").length >= 8;
-  const smsBody = buildSmsBody(lead.name, identity, slotsLine, branding);
+  const smsBody = buildSmsBody(lead.name, identity, slotsLine);
   const hasEmail = !!lead.email && lead.email.includes("@");
   const hasDialled = hasRung || lead.call_status !== null;
   const showOutcomeSection = lead.call_status === "answered";
@@ -1808,6 +1784,7 @@ function DetailPanel({
           />
           <ContactAction
             href={hasEmail ? mailtoHref(lead.email, lead.name, identity, slotsLine, branding) : "#"}
+            newTab={opensInNewTab(branding?.mailProvider)}
             enabled={hasEmail}
             icon={<MailIcon />}
             label="Skriv mail"
@@ -2291,7 +2268,7 @@ function PendingOutcomeBar({
 }) {
   const displayName = lead.name ?? lead.email ?? "Unavngivet";
   return (
-    <div className="border-b border-[var(--clay)]/30 bg-[var(--clay)]/[0.08] backdrop-blur-xl">
+    <div className="sticky top-[56px] z-10 border-b border-[var(--clay)]/30 bg-[var(--clay)]/[0.08] backdrop-blur-xl">
       <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-8 lg:px-12">
         <div className="min-w-0">
           <p className="tabular text-[10px] uppercase tracking-[0.26em] text-[var(--clay)]">
@@ -2358,7 +2335,7 @@ function PendingQuickButton({
     <button
       type="button"
       onClick={onClick}
-      className={`focus-cream tabular rounded-sm px-3 py-2.5 text-[11px] uppercase tracking-[0.16em] transition sm:px-2.5 sm:py-1.5 sm:text-[10px] ${
+      className={`focus-cream tabular rounded-sm px-2.5 py-1.5 text-[10px] uppercase tracking-[0.16em] transition ${
         accent
           ? "bg-[var(--forest)] text-[var(--cream)] hover:bg-[#2f5e4e]"
           : "border border-[var(--ink)]/15 text-[var(--ink)]/75 hover:border-[var(--ink)]/35 hover:text-[var(--ink)]"
@@ -2783,6 +2760,7 @@ function IconButton({
 function ContactAction({
   href,
   download,
+  newTab,
   enabled,
   icon,
   label,
@@ -2790,6 +2768,7 @@ function ContactAction({
 }: {
   href: string;
   download?: string;
+  newTab?: boolean;
   enabled: boolean;
   icon: ReactNode;
   label: string;
@@ -2811,6 +2790,8 @@ function ContactAction({
     <a
       href={href}
       download={download}
+      target={newTab ? "_blank" : undefined}
+      rel={newTab ? "noopener noreferrer" : undefined}
       className="focus-cream flex min-w-0 items-center justify-between gap-4 text-[var(--ink)]/55 transition hover:text-[var(--ink)]"
     >
       <span className="flex items-center gap-3 text-[11px] uppercase tracking-[0.18em]">
@@ -2989,6 +2970,34 @@ function outcomeStripe(outcome: Exclude<Outcome, null>) {
   return OUTCOME_TONE[outcome].edge;
 }
 
+function firstName(name: string | null) {
+  if (!name) return "der";
+  return name.trim().split(/\s+/)[0] ?? name;
+}
+
+type Identity = {
+  displayName: string;
+  companyName: string;
+  calendlyUrl: string;
+  signoff: string;
+};
+
+// Per-workspace email branding. When bookingUrl is set (e.g. Soho's Nexudus
+// link), the email draft uses the client's follow-up template instead of the
+// operator's CarterCo identity. PLACEHOLDER booking link until Louis sets it.
+type Branding = {
+  bookingUrl: string | null;
+  signoff: string | null;
+  companyName: string | null;
+  signerName: string | null;
+  mailProvider: string | null;
+};
+
+function buildSmsBody(name: string | null, identity: Identity, slotsLine?: string) {
+  const slot = slotsLine ? ` Hvordan ser din kalender ud ${slotsLine}?` : "";
+  return `Hej ${firstName(name)}, det er ${identity.displayName} fra ${identity.companyName} - jeg prøvede lige at ringe.${slot} /${identity.signoff}`;
+}
+
 function buildEmailDraft(
   name: string | null,
   identity: Identity,
@@ -3038,8 +3047,7 @@ function mailtoHref(
 ) {
   if (!email) return "#";
   const { subject, body } = buildEmailDraft(name, identity, slotsLine, branding);
-  const query = `subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-  return `mailto:${email}?${query}`;
+  return mailComposeUrl(branding?.mailProvider, email, subject, body);
 }
 
 function canSaveContact(lead: Lead) {
