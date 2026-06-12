@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { firstNameOf, smsAckDecision, toTelavoxNumber } from "./lead-sms-ack.ts";
 
 const SOHO = "7f13f551-9514-4a5a-b1bf-98eb95c1a469";
+const SOHO_EVENTS = "9d2a8cd2-ea01-4ab0-92c5-84e4256ccca7";
 const KLOSTER = "c61aaffb-518b-4995-ac31-5a2e7300b1f2";
 
 // Tuesday 2026-06-16 10:00 CPH (08:00 UTC, CEST) — inside reception hours.
@@ -71,11 +72,18 @@ describe("smsAckDecision", () => {
     expect(d).toEqual({ action: "skip", reason: "outside_hours" });
   });
 
-  it("uses Klosterstræde copy without a promised number", () => {
-    const d = smsAckDecision(lead({ workspace_id: KLOSTER, name: "Jonas Holm" }), base);
+  it("covers Soho Events (Telavox-dialled) without a promised number", () => {
+    const d = smsAckDecision(lead({ workspace_id: SOHO_EVENTS, name: "Jonas Holm" }), base);
     expect(d).toMatchObject({ action: "send" });
-    expect((d as { message: string }).message).toContain("fast plads i Klosterstræde");
+    expect((d as { message: string }).message).toContain("events hos SOHO");
     expect((d as { message: string }).message).not.toContain("88 27 64 01");
+  });
+
+  it("never texts Klosterstræde leads (Lee doesn't dial via Telavox)", () => {
+    expect(smsAckDecision(lead({ workspace_id: KLOSTER }), base)).toEqual({
+      action: "skip",
+      reason: "workspace_not_enabled",
+    });
   });
 });
 
