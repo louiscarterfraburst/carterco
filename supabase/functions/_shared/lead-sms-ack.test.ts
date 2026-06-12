@@ -19,6 +19,7 @@ function lead(overrides: Partial<Parameters<typeof smsAckDecision>[0]> = {}) {
     call_status: null,
     outcome: null,
     created_at: new Date(NOW.getTime() - 10 * 60 * 1000).toISOString(), // 10 min old
+    meta_form_id: null as string | null,
     ...overrides,
   };
 }
@@ -79,11 +80,26 @@ describe("smsAckDecision", () => {
     expect((d as { message: string }).message).not.toContain("70 13 60 00");
   });
 
-  it("never texts Klosterstræde leads (Lee doesn't dial via Telavox)", () => {
-    expect(smsAckDecision(lead({ workspace_id: KLOSTER }), base)).toEqual({
-      action: "skip",
-      reason: "workspace_not_enabled",
-    });
+  it("texts Klosterstræde leads with the Klosterstræde page link, no number promise", () => {
+    const d = smsAckDecision(lead({ workspace_id: KLOSTER, name: "Camilla Friis" }), base);
+    expect(d).toMatchObject({ action: "send" });
+    const msg = (d as { message: string }).message;
+    expect(msg).toContain("https://soho.dk/da-dk/kontorer/klosterstraede");
+    expect(msg).not.toContain("70 13 60 00");
+  });
+
+  it("picks the link by lead type (form) within the Soho workspace", () => {
+    const cr = smsAckDecision(lead({ meta_form_id: "1539910014404003" }), base);
+    expect((cr as { message: string }).message).toContain("sohonetwork.spaces.nexudus.com/bookings");
+    const office = smsAckDecision(lead({ meta_form_id: "997952706463015" }), base);
+    expect((office as { message: string }).message).toContain("https://soho.dk/da-dk/kontorer/kodbyen");
+    const k9 = smsAckDecision(lead({ workspace_id: KLOSTER, meta_form_id: "2837412979963112" }), base);
+    expect((k9 as { message: string }).message).toContain("kontorer/klosterstraede");
+  });
+
+  it("a known form id never enables a disabled workspace", () => {
+    const d = smsAckDecision(lead({ workspace_id: "other-ws", meta_form_id: "1539910014404003" }), base);
+    expect(d).toEqual({ action: "skip", reason: "workspace_not_enabled" });
   });
 });
 
