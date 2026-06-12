@@ -14,6 +14,8 @@ export type Workspace = {
   // First-message mechanism (video_render | ai_drafted_dm) — drives the Flow
   // board's main spine in /outreach.
   outreach_style?: string | null;
+  // How "Skriv mail" composes: mailto | gmail | outlook (web composer).
+  mail_provider?: string | null;
 };
 
 // Returns the workspaces the authenticated user is a member of. RLS filters the
@@ -33,7 +35,7 @@ export function useWorkspace(
 
     void supabase
       .from("workspaces")
-      .select("id, name, sms_enabled, booking_url, signoff, outcome_preset, sms_template, outreach_style")
+      .select("id, name, sms_enabled, booking_url, signoff, outcome_preset, sms_template, outreach_style, mail_provider")
       .order("name", { ascending: true })
       .then(({ data }) => {
         if (cancelled) return;
@@ -48,6 +50,7 @@ export function useWorkspace(
             outcome_preset: w.outcome_preset ?? "standard",
             sms_template: w.sms_template ?? null,
             outreach_style: w.outreach_style ?? "video_render",
+            mail_provider: w.mail_provider ?? "mailto",
           })),
         });
       });

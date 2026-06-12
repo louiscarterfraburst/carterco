@@ -21,6 +21,9 @@ export type Branding = {
   companyName: string | null;
   signerName: string | null;
   smsTemplate: string | null;
+  // How "Skriv mail" composes (mailto | gmail | outlook) — unused by the SMS
+  // helpers, carried here because Branding is the workspace-voice bundle.
+  mailProvider?: string | null;
 };
 
 export function firstName(name: string | null) {

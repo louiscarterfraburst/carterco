@@ -16,6 +16,7 @@ import { useWorkspace } from "@/utils/workspace";
 import { leadOutcomePreset } from "@/utils/lead-presets";
 import { buildSmsBody, firstName, type Branding, type Identity } from "./messages";
 import { CallbackOutcomeButton } from "./CallbackOutcomeButton";
+import { mailComposeUrl, opensInNewTab } from "@/utils/mail-compose";
 
 /* ─── types ─────────────────────────────────────────────────────────── */
 
@@ -191,6 +192,7 @@ export default function LeadsPage() {
     companyName: activeWorkspace?.name ?? null,
     signerName: (user?.email ? memberNames[user.email] : null) ?? null,
     smsTemplate: activeWorkspace?.sms_template ?? null,
+    mailProvider: activeWorkspace?.mail_provider ?? "mailto",
   };
   const [loading, setLoading] = useState(true);
   const [notifications, setNotifications] =
@@ -1809,6 +1811,7 @@ function DetailPanel({
           />
           <ContactAction
             href={hasEmail ? mailtoHref(lead.email, lead.name, identity, slotsLine, branding) : "#"}
+            newTab={opensInNewTab(branding?.mailProvider)}
             enabled={hasEmail}
             icon={<MailIcon />}
             label="Skriv mail"
@@ -2685,6 +2688,7 @@ function IconButton({
 function ContactAction({
   href,
   download,
+  newTab,
   enabled,
   icon,
   label,
@@ -2692,6 +2696,7 @@ function ContactAction({
 }: {
   href: string;
   download?: string;
+  newTab?: boolean;
   enabled: boolean;
   icon: ReactNode;
   label: string;
@@ -2713,6 +2718,8 @@ function ContactAction({
     <a
       href={href}
       download={download}
+      target={newTab ? "_blank" : undefined}
+      rel={newTab ? "noopener noreferrer" : undefined}
       className="focus-cream flex min-w-0 items-center justify-between gap-4 text-[var(--ink)]/55 transition hover:text-[var(--ink)]"
     >
       <span className="flex items-center gap-3 text-[11px] uppercase tracking-[0.18em]">
@@ -2940,8 +2947,7 @@ function mailtoHref(
 ) {
   if (!email) return "#";
   const { subject, body } = buildEmailDraft(name, identity, slotsLine, branding);
-  const query = `subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-  return `mailto:${email}?${query}`;
+  return mailComposeUrl(branding?.mailProvider, email, subject, body);
 }
 
 function canSaveContact(lead: Lead) {
