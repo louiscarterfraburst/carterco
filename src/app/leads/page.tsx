@@ -13,6 +13,7 @@ import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/utils/supabase/client";
 import { clampToBusinessHours, wasClamped } from "@/utils/businessHours";
 import { useWorkspace } from "@/utils/workspace";
+import { leadOutcomePreset } from "@/utils/lead-presets";
 
 /* ─── types ─────────────────────────────────────────────────────────── */
 
@@ -49,6 +50,7 @@ type Lead = {
   next_action_type: "retry" | "callback" | null;
   retry_count: number;
   last_action_fired_at: string | null;
+  meta_form_id: string | null;
 };
 
 type ConversationEvent = {
@@ -554,7 +556,7 @@ export default function LeadsPage() {
     const { data, error } = await supabase
       .from("leads")
       .select(
-        "id, created_at, name, company, email, phone, monthly_leads, response_time, call_status, call_status_at, outcome, outcome_at, notes, is_draft, draft_updated_at, meeting_at, callback_at, next_action_at, next_action_type, retry_count, last_action_fired_at",
+        "id, created_at, name, company, email, phone, monthly_leads, response_time, call_status, call_status_at, outcome, outcome_at, notes, is_draft, draft_updated_at, meeting_at, callback_at, next_action_at, next_action_type, retry_count, last_action_fired_at, meta_form_id",
       )
       .eq("workspace_id", activeWorkspaceId)
       .order("created_at", { ascending: false })
@@ -791,7 +793,9 @@ export default function LeadsPage() {
       payload.last_action_fired_at = null;
     } else if (outcome === "interested" && !currentLead?.meeting_at) {
       // Said yes / "delt link" but hasn't booked — queue a nudge so they don't rot.
-      if (outcomePreset === "meeting_room") {
+      // Preset is per-lead: Soho's kontor-leads (office) take the standard nudge,
+      // its mødelokale-leads the 1·1·2 ladder.
+      if (leadOutcomePreset(outcomePreset, currentLead?.meta_form_id) === "meeting_room") {
         // 1·1·2 resurface ladder: nudge at day 1, 2, 4 (gaps 1·1·2), then quiet.
         // Never closes — Nexudus auto-marks Booket whenever they eventually book.
         const newCount = (currentLead?.retry_count ?? 0) + 1;
@@ -1387,7 +1391,7 @@ export default function LeadsPage() {
                 names={memberNames}
                 smsEnabled={smsEnabled}
                 branding={branding}
-                preset={outcomePreset}
+                preset={leadOutcomePreset(outcomePreset, lead.meta_form_id)}
               />
             ))}
           </ol>
@@ -1899,6 +1903,50 @@ function DetailPanel({
                     <OutcomeButton
                       outcome="interested"
                       label="Delt link – vil kigge"
+                      selected={lead.outcome === "interested"}
+                      onClick={() => void setOutcome(lead.id, "interested")}
+                      subtitle={
+                        lead.outcome === "interested" && lead.next_action_at
+                          ? `Følg op ${formatMeetingTime(lead.next_action_at)}`
+                          : undefined
+                      }
+                    />
+                    <OutcomeButton
+                      outcome="not_interested"
+                      label="Ikke relevant"
+                      selected={lead.outcome === "not_interested"}
+                      onClick={() => void setOutcome(lead.id, "not_interested")}
+                    />
+                    <CallbackOutcomeButton
+                      selected={lead.outcome === "callback"}
+                      callbackAt={lead.callback_at}
+                      onPick={(isoTime) =>
+                        void setOutcome(lead.id, "callback", isoTime)
+                      }
+                      onClear={() => void setOutcome(lead.id, null)}
+                    />
+                  </>
+                ) : preset === "office" ? (
+                  <>
+                    {/* Kontor-leads (Soho Office-carter form): fremvisning er det
+                        ledende mål, Lejet den endelige konvertering. Interesseret
+                        tager standard-nudgen (+2 dage), ikke 1·1·2-stigen. */}
+                    <OutcomeButton
+                      outcome="booked"
+                      label="Fremvisning booket"
+                      selected={lead.outcome === "booked"}
+                      onClick={() => void setOutcome(lead.id, "booked")}
+                      fullWidth
+                    />
+                    <OutcomeButton
+                      outcome="customer"
+                      label="Lejet"
+                      selected={lead.outcome === "customer"}
+                      onClick={() => void setOutcome(lead.id, "customer")}
+                    />
+                    <OutcomeButton
+                      outcome="interested"
+                      label="Interesseret"
                       selected={lead.outcome === "interested"}
                       onClick={() => void setOutcome(lead.id, "interested")}
                       subtitle={
